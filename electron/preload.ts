@@ -3,6 +3,8 @@ import type { PointerApi } from '../shared/db-types'
 import { IPC_CHANNELS } from './services/ipc'
 
 const pointerApi: PointerApi = {
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
+
   listEnvironments: () => ipcRenderer.invoke(IPC_CHANNELS.listEnvironments),
   createEnvironment: (name, color) => ipcRenderer.invoke(IPC_CHANNELS.createEnvironment, name, color),
   updateEnvironment: (id, name, color) =>
