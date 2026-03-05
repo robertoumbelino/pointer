@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { DbService } from './services/db-service'
 import { registerIpc } from './services/ipc'
+import { UpdaterService } from './services/updater-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -17,9 +18,10 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   : RENDERER_DIST
 
 const dbService = new DbService()
+const updaterService = new UpdaterService()
 let mainWindow: BrowserWindow | null = null
 
-registerIpc(dbService)
+registerIpc(dbService, updaterService)
 
 function createMainWindow(): void {
   const isMac = process.platform === 'darwin'

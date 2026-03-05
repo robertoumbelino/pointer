@@ -31,6 +31,9 @@ const pointerApi: PointerApi = {
 
   previewSqlRisk: (sql) => ipcRenderer.invoke(IPC_CHANNELS.previewSqlRisk, sql),
   executeSql: (connectionId, sql) => ipcRenderer.invoke(IPC_CHANNELS.executeSql, connectionId, sql),
+
+  checkForAppUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.checkForAppUpdate),
+  installLatestUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.installLatestUpdate),
 }
 
 contextBridge.exposeInMainWorld('pointerApi', pointerApi)
