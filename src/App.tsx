@@ -58,7 +58,6 @@ import {
   DialogTrigger,
 } from './components/ui/dialog'
 import { Input } from './components/ui/input'
-import { Textarea } from './components/ui/textarea'
 import { cn } from './lib/utils'
 
 type ConnectionDraft = ConnectionInput
@@ -75,6 +74,7 @@ type SqlTab = {
 }
 
 type RowPendingUpdates = Record<number, Record<string, unknown>>
+type InsertDraftRow = Record<string, unknown>
 
 type TableTab = {
   id: string
@@ -93,6 +93,7 @@ type TableTab = {
   selectedRowIndex: number | null
   pendingUpdates: RowPendingUpdates
   pendingDeletes: number[]
+  insertDraft: InsertDraftRow | null
   baseRows: Record<string, unknown>[] | null
   loading: boolean
 }
@@ -251,9 +252,6 @@ function App(): JSX.Element {
   const [isRenameSqlTabOpen, setIsRenameSqlTabOpen] = useState(false)
   const [renamingSqlTabId, setRenamingSqlTabId] = useState('')
   const [sqlTabNameDraft, setSqlTabNameDraft] = useState('')
-
-  const [insertDialogOpen, setInsertDialogOpen] = useState(false)
-  const [insertJson, setInsertJson] = useState('{}')
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
 
@@ -1208,6 +1206,7 @@ function App(): JSX.Element {
         selectedRowIndex: null,
         pendingUpdates: {},
         pendingDeletes: [],
+        insertDraft: null,
         baseRows: null,
         loading: false,
       },
@@ -1242,6 +1241,7 @@ function App(): JSX.Element {
             selectedRowIndex: null,
             pendingUpdates: {},
             pendingDeletes: [],
+            insertDraft: null,
             baseRows: cloneRows(data.rows),
             loading: false,
           }
@@ -1297,6 +1297,7 @@ function App(): JSX.Element {
         selectedRowIndex: null,
         pendingUpdates: {},
         pendingDeletes: [],
+        insertDraft: null,
         baseRows: cloneRows(result.rows),
         loading: false,
       }))
@@ -1435,17 +1436,14 @@ function App(): JSX.Element {
       return
     }
 
-    if (!tab.schema?.supportsRowEdit) {
-      toast.info('Update por linha não está disponível para este banco.')
-      return
-    }
-
     const pendingDeleteRows = Array.from(new Set(tab.pendingDeletes)).sort((a, b) => a - b)
     const pendingUpdateRows = Object.keys(tab.pendingUpdates)
       .map((value) => Number(value))
       .filter((rowIndex) => Number.isInteger(rowIndex) && rowIndex >= 0 && !pendingDeleteRows.includes(rowIndex))
+    const hasPendingInsert = Boolean(tab.insertDraft)
+    const hasPendingWriteRows = pendingDeleteRows.length > 0 || pendingUpdateRows.length > 0
 
-    if (pendingDeleteRows.length === 0 && pendingUpdateRows.length === 0) {
+    if (!hasPendingInsert && !hasPendingWriteRows) {
       toast.info('Nenhuma alteração pendente para salvar.')
       return
     }
@@ -1453,43 +1451,57 @@ function App(): JSX.Element {
     try {
       let affected = 0
 
-      for (const rowIndex of pendingUpdateRows) {
-        const row = tab.data.rows[rowIndex]
-        if (!row) {
-          continue
+      if (tab.insertDraft && tab.schema) {
+        const insertPayload = buildInsertPayload(tab.insertDraft, tab.schema)
+        if (Object.keys(insertPayload).length === 0) {
+          throw new Error('Preencha ao menos uma coluna para inserir.')
         }
 
-        const pendingColumns = tab.pendingUpdates[rowIndex] ?? {}
-        const patchKeys = Object.keys(pendingColumns)
-        if (patchKeys.length === 0) {
-          continue
-        }
-
-        const payload: Record<string, unknown> = {}
-        for (const pkColumn of tab.schema.primaryKey) {
-          payload[pkColumn] = row[pkColumn]
-        }
-        for (const key of patchKeys) {
-          payload[key] = pendingColumns[key]
-        }
-
-        const result = await window.pointerApi.updateRow(tab.connectionId, tab.table, payload)
-        affected += result.affected
+        await window.pointerApi.insertRow(tab.connectionId, tab.table, insertPayload)
+        affected += 1
       }
 
-      for (const rowIndex of pendingDeleteRows) {
-        const row = tab.data.rows[rowIndex]
-        if (!row) {
-          continue
+      if (tab.schema?.supportsRowEdit) {
+        for (const rowIndex of pendingUpdateRows) {
+          const row = tab.data.rows[rowIndex]
+          if (!row) {
+            continue
+          }
+
+          const pendingColumns = tab.pendingUpdates[rowIndex] ?? {}
+          const patchKeys = Object.keys(pendingColumns)
+          if (patchKeys.length === 0) {
+            continue
+          }
+
+          const payload: Record<string, unknown> = {}
+          for (const pkColumn of tab.schema.primaryKey) {
+            payload[pkColumn] = row[pkColumn]
+          }
+          for (const key of patchKeys) {
+            payload[key] = pendingColumns[key]
+          }
+
+          const result = await window.pointerApi.updateRow(tab.connectionId, tab.table, payload)
+          affected += result.affected
         }
 
-        const payload: Record<string, unknown> = {}
-        for (const pkColumn of tab.schema.primaryKey) {
-          payload[pkColumn] = row[pkColumn]
-        }
+        for (const rowIndex of pendingDeleteRows) {
+          const row = tab.data.rows[rowIndex]
+          if (!row) {
+            continue
+          }
 
-        const result = await window.pointerApi.deleteRow(tab.connectionId, tab.table, payload)
-        affected += result.affected
+          const payload: Record<string, unknown> = {}
+          for (const pkColumn of tab.schema.primaryKey) {
+            payload[pkColumn] = row[pkColumn]
+          }
+
+          const result = await window.pointerApi.deleteRow(tab.connectionId, tab.table, payload)
+          affected += result.affected
+        }
+      } else if (hasPendingWriteRows) {
+        toast.info('Update/Delete por linha não está disponível para este banco.')
       }
 
       toast.success(`${affected} registro(s) salvo(s).`)
@@ -1499,21 +1511,50 @@ function App(): JSX.Element {
     }
   }
 
-  async function handleInsertRow(): Promise<void> {
-    if (!activeTableTab) {
+  function handleToggleInsertDraftRow(): void {
+    if (!activeTableTab || !activeTableTab.schema) {
       return
     }
 
-    try {
-      const payload = parseJsonObject(insertJson)
-      await window.pointerApi.insertRow(activeTableTab.connectionId, activeTableTab.table, payload)
-      toast.success('Registro inserido.')
-      setInsertDialogOpen(false)
-      setInsertJson('{}')
-      await reloadTableTab(activeTableTab.id)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
+    setEditingCell(null)
+
+    updateTableTab(activeTableTab.id, (tab) => {
+      if (!tab.schema) {
+        return tab
+      }
+
+      if (tab.insertDraft) {
+        return {
+          ...tab,
+          insertDraft: null,
+        }
+      }
+
+      return {
+        ...tab,
+        insertDraft: createInitialInsertDraft(tab.schema),
+      }
+    })
+  }
+
+  function updateInsertDraftValue(columnName: string, value: string): void {
+    if (!activeTableTab?.insertDraft) {
+      return
     }
+
+    updateTableTab(activeTableTab.id, (tab) => {
+      if (!tab.insertDraft) {
+        return tab
+      }
+
+      return {
+        ...tab,
+        insertDraft: {
+          ...tab.insertDraft,
+          [columnName]: value,
+        },
+      }
+    })
   }
 
   function handleDeleteRow(): void {
@@ -1662,7 +1703,30 @@ function App(): JSX.Element {
     <div className='h-screen w-screen overflow-hidden text-[13px] text-slate-100'>
       <div className='h-full w-full overflow-hidden border border-slate-800/70 bg-slate-950'>
         <div className='drag-region flex h-9 items-center justify-end border-b border-slate-800/70 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950/90 pl-24 pr-4'>
-          <span className='select-none text-[11px] tracking-wide text-slate-500'>v{appVersion}</span>
+          <div className='no-drag flex items-center gap-2'>
+            <span className='select-none text-[11px] tracking-wide text-slate-500'>v{appVersion}</span>
+            <Button
+              variant={appUpdateInfo?.hasUpdate ? 'default' : 'ghost'}
+              size='sm'
+              className='h-6 px-2 text-[11px]'
+              onClick={() => {
+                if (appUpdateInfo?.hasUpdate) {
+                  void handleInstallAppUpdate()
+                } else {
+                  void checkForAppUpdate(true)
+                }
+              }}
+              disabled={isCheckingAppUpdate || isInstallingAppUpdate}
+            >
+              {isInstallingAppUpdate
+                ? 'Atualizando...'
+                : isCheckingAppUpdate
+                  ? 'Checando...'
+                  : appUpdateInfo?.hasUpdate
+                    ? `Upgrade ${appUpdateInfo.latestVersion}`
+                    : 'Checar update'}
+            </Button>
+          </div>
         </div>
 
         <div className='no-drag flex h-[calc(100%-2.25rem)]'>
@@ -1684,30 +1748,7 @@ function App(): JSX.Element {
                     <p className='text-[12px] text-slate-500'>Ambientes e Bancos</p>
                   </div>
                 </div>
-                <div className='flex items-center gap-2'>
-                  <Badge variant='secondary'>{connections.length}</Badge>
-                  <Button
-                    variant={appUpdateInfo?.hasUpdate ? 'default' : 'ghost'}
-                    size='sm'
-                    className='h-7 px-2 text-[11px]'
-                    onClick={() => {
-                      if (appUpdateInfo?.hasUpdate) {
-                        void handleInstallAppUpdate()
-                      } else {
-                        void checkForAppUpdate(true)
-                      }
-                    }}
-                    disabled={isCheckingAppUpdate || isInstallingAppUpdate}
-                  >
-                    {isInstallingAppUpdate
-                      ? 'Atualizando...'
-                      : isCheckingAppUpdate
-                        ? 'Checando...'
-                        : appUpdateInfo?.hasUpdate
-                          ? `Upgrade ${appUpdateInfo.latestVersion}`
-                          : 'Checar update'}
-                  </Button>
-                </div>
+                <Badge variant='secondary'>{connections.length}</Badge>
               </div>
 
               <label className={SIDEBAR_SECTION_LABEL_CLASS}>
@@ -2525,8 +2566,8 @@ function App(): JSX.Element {
                       >
                         <RefreshCw className='mr-1.5 h-3.5 w-3.5' /> Atualizar
                       </Button>
-                      <Button variant='secondary' size='sm' className='h-8 text-[13px]' onClick={() => setInsertDialogOpen(true)}>
-                        <Plus className='mr-1.5 h-3.5 w-3.5' /> Inserir
+                      <Button variant='secondary' size='sm' className='h-8 text-[13px]' onClick={handleToggleInsertDraftRow}>
+                        <Plus className='mr-1.5 h-3.5 w-3.5' /> {activeTableTab.insertDraft ? 'Cancelar insert' : 'Inserir'}
                       </Button>
                       <Button
                         variant='destructive'
@@ -2681,6 +2722,20 @@ function App(): JSX.Element {
                               </tr>
                             )
                           })}
+                          {activeTableTab.insertDraft && (
+                            <tr className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'>
+                              {activeTableTab.schema?.columns.map((column) => (
+                                <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
+                                  <Input
+                                    value={formatDraftInputValue(activeTableTab.insertDraft?.[column.name])}
+                                    placeholder={column.isPrimaryKey ? 'PK' : column.name}
+                                    onChange={(event) => updateInsertDraftValue(column.name, event.target.value)}
+                                    className='h-7 border-emerald-500/35 bg-slate-900/90 text-[12px] text-slate-100'
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -2696,10 +2751,11 @@ function App(): JSX.Element {
                     <p>
                       Página {activeTableTab.page + 1} • {activeTableTab.data?.total ?? 0} registros
                       {(Object.keys(activeTableTab.pendingUpdates).length > 0 ||
-                        activeTableTab.pendingDeletes.length > 0) && (
+                        activeTableTab.pendingDeletes.length > 0 ||
+                        Boolean(activeTableTab.insertDraft)) && (
                         <span className='ml-2 text-slate-300'>
                           • {Object.keys(activeTableTab.pendingUpdates).length} update(s) •{' '}
-                          {activeTableTab.pendingDeletes.length} delete(s) pendente(s)
+                          {activeTableTab.pendingDeletes.length} delete(s) • {activeTableTab.insertDraft ? 1 : 0} insert(s) pendente(s)
                         </span>
                       )}
                     </p>
@@ -2784,24 +2840,6 @@ function App(): JSX.Element {
               Cancelar
             </Button>
             <Button onClick={handleRenameSqlTab}>Salvar nome</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={insertDialogOpen} onOpenChange={setInsertDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Inserir registro</DialogTitle>
-            <DialogDescription>
-              Informe um objeto JSON válido. Campos ausentes usam valores padrão do banco.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea value={insertJson} onChange={(event) => setInsertJson(event.target.value)} className='min-h-64' />
-          <DialogFooter>
-            <Button variant='secondary' onClick={() => setInsertDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void handleInsertRow()}>Inserir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3053,6 +3091,7 @@ function deserializeEnvironmentWorkspaceSnapshot(
           selectedRowIndex: null,
           pendingUpdates: {},
           pendingDeletes: [],
+          insertDraft: null,
           baseRows: null,
           loading: false,
         } as TableTab
@@ -3077,14 +3116,149 @@ function deserializeEnvironmentWorkspaceSnapshot(
   }
 }
 
-function parseJsonObject(input: string): Record<string, unknown> {
-  const parsed = JSON.parse(input)
+function createInitialInsertDraft(schema: TableSchema): InsertDraftRow {
+  const draft: InsertDraftRow = {}
+  const nowIso = new Date().toISOString()
 
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('O conteúdo precisa ser um objeto JSON.')
+  for (const column of schema.columns) {
+    const normalizedName = column.name.toLowerCase()
+
+    if (column.isPrimaryKey) {
+      const primaryKeyDefault = generatePrimaryKeyDefault(column.dataType)
+      if (primaryKeyDefault !== undefined) {
+        draft[column.name] = primaryKeyDefault
+      }
+    }
+
+    if ((normalizedName === 'created_at' || normalizedName === 'updated_at') && isDateTimeDataType(column.dataType)) {
+      draft[column.name] = nowIso
+    }
   }
 
-  return parsed as Record<string, unknown>
+  return draft
+}
+
+function buildInsertPayload(draft: InsertDraftRow, schema: TableSchema): Record<string, unknown> {
+  const payload: Record<string, unknown> = {}
+
+  for (const column of schema.columns) {
+    const normalizedValue = normalizeInsertValue(draft[column.name], column.dataType)
+    if (normalizedValue === undefined) {
+      continue
+    }
+
+    payload[column.name] = normalizedValue
+  }
+
+  return payload
+}
+
+function normalizeInsertValue(rawValue: unknown, dataType: string): unknown {
+  if (rawValue === undefined) {
+    return undefined
+  }
+
+  if (rawValue === null) {
+    return null
+  }
+
+  if (typeof rawValue !== 'string') {
+    return rawValue
+  }
+
+  const trimmed = rawValue.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  if (trimmed.toLowerCase() === 'null') {
+    return null
+  }
+
+  if (isBooleanDataType(dataType)) {
+    if (trimmed.toLowerCase() === 'true') {
+      return true
+    }
+
+    if (trimmed.toLowerCase() === 'false') {
+      return false
+    }
+  }
+
+  if (isNumericDataType(dataType)) {
+    const parsedNumber = Number(trimmed)
+    if (!Number.isNaN(parsedNumber) && Number.isFinite(parsedNumber)) {
+      return parsedNumber
+    }
+  }
+
+  if (isJsonLikeDataType(dataType)) {
+    try {
+      return JSON.parse(trimmed)
+    } catch {
+      return trimmed
+    }
+  }
+
+  return trimmed
+}
+
+function formatDraftInputValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+
+  return String(value)
+}
+
+function generatePrimaryKeyDefault(dataType: string): string | undefined {
+  if (isUuidDataType(dataType)) {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+
+    return generateCuid()
+  }
+
+  if (isTextualDataType(dataType)) {
+    return generateCuid()
+  }
+
+  return undefined
+}
+
+function generateCuid(): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).slice(2, 12)
+  return `c${timestamp}${random}`.slice(0, 25)
+}
+
+function isTextualDataType(dataType: string): boolean {
+  return /(char|text|string)/i.test(dataType)
+}
+
+function isUuidDataType(dataType: string): boolean {
+  return /uuid/i.test(dataType)
+}
+
+function isDateTimeDataType(dataType: string): boolean {
+  return /(date|time)/i.test(dataType)
+}
+
+function isBooleanDataType(dataType: string): boolean {
+  return /bool/i.test(dataType)
+}
+
+function isNumericDataType(dataType: string): boolean {
+  return /(int|numeric|decimal|float|double|real|serial)/i.test(dataType)
+}
+
+function isJsonLikeDataType(dataType: string): boolean {
+  return /(json|map|array|object)/i.test(dataType)
 }
 
 function cloneRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
