@@ -108,6 +108,20 @@ export interface SqlExecutionResult {
   resultSets: SqlResultSet[]
 }
 
+export interface AppUpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  hasUpdate: boolean
+  releaseUrl: string | null
+  publishedAt: string | null
+  notes: string | null
+}
+
+export interface AppUpdateInstallResult {
+  started: boolean
+  message: string
+}
+
 export interface PointerApi {
   listEnvironments: () => Promise<EnvironmentSummary[]>
   createEnvironment: (name: string, color?: string) => Promise<EnvironmentSummary>
@@ -134,4 +148,7 @@ export interface PointerApi {
 
   previewSqlRisk: (sql: string) => Promise<SqlPreviewRiskResult>
   executeSql: (connectionId: string, sql: string) => Promise<SqlExecutionResult>
+
+  checkForAppUpdate: () => Promise<AppUpdateInfo>
+  installLatestUpdate: () => Promise<AppUpdateInstallResult>
 }

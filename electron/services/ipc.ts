@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import type { ConnectionInput, TableReadInput, TableRef } from '../../shared/db-types'
 import { DbService } from './db-service'
+import { UpdaterService } from './updater-service'
 
 export const IPC_CHANNELS = {
   listEnvironments: 'pointer:environments:list',
@@ -28,9 +29,12 @@ export const IPC_CHANNELS = {
 
   previewSqlRisk: 'pointer:sql:preview-risk',
   executeSql: 'pointer:sql:execute',
+
+  checkForAppUpdate: 'pointer:app:update:check',
+  installLatestUpdate: 'pointer:app:update:install',
 } as const
 
-export function registerIpc(dbService: DbService): void {
+export function registerIpc(dbService: DbService, updaterService: UpdaterService): void {
   ipcMain.handle(IPC_CHANNELS.listEnvironments, () => wrap(() => dbService.listEnvironments()))
   ipcMain.handle(IPC_CHANNELS.createEnvironment, (_, name: string, color?: string) =>
     wrap(() => dbService.createEnvironment(name, color)),
@@ -96,6 +100,9 @@ export function registerIpc(dbService: DbService): void {
   ipcMain.handle(IPC_CHANNELS.executeSql, (_, connectionId: string, sql: string) =>
     wrap(() => dbService.executeSql(connectionId, sql)),
   )
+
+  ipcMain.handle(IPC_CHANNELS.checkForAppUpdate, () => wrap(() => updaterService.checkForAppUpdate()))
+  ipcMain.handle(IPC_CHANNELS.installLatestUpdate, () => wrap(() => updaterService.installLatestUpdate()))
 }
 
 async function wrap<T>(callback: () => Promise<T> | T): Promise<T> {

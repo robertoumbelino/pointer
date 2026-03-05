@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
+  AppUpdateInfo,
   ConnectionInput,
   ConnectionSummary,
   DatabaseEngine,
@@ -259,6 +260,9 @@ function App(): JSX.Element {
   const [sqlConfirmOpen, setSqlConfirmOpen] = useState(false)
   const [sqlConfirmText, setSqlConfirmText] = useState('')
   const [pendingSqlExecution, setPendingSqlExecution] = useState<{ tabId: string; sql: string } | null>(null)
+  const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null)
+  const [isCheckingAppUpdate, setIsCheckingAppUpdate] = useState(false)
+  const [isInstallingAppUpdate, setIsInstallingAppUpdate] = useState(false)
 
   const [resizingSqlTabId, setResizingSqlTabId] = useState<string | null>(null)
 
@@ -454,6 +458,10 @@ function App(): JSX.Element {
 
   useEffect(() => {
     void loadEnvironments()
+  }, [])
+
+  useEffect(() => {
+    void checkForAppUpdate()
   }, [])
 
   useEffect(() => {
@@ -736,6 +744,53 @@ function App(): JSX.Element {
       }
     } catch (error) {
       toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function checkForAppUpdate(showToastWhenCurrent = false): Promise<void> {
+    try {
+      setIsCheckingAppUpdate(true)
+      const info = await window.pointerApi.checkForAppUpdate()
+      setAppUpdateInfo(info)
+
+      if (showToastWhenCurrent && !info.hasUpdate) {
+        toast.success(`Você já está na versão ${info.currentVersion}.`)
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsCheckingAppUpdate(false)
+    }
+  }
+
+  async function handleInstallAppUpdate(): Promise<void> {
+    try {
+      if (!appUpdateInfo?.hasUpdate) {
+        toast.info('Nenhuma atualização disponível.')
+        return
+      }
+
+      if (
+        !window.confirm(
+          `Atualizar da versão ${appUpdateInfo.currentVersion} para ${appUpdateInfo.latestVersion}? O app será reiniciado.`,
+        )
+      ) {
+        return
+      }
+
+      setIsInstallingAppUpdate(true)
+      const result = await window.pointerApi.installLatestUpdate()
+
+      if (result.started) {
+        toast.success(result.message)
+        return
+      }
+
+      toast.info(result.message)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsInstallingAppUpdate(false)
     }
   }
 
@@ -1615,7 +1670,30 @@ function App(): JSX.Element {
                     <p className='text-[12px] text-slate-500'>Ambientes e Bancos</p>
                   </div>
                 </div>
-                <Badge variant='secondary'>{connections.length}</Badge>
+                <div className='flex items-center gap-2'>
+                  <Badge variant='secondary'>{connections.length}</Badge>
+                  <Button
+                    variant={appUpdateInfo?.hasUpdate ? 'default' : 'ghost'}
+                    size='sm'
+                    className='h-7 px-2 text-[11px]'
+                    onClick={() => {
+                      if (appUpdateInfo?.hasUpdate) {
+                        void handleInstallAppUpdate()
+                      } else {
+                        void checkForAppUpdate(true)
+                      }
+                    }}
+                    disabled={isCheckingAppUpdate || isInstallingAppUpdate}
+                  >
+                    {isInstallingAppUpdate
+                      ? 'Atualizando...'
+                      : isCheckingAppUpdate
+                        ? 'Checando...'
+                        : appUpdateInfo?.hasUpdate
+                          ? `Upgrade ${appUpdateInfo.latestVersion}`
+                          : 'Checar update'}
+                  </Button>
+                </div>
               </div>
 
               <label className={SIDEBAR_SECTION_LABEL_CLASS}>
