@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Pointer dot icon">
+  <defs>
+    <radialGradient id="bg" cx="20%" cy="15%" r="90%">
+      <stop offset="0%" stop-color="#171717" />
+      <stop offset="100%" stop-color="#0a0a0a" />
+    </radialGradient>
+    <radialGradient id="dot" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#94a3b8" />
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="16" result="b" />
+      <feMerge>
+        <feMergeNode in="b" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#bg)" />
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="none" stroke="#262626" stroke-width="20" />
+
+  <circle cx="512" cy="512" r="120" fill="url(#dot)" filter="url(#glow)" opacity="0.95" />
+</svg>
