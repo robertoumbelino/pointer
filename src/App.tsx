@@ -263,6 +263,7 @@ function App(): JSX.Element {
   const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null)
   const [isCheckingAppUpdate, setIsCheckingAppUpdate] = useState(false)
   const [isInstallingAppUpdate, setIsInstallingAppUpdate] = useState(false)
+  const [appVersion, setAppVersion] = useState('0.0.0')
 
   const [resizingSqlTabId, setResizingSqlTabId] = useState<string | null>(null)
 
@@ -462,6 +463,17 @@ function App(): JSX.Element {
 
   useEffect(() => {
     void checkForAppUpdate()
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const version = await window.pointerApi.getAppVersion()
+        setAppVersion(version)
+      } catch {
+        setAppVersion('0.0.0')
+      }
+    })()
   }, [])
 
   useEffect(() => {
@@ -1649,7 +1661,9 @@ function App(): JSX.Element {
   return (
     <div className='h-screen w-screen overflow-hidden text-[13px] text-slate-100'>
       <div className='h-full w-full overflow-hidden border border-slate-800/70 bg-slate-950'>
-        <div className='drag-region h-9 border-b border-slate-800/70 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950/90 pl-24 pr-4' />
+        <div className='drag-region flex h-9 items-center justify-end border-b border-slate-800/70 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950/90 pl-24 pr-4'>
+          <span className='select-none text-[11px] tracking-wide text-slate-500'>v{appVersion}</span>
+        </div>
 
         <div className='no-drag flex h-[calc(100%-2.25rem)]'>
           <aside

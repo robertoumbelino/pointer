@@ -123,6 +123,8 @@ export interface AppUpdateInstallResult {
 }
 
 export interface PointerApi {
+  getAppVersion: () => Promise<string>
+
   listEnvironments: () => Promise<EnvironmentSummary[]>
   createEnvironment: (name: string, color?: string) => Promise<EnvironmentSummary>
   updateEnvironment: (id: string, name: string, color?: string) => Promise<EnvironmentSummary>
