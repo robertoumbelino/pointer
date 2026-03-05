@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { app, clipboard, ipcMain } from 'electron'
 import type { ConnectionInput, TableReadInput, TableRef } from '../../shared/db-types'
 import { DbService } from './db-service'
 import { UpdaterService } from './updater-service'
@@ -33,10 +33,14 @@ export const IPC_CHANNELS = {
   checkForAppUpdate: 'pointer:app:update:check',
   installLatestUpdate: 'pointer:app:update:install',
   getAppVersion: 'pointer:app:version',
+  copyToClipboard: 'pointer:clipboard:write',
 } as const
 
 export function registerIpc(dbService: DbService, updaterService: UpdaterService): void {
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
+  ipcMain.handle(IPC_CHANNELS.copyToClipboard, (_, text: string) => {
+    clipboard.writeText(text)
+  })
 
   ipcMain.handle(IPC_CHANNELS.listEnvironments, () => wrap(() => dbService.listEnvironments()))
   ipcMain.handle(IPC_CHANNELS.createEnvironment, (_, name: string, color?: string) =>

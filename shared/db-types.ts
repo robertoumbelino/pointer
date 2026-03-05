@@ -72,8 +72,11 @@ export interface TableSort {
   direction: SortDirection
 }
 
+export type TableFilterOperator = 'eq' | 'ilike'
+
 export interface TableFilter {
   column: string
+  operator: TableFilterOperator
   value: string
 }
 
@@ -124,6 +127,7 @@ export interface AppUpdateInstallResult {
 
 export interface PointerApi {
   getAppVersion: () => Promise<string>
+  copyToClipboard: (text: string) => Promise<void>
 
   listEnvironments: () => Promise<EnvironmentSummary[]>
   createEnvironment: (name: string, color?: string) => Promise<EnvironmentSummary>

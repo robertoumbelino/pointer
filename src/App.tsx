@@ -13,7 +13,9 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Database,
+  FileCode2,
   Pencil,
   Play,
   Plus,
@@ -34,6 +36,7 @@ import type {
   SqlExecutionResult,
   TableReadResult,
   TableRef,
+  TableFilterOperator,
   TableSchema,
   TableSearchHit,
   TableSort,
@@ -57,6 +60,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './components/ui/dropdown-menu'
 import { Input } from './components/ui/input'
 import { cn } from './lib/utils'
 
@@ -89,6 +100,7 @@ type TableTab = {
   page: number
   sort?: TableSort
   filterColumn: string
+  filterOperator: TableFilterOperator
   filterValue: string
   selectedRowIndex: number | null
   pendingUpdates: RowPendingUpdates
@@ -105,6 +117,20 @@ type EditingCell = {
   rowIndex: number
   column: string
   value: string
+}
+
+type SidebarTableContextMenuState = {
+  hit: TableSearchHit
+  x: number
+  y: number
+}
+
+type TableReloadOverrides = {
+  page?: number
+  sort?: TableSort
+  filterColumn?: string
+  filterOperator?: TableFilterOperator
+  filterValue?: string
 }
 
 type EnvironmentWorkspaceSnapshot = {
@@ -134,6 +160,7 @@ type PersistedTableTab = {
   page: number
   sort?: TableSort
   filterColumn: string
+  filterOperator: TableFilterOperator
   filterValue: string
 }
 
@@ -245,6 +272,11 @@ function App(): JSX.Element {
 
   const [isCommandOpen, setIsCommandOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
+  const [commandIndex, setCommandIndex] = useState(0)
+  const [commandScopedTarget, setCommandScopedTarget] = useState<TableSearchHit | null>(null)
+  const [commandScopedSchema, setCommandScopedSchema] = useState<TableSchema | null>(null)
+  const [commandScopedColumn, setCommandScopedColumn] = useState('')
+  const [commandScopedValue, setCommandScopedValue] = useState('')
 
   const [isEnvironmentCommandOpen, setIsEnvironmentCommandOpen] = useState(false)
   const [environmentCommandQuery, setEnvironmentCommandQuery] = useState('')
@@ -262,6 +294,7 @@ function App(): JSX.Element {
   const [isCheckingAppUpdate, setIsCheckingAppUpdate] = useState(false)
   const [isInstallingAppUpdate, setIsInstallingAppUpdate] = useState(false)
   const [appVersion, setAppVersion] = useState('0.0.0')
+  const [tableContextMenu, setTableContextMenu] = useState<SidebarTableContextMenuState | null>(null)
 
   const [resizingSqlTabId, setResizingSqlTabId] = useState<string | null>(null)
 
@@ -270,6 +303,8 @@ function App(): JSX.Element {
   const selectedSchemaRef = useRef<string>(selectedSchema)
   const sqlTabCounterRef = useRef<number>(2)
   const sqlSplitContainerRef = useRef<HTMLDivElement | null>(null)
+  const commandColumnInputRef = useRef<HTMLSelectElement | null>(null)
+  const commandValueInputRef = useRef<HTMLInputElement | null>(null)
   const sqlCursorByTabRef = useRef<Record<string, number>>({})
   const environmentWorkspaceRef = useRef<Record<string, EnvironmentWorkspaceSnapshot>>({})
   const previousEnvironmentIdRef = useRef<string>('')
@@ -395,6 +430,29 @@ function App(): JSX.Element {
 
     return Array.from(completionMap.values())
   }, [catalogHits, workTabs])
+
+  const groupedCommandHits = useMemo(() => {
+    const groups = new Map<
+      string,
+      { connectionId: string; heading: string; items: Array<{ hit: TableSearchHit; index: number }> }
+    >()
+
+    commandHits.forEach((hit, index) => {
+      const existing = groups.get(hit.connectionId)
+      if (existing) {
+        existing.items.push({ hit, index })
+        return
+      }
+
+      groups.set(hit.connectionId, {
+        connectionId: hit.connectionId,
+        heading: hit.connectionName,
+        items: [{ hit, index }],
+      })
+    })
+
+    return Array.from(groups.values())
+  }, [commandHits])
 
   const sqlCompletionSource = useMemo(() => {
     return (context: CompletionContext) => {
@@ -552,6 +610,27 @@ function App(): JSX.Element {
 
     return () => clearTimeout(timeout)
   }, [commandQuery, isCommandOpen, selectedEnvironmentId])
+
+  useEffect(() => {
+    if (!isCommandOpen || commandScopedTarget) {
+      return
+    }
+
+    if (commandHits.length === 0) {
+      setCommandIndex(0)
+      return
+    }
+
+    setCommandIndex((current) => Math.max(0, Math.min(current, commandHits.length - 1)))
+  }, [commandHits, commandScopedTarget, isCommandOpen])
+
+  useEffect(() => {
+    if (!isCommandOpen || commandScopedTarget) {
+      return
+    }
+
+    setCommandIndex(0)
+  }, [commandQuery, commandScopedTarget, isCommandOpen])
 
   useEffect(() => {
     if (selectedSchema === 'all') {
@@ -860,6 +939,120 @@ function App(): JSX.Element {
       if (!query.trim()) {
         setCatalogHits(hits)
       }
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function enterCommandScopedMode(hit: TableSearchHit): Promise<void> {
+    try {
+      setCommandScopedTarget(hit)
+      setCommandScopedColumn('')
+      setCommandScopedValue('')
+      setCommandScopedSchema(null)
+
+      const schema = await window.pointerApi.describeTable(hit.connectionId, hit.table)
+      setCommandScopedSchema(schema)
+      setCommandScopedColumn(schema.columns[0]?.name ?? '')
+
+      window.requestAnimationFrame(() => {
+        commandColumnInputRef.current?.focus()
+      })
+    } catch (error) {
+      setCommandScopedTarget(null)
+      setCommandScopedSchema(null)
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  function handleCommandInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
+    if (commandScopedTarget) {
+      return
+    }
+
+    if (commandHits.length === 0) {
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setCommandIndex((current) => Math.max(0, Math.min(current + 1, commandHits.length - 1)))
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setCommandIndex((current) => Math.max(0, current - 1))
+      return
+    }
+
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      const target = commandHits[commandIndex] ?? commandHits[0]
+      if (target) {
+        void enterCommandScopedMode(target)
+      }
+      return
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const target = commandHits[commandIndex] ?? commandHits[0]
+      if (target) {
+        setIsCommandOpen(false)
+        void openTableTab(target)
+      }
+    }
+  }
+
+  async function applyCommandScopedFilter(): Promise<void> {
+    if (!commandScopedTarget || !commandScopedSchema) {
+      return
+    }
+
+    const resolvedColumn = resolveCommandScopedColumn(commandScopedSchema, commandScopedColumn)
+    if (!resolvedColumn) {
+      toast.error('Coluna inválida para filtro.')
+      return
+    }
+
+    if (!commandScopedValue.trim()) {
+      toast.error('Informe um valor para buscar.')
+      return
+    }
+
+    setIsCommandOpen(false)
+    void openTableTab(commandScopedTarget, {
+      page: 0,
+      filterColumn: resolvedColumn,
+      filterOperator: 'ilike',
+      filterValue: commandScopedValue.trim(),
+    })
+    setCommandScopedTarget(null)
+    setCommandScopedSchema(null)
+    setCommandScopedColumn('')
+    setCommandScopedValue('')
+  }
+
+  async function handleCopyTableStructureSql(hit: TableSearchHit): Promise<void> {
+    try {
+      const schema = await window.pointerApi.describeTable(hit.connectionId, hit.table)
+      const sql = buildCreateTableTemplateSql(hit.engine, schema)
+      await window.pointerApi.copyToClipboard(sql)
+      setTableContextMenu(null)
+      toast.success('Estrutura da tabela copiada.')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleCopyInsertTemplateSql(hit: TableSearchHit): Promise<void> {
+    try {
+      const schema = await window.pointerApi.describeTable(hit.connectionId, hit.table)
+      const sql = buildInsertTemplateSql(hit.engine, schema)
+      await window.pointerApi.copyToClipboard(sql)
+      setTableContextMenu(null)
+      toast.success('SQL de insert copiado.')
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -1174,15 +1367,28 @@ function App(): JSX.Element {
     setSqlTabNameDraft('')
   }
 
-  async function openTableTab(hit: TableSearchHit): Promise<void> {
+  async function openTableTab(hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> {
     const tabId = `table:${hit.connectionId}:${hit.table.fqName}`
 
     const existing = getTableTab(tabId)
     setActiveTabId(tabId)
 
     if (existing) {
+      if (initialLoad) {
+        updateTableTab(tabId, (tab) => ({
+          ...tab,
+          page: initialLoad.page ?? tab.page,
+          sort: initialLoad.sort ?? tab.sort,
+          filterColumn: initialLoad.filterColumn ?? tab.filterColumn,
+          filterOperator: initialLoad.filterOperator ?? tab.filterOperator,
+          filterValue: initialLoad.filterValue ?? tab.filterValue,
+        }))
+      }
+
       if (!existing.schema || !existing.data) {
-        await initializeTableTab(tabId, hit)
+        await initializeTableTab(tabId, hit, initialLoad)
+      } else if (initialLoad) {
+        void reloadTableTab(tabId, initialLoad)
       }
       return
     }
@@ -1199,32 +1405,47 @@ function App(): JSX.Element {
         table: hit.table,
         schema: null,
         data: null,
-        page: 0,
-        sort: undefined,
-        filterColumn: '',
-        filterValue: '',
+        page: initialLoad?.page ?? 0,
+        sort: initialLoad?.sort,
+        filterColumn: initialLoad?.filterColumn ?? '',
+        filterOperator: initialLoad?.filterOperator ?? 'ilike',
+        filterValue: initialLoad?.filterValue ?? '',
         selectedRowIndex: null,
         pendingUpdates: {},
         pendingDeletes: [],
         insertDraft: null,
         baseRows: null,
-        loading: false,
+        loading: true,
       },
     ])
 
-    await initializeTableTab(tabId, hit)
+    await initializeTableTab(tabId, hit, initialLoad)
   }
 
-  const initializeTableTab = useCallback(async (tabId: string, hit: TableSearchHit): Promise<void> => {
+  const initializeTableTab = useCallback(async (tabId: string, hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> => {
     setWorkTabs((current) =>
       current.map((tab) => (tab.id === tabId && tab.type === 'table' ? { ...tab, loading: true } : tab)),
     )
 
     try {
+      const nextPage = initialLoad?.page ?? 0
+      const nextSort = initialLoad?.sort
+      const nextFilterColumn = initialLoad?.filterColumn ?? ''
+      const nextFilterOperator = initialLoad?.filterOperator ?? 'ilike'
+      const nextFilterValue = initialLoad?.filterValue ?? ''
+
       const schema = await window.pointerApi.describeTable(hit.connectionId, hit.table)
+      const resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
+      const filters =
+        resolvedFilterColumn && nextFilterValue
+          ? [{ column: resolvedFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
+          : []
+
       const data = await window.pointerApi.readTable(hit.connectionId, hit.table, {
-        page: 0,
+        page: nextPage,
         pageSize: PAGE_SIZE,
+        sort: nextSort,
+        filters,
       })
 
       setWorkTabs((current) =>
@@ -1237,7 +1458,11 @@ function App(): JSX.Element {
             ...tab,
             schema,
             data,
-            filterColumn: schema.columns[0]?.name ?? '',
+            page: nextPage,
+            sort: nextSort,
+            filterColumn: resolvedFilterColumn,
+            filterOperator: nextFilterOperator,
+            filterValue: nextFilterValue,
             selectedRowIndex: null,
             pendingUpdates: {},
             pendingDeletes: [],
@@ -1272,27 +1497,41 @@ function App(): JSX.Element {
     })
   }, [activeTableTab, initializeTableTab])
 
-  async function reloadTableTab(tabId: string): Promise<void> {
+  async function reloadTableTab(tabId: string, overrides?: TableReloadOverrides): Promise<void> {
     const tab = getTableTab(tabId)
 
     if (!tab) {
       return
     }
 
+    const nextPage = overrides?.page ?? tab.page
+    const nextSort = overrides?.sort ?? tab.sort
+    const nextFilterColumn = overrides?.filterColumn ?? tab.filterColumn
+    const nextFilterOperator = overrides?.filterOperator ?? tab.filterOperator
+    const nextFilterValue = overrides?.filterValue ?? tab.filterValue
+
     updateTableTab(tabId, (current) => ({ ...current, loading: true }))
 
     try {
-      const filters = tab.filterColumn && tab.filterValue ? [{ column: tab.filterColumn, value: tab.filterValue }] : []
+      const filters =
+        nextFilterColumn && nextFilterValue
+          ? [{ column: nextFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
+          : []
 
       const result = await window.pointerApi.readTable(tab.connectionId, tab.table, {
-        page: tab.page,
+        page: nextPage,
         pageSize: PAGE_SIZE,
-        sort: tab.sort,
+        sort: nextSort,
         filters,
       })
 
       updateTableTab(tabId, (current) => ({
         ...current,
+        page: nextPage,
+        sort: nextSort,
+        filterColumn: nextFilterColumn,
+        filterOperator: nextFilterOperator,
+        filterValue: nextFilterValue,
         data: result,
         selectedRowIndex: null,
         pendingUpdates: {},
@@ -2258,7 +2497,19 @@ function App(): JSX.Element {
                         'mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors',
                         isOpen ? 'bg-slate-200/12 text-slate-100' : 'text-slate-300 hover:bg-slate-800',
                       )}
-                      onClick={() => void openTableTab(hit)}
+                      onClick={() => {
+                        setTableContextMenu(null)
+                        void openTableTab(hit)
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        setTableContextMenu({
+                          hit,
+                          x: event.clientX,
+                          y: event.clientY,
+                        })
+                      }}
                       type='button'
                     >
                       <Table2 className='h-3.5 w-3.5 shrink-0' />
@@ -2532,6 +2783,20 @@ function App(): JSX.Element {
                             </option>
                           ))}
                         </select>
+                        <select
+                          className='h-8 w-[112px] rounded-md border border-slate-700 bg-slate-900 px-2.5 pr-8 text-[13px] outline-none ring-slate-300/45 focus:ring-2'
+                          value={activeTableTab.filterOperator}
+                          onChange={(event) =>
+                            updateTableTab(activeTableTab.id, (tab) => ({
+                              ...tab,
+                              filterOperator: event.target.value as TableFilterOperator,
+                              page: 0,
+                            }))
+                          }
+                        >
+                          <option value='ilike'>ilike</option>
+                          <option value='eq'>equal</option>
+                        </select>
                         <Input
                           className='h-8 w-44 text-[13px]'
                           placeholder='Filtrar por valor'
@@ -2545,7 +2810,12 @@ function App(): JSX.Element {
                           }
                           onKeyDown={(event) => {
                             if (event.key === 'Enter') {
-                              void reloadTableTab(activeTableTab.id)
+                              void reloadTableTab(activeTableTab.id, {
+                                page: 0,
+                                filterColumn: activeTableTab.filterColumn,
+                                filterOperator: activeTableTab.filterOperator,
+                                filterValue: event.currentTarget.value,
+                              })
                             }
                           }}
                         />
@@ -2553,7 +2823,14 @@ function App(): JSX.Element {
                           variant='outline'
                           size='sm'
                           className='h-8 text-[13px]'
-                          onClick={() => void reloadTableTab(activeTableTab.id)}
+                          onClick={() =>
+                            void reloadTableTab(activeTableTab.id, {
+                              page: 0,
+                              filterColumn: activeTableTab.filterColumn,
+                              filterOperator: activeTableTab.filterOperator,
+                              filterValue: activeTableTab.filterValue,
+                            })
+                          }
                         >
                           Aplicar
                         </Button>
@@ -2583,7 +2860,10 @@ function App(): JSX.Element {
 
                   <div className='flex-1 overflow-auto'>
                     {activeTableTab.loading && (
-                      <div className='border-b border-slate-800/80 px-4 py-2 text-sm text-slate-400'>Carregando...</div>
+                      <div className='flex items-center gap-2 border-b border-slate-800/80 px-4 py-2 text-sm text-slate-400'>
+                        <RefreshCw className='h-3.5 w-3.5 animate-spin' />
+                        <span>Carregando...</span>
+                      </div>
                     )}
 
                     <div className='h-full overflow-auto'>
@@ -2615,7 +2895,17 @@ function App(): JSX.Element {
                                       }
                                     })
 
-                                    void reloadTableTab(activeTableTab.id)
+                                    let nextSort: TableSort | undefined
+                                    if (!activeTableTab.sort || activeTableTab.sort.column !== column.name) {
+                                      nextSort = { column: column.name, direction: 'asc' }
+                                    } else if (activeTableTab.sort.direction === 'asc') {
+                                      nextSort = { column: column.name, direction: 'desc' }
+                                    }
+
+                                    void reloadTableTab(activeTableTab.id, {
+                                      page: 0,
+                                      sort: nextSort,
+                                    })
                                   }}
                                 >
                                   <span>{column.name}</span>
@@ -2764,13 +3054,14 @@ function App(): JSX.Element {
                         size='icon'
                         variant='ghost'
                         onClick={() => {
+                          const nextPage = Math.max(0, activeTableTab.page - 1)
                           updateTableTab(activeTableTab.id, (tab) => ({
                             ...tab,
-                            page: Math.max(0, tab.page - 1),
+                            page: nextPage,
                           }))
 
                           if (activeTableTab.page > 0) {
-                            void reloadTableTab(activeTableTab.id)
+                            void reloadTableTab(activeTableTab.id, { page: nextPage })
                           }
                         }}
                         disabled={activeTableTab.page === 0}
@@ -2781,13 +3072,14 @@ function App(): JSX.Element {
                         size='icon'
                         variant='ghost'
                         onClick={() => {
+                          const nextPage = activeTableTab.page + 1
                           updateTableTab(activeTableTab.id, (tab) => ({
                             ...tab,
-                            page: tab.page + 1,
+                            page: nextPage,
                           }))
 
                           if ((activeTableTab.data?.rows.length ?? 0) === PAGE_SIZE) {
-                            void reloadTableTab(activeTableTab.id)
+                            void reloadTableTab(activeTableTab.id, { page: nextPage })
                           }
                         }}
                         disabled={(activeTableTab.data?.rows.length ?? 0) < PAGE_SIZE}
@@ -2808,6 +3100,67 @@ function App(): JSX.Element {
           </main>
         </div>
       </div>
+
+      <DropdownMenu
+        open={Boolean(tableContextMenu)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTableContextMenu(null)
+          }
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            type='button'
+            aria-hidden
+            tabIndex={-1}
+            className='fixed h-0 w-0 opacity-0 pointer-events-none'
+            style={{
+              left: tableContextMenu?.x ?? -9999,
+              top: tableContextMenu?.y ?? -9999,
+            }}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align='start'
+          side='right'
+          sideOffset={8}
+          className='w-[238px]'
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DropdownMenuLabel className='flex items-center gap-2'>
+            <Table2 className='h-3.5 w-3.5 text-slate-400' />
+            TABELA
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              if (!tableContextMenu) {
+                return
+              }
+
+              void handleCopyTableStructureSql(tableContextMenu.hit)
+            }}
+          >
+            <FileCode2 className='h-3.5 w-3.5 text-slate-400' />
+            Copiar estrutura da tabela
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              if (!tableContextMenu) {
+                return
+              }
+
+              void handleCopyInsertTemplateSql(tableContextMenu.hit)
+            }}
+          >
+            <Copy className='h-3.5 w-3.5 text-slate-400' />
+            Copiar SQL de Insert
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog
         open={isRenameSqlTabOpen}
@@ -2896,37 +3249,102 @@ function App(): JSX.Element {
           setIsCommandOpen(open)
           if (!open) {
             setCommandQuery('')
+            setCommandIndex(0)
+            setCommandScopedTarget(null)
+            setCommandScopedSchema(null)
+            setCommandScopedColumn('')
+            setCommandScopedValue('')
           }
         }}
       >
         <DialogContent className='max-w-xl overflow-hidden p-0'>
-          <Command className='bg-slate-900 text-slate-100'>
+          <Command
+            className='bg-slate-900 text-slate-100 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-slate-500'
+            shouldFilter={false}
+          >
             <CommandInput
               value={commandQuery}
               onValueChange={setCommandQuery}
-              placeholder='Buscar tabela em todo o ambiente...'
+              placeholder={
+                commandScopedTarget
+                  ? `Filtro rápido em ${formatTableLabel(commandScopedTarget.table)}`
+                  : 'Buscar tabela em todo o ambiente...'
+              }
+              onKeyDown={handleCommandInputKeyDown}
             />
             <CommandList className='max-h-[380px]'>
+              {commandScopedTarget && (
+                <div className='space-y-2 border-b border-slate-800 px-3 py-2.5'>
+                  <p className='text-[11px] uppercase tracking-[0.16em] text-slate-500'>
+                    Filtro rápido (Tab)
+                  </p>
+                  <p className='truncate text-xs text-slate-300'>{formatTableLabel(commandScopedTarget.table)}</p>
+                  <div className='flex items-center gap-2'>
+                    <select
+                      ref={commandColumnInputRef}
+                      value={commandScopedColumn}
+                      onChange={(event) => setCommandScopedColumn(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === 'Tab') {
+                          event.preventDefault()
+                          commandValueInputRef.current?.focus()
+                        }
+                      }}
+                      className='h-8 min-w-[220px] rounded-md border border-slate-700 bg-slate-900 px-2.5 pr-8 text-[13px] outline-none ring-slate-300/45 focus:ring-2'
+                    >
+                      {(commandScopedSchema?.columns ?? []).map((column) => (
+                        <option key={column.name} value={column.name}>
+                          {column.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      ref={commandValueInputRef}
+                      placeholder='Valor (ilike)'
+                      value={commandScopedValue}
+                      onChange={(event) => setCommandScopedValue(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void applyCommandScopedFilter()
+                        }
+                      }}
+                      className='h-8'
+                    />
+                    <Button size='sm' className='h-8' onClick={() => void applyCommandScopedFilter()}>
+                      Aplicar
+                    </Button>
+                  </div>
+                </div>
+              )}
               <CommandEmpty>Nenhuma tabela encontrada.</CommandEmpty>
-              <CommandGroup heading='Tabelas'>
-                {commandHits.map((hit) => (
-                  <CommandItem
-                    key={`${hit.connectionId}:${hit.table.fqName}`}
-                    value={`${hit.connectionName} ${hit.table.fqName}`}
-                    onSelect={() => {
-                      void openTableTab(hit)
-                      setIsCommandOpen(false)
-                    }}
-                    className='cursor-pointer'
-                  >
-                    <Table2 className='h-4 w-4' />
-                    <span className='truncate'>{formatTableLabel(hit.table)}</span>
-                    <span className='ml-auto text-[10px] uppercase tracking-wide text-slate-400'>
-                      {hit.connectionName} • {hit.engine === 'postgres' ? 'PG' : 'CH'}
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
+              {groupedCommandHits.map((group, groupIndex) => (
+                <CommandGroup
+                  key={group.connectionId}
+                  heading={group.heading}
+                  className={cn(groupIndex > 0 && 'mt-1 border-t border-slate-800 pt-2')}
+                >
+                  {group.items.map(({ hit, index }) => (
+                    <CommandItem
+                      key={`${hit.connectionId}:${hit.table.fqName}`}
+                      value={`${hit.connectionName} ${hit.table.fqName}`}
+                      onSelect={() => {
+                        setIsCommandOpen(false)
+                        void openTableTab(hit)
+                      }}
+                      onMouseEnter={() => setCommandIndex(index)}
+                      onFocus={() => setCommandIndex(index)}
+                      className={cn('cursor-pointer', commandIndex === index && 'bg-slate-700/40')}
+                    >
+                      <Table2 className='h-4 w-4' />
+                      <span className='truncate'>{formatTableLabel(hit.table)}</span>
+                      <span className='ml-auto text-[10px] uppercase tracking-wide text-slate-400'>
+                        {hit.engine === 'postgres' ? 'PG' : 'CH'}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
             </CommandList>
           </Command>
         </DialogContent>
@@ -3052,6 +3470,7 @@ function serializeWorkTab(tab: WorkTab): PersistedWorkTab {
     page: tab.page,
     sort: tab.sort,
     filterColumn: tab.filterColumn,
+    filterOperator: tab.filterOperator,
     filterValue: tab.filterValue,
   }
 }
@@ -3087,6 +3506,7 @@ function deserializeEnvironmentWorkspaceSnapshot(
           page: typeof tab.page === 'number' ? tab.page : 0,
           sort: tab.sort,
           filterColumn: tab.filterColumn ?? '',
+          filterOperator: tab.filterOperator ?? 'ilike',
           filterValue: tab.filterValue ?? '',
           selectedRowIndex: null,
           pendingUpdates: {},
@@ -3271,6 +3691,56 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   }
 
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function resolveCommandScopedColumn(schema: TableSchema, draftColumn: string): string | null {
+  const candidate = draftColumn.trim().toLowerCase()
+  if (!candidate) {
+    return schema.columns[0]?.name ?? null
+  }
+
+  const exact = schema.columns.find((column) => column.name.toLowerCase() === candidate)
+  if (exact) {
+    return exact.name
+  }
+
+  const startsWith = schema.columns.find((column) => column.name.toLowerCase().startsWith(candidate))
+  if (startsWith) {
+    return startsWith.name
+  }
+
+  return null
+}
+
+function buildCreateTableTemplateSql(engine: DatabaseEngine, schema: TableSchema): string {
+  const columnsSql = schema.columns
+    .map((column) => {
+      const nullability = column.nullable ? '' : ' NOT NULL'
+      return `  ${quoteSqlIdentifier(engine, column.name)} ${column.dataType}${nullability}`
+    })
+    .join(',\n')
+
+  const primaryKeySql =
+    schema.primaryKey.length > 0
+      ? `,\n  PRIMARY KEY (${schema.primaryKey.map((column) => quoteSqlIdentifier(engine, column)).join(', ')})`
+      : ''
+
+  return `CREATE TABLE ${quoteSqlIdentifier(engine, schema.table.schema)}.${quoteSqlIdentifier(engine, schema.table.name)} (\n${columnsSql}${primaryKeySql}\n);`
+}
+
+function buildInsertTemplateSql(engine: DatabaseEngine, schema: TableSchema): string {
+  const columns = schema.columns.map((column) => quoteSqlIdentifier(engine, column.name))
+  const placeholders = schema.columns.map(() => '?')
+
+  return `INSERT INTO ${quoteSqlIdentifier(engine, schema.table.schema)}.${quoteSqlIdentifier(engine, schema.table.name)} (\n  ${columns.join(',\n  ')}\n)\nVALUES (\n  ${placeholders.join(',\n  ')}\n);`
+}
+
+function quoteSqlIdentifier(engine: DatabaseEngine, identifier: string): string {
+  if (engine === 'clickhouse') {
+    return '`' + identifier.replace(/`/g, '``') + '`'
+  }
+
+  return `"${identifier.replace(/"/g, '""')}"`
 }
 
 function formatCell(value: unknown): string {

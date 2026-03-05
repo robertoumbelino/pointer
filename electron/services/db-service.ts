@@ -333,6 +333,7 @@ export class DbService {
 
   async searchTablesInEnvironment(environmentId: string, query: string): Promise<TableSearchHit[]> {
     const connections = await this.listConnections(environmentId)
+    const normalizedQuery = query.trim().toLowerCase()
 
     const results = await Promise.all(
       connections.map(async (connection) => {
@@ -353,6 +354,16 @@ export class DbService {
     return results
       .flat()
       .sort((a, b) => {
+        const rankDiff = rankTableMatch(a.table, normalizedQuery) - rankTableMatch(b.table, normalizedQuery)
+        if (rankDiff !== 0) {
+          return rankDiff
+        }
+
+        const lengthDiff = a.table.name.length - b.table.name.length
+        if (lengthDiff !== 0) {
+          return lengthDiff
+        }
+
         const byConnection = a.connectionName.localeCompare(b.connectionName)
         if (byConnection !== 0) {
           return byConnection
@@ -1217,6 +1228,12 @@ function buildPostgresWhereClause(filters: TableFilter[], availableColumns: stri
       continue
     }
 
+    if (filter.operator === 'eq') {
+      values.push(filter.value)
+      parts.push(`CAST(${quotePostgresIdentifier(filter.column)} AS TEXT) = $${values.length}`)
+      continue
+    }
+
     values.push(`%${filter.value}%`)
     parts.push(`CAST(${quotePostgresIdentifier(filter.column)} AS TEXT) ILIKE $${values.length}`)
   }
@@ -1250,9 +1267,12 @@ function buildClickHouseWhereClause(
     const key = `f_${parts.length}`
     params[key] = filter.value
 
-    parts.push(
-      `positionCaseInsensitiveUTF8(toString(${quoteClickHouseIdentifier(filter.column)}), {${key}:String}) > 0`,
-    )
+    if (filter.operator === 'eq') {
+      parts.push(`toString(${quoteClickHouseIdentifier(filter.column)}) = {${key}:String}`)
+      continue
+    }
+
+    parts.push(`positionCaseInsensitiveUTF8(toString(${quoteClickHouseIdentifier(filter.column)}), {${key}:String}) > 0`)
   }
 
   if (parts.length === 0) {
@@ -1345,4 +1365,48 @@ function normalizeEnvironmentColor(color?: string): string {
   }
 
   return DEFAULT_ENVIRONMENT_COLOR
+}
+
+function rankTableMatch(table: TableRef, queryLower: string): number {
+  if (!queryLower) {
+    return 100
+  }
+
+  const tableName = table.name.toLowerCase()
+  const fqName = table.fqName.toLowerCase()
+
+  if (tableName === queryLower) {
+    return 0
+  }
+
+  if (fqName === queryLower) {
+    return 1
+  }
+
+  if (tableName.startsWith(queryLower)) {
+    return 2
+  }
+
+  if (fqName.startsWith(queryLower)) {
+    return 3
+  }
+
+  const wordBoundary = tableName.match(new RegExp(`(^|[_\\-.])${escapeRegExp(queryLower)}`))
+  if (wordBoundary) {
+    return 4
+  }
+
+  if (tableName.includes(queryLower)) {
+    return 5
+  }
+
+  if (fqName.includes(queryLower)) {
+    return 6
+  }
+
+  return 50
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
