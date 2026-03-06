@@ -1,4 +1,5 @@
 import type { AppUpdateInfo } from '../../../../shared/db-types'
+import { Download, RefreshCw } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 
 type AppTopBarProps = {
@@ -18,16 +19,24 @@ export function AppTopBar({
   onCheckForUpdate,
   onInstallUpdate,
 }: AppTopBarProps): JSX.Element {
+  const hasUpdate = Boolean(appUpdateInfo?.hasUpdate)
+
   return (
     <div className='drag-region flex h-9 items-center justify-end border-b border-slate-800/70 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950/90 pl-24 pr-4'>
-      <div className='no-drag flex items-center gap-2'>
-        <span className='select-none text-[11px] tracking-wide text-slate-500'>v{appVersion}</span>
+      <div className='no-drag ml-auto flex h-full items-center'>
         <Button
-          variant={appUpdateInfo?.hasUpdate ? 'default' : 'ghost'}
-          size='sm'
-          className='h-6 px-2 text-[11px]'
+          variant={hasUpdate ? 'default' : 'ghost'}
+          size={hasUpdate ? 'sm' : 'icon'}
+          className={hasUpdate ? 'h-6 gap-1.5 px-2 text-[11px] leading-none' : 'h-6 w-6'}
+          title={
+            hasUpdate
+              ? `Atualizar para v${appUpdateInfo?.latestVersion ?? ''}`
+              : isCheckingAppUpdate
+                ? 'Checando atualizações...'
+                : 'Checar atualizações'
+          }
           onClick={() => {
-            if (appUpdateInfo?.hasUpdate) {
+            if (hasUpdate) {
               void onInstallUpdate()
             } else {
               void onCheckForUpdate(true)
@@ -35,14 +44,21 @@ export function AppTopBar({
           }}
           disabled={isCheckingAppUpdate || isInstallingAppUpdate}
         >
-          {isInstallingAppUpdate
-            ? 'Atualizando...'
-            : isCheckingAppUpdate
-              ? 'Checando...'
-              : appUpdateInfo?.hasUpdate
-                ? `Upgrade ${appUpdateInfo.latestVersion}`
-                : 'Checar update'}
+          {hasUpdate ? (
+            <>
+              {isInstallingAppUpdate ? (
+                <RefreshCw className='h-3.5 w-3.5 animate-spin' />
+              ) : (
+                <Download className='h-3.5 w-3.5' />
+              )}
+              <span>{isInstallingAppUpdate ? 'Atualizando...' : 'Atualizar'}</span>
+            </>
+          ) : (
+            <RefreshCw className={isCheckingAppUpdate ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+          )}
         </Button>
+        <span className='mx-2 h-4 w-px bg-slate-700/55' />
+        <span className='select-none text-[11px] leading-none tracking-wide text-slate-500'>v{appVersion}</span>
       </div>
     </div>
   )
