@@ -56,6 +56,7 @@ export interface TableSearchHit {
 export interface ColumnDef {
   name: string
   dataType: string
+  enumValues?: string[]
   nullable: boolean
   defaultValue: string | null
   isPrimaryKey: boolean

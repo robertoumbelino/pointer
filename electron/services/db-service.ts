@@ -1066,16 +1066,54 @@ export class DbService {
       [table.schema, table.name],
     )
 
+    const enumResult = await pool.query<{
+      column_name: string
+      enum_label: string
+    }>(
+      `
+      SELECT
+        a.attname AS column_name,
+        e.enumlabel AS enum_label
+      FROM pg_catalog.pg_attribute AS a
+      JOIN pg_catalog.pg_class AS c
+        ON c.oid = a.attrelid
+      JOIN pg_catalog.pg_namespace AS n
+        ON n.oid = c.relnamespace
+      JOIN pg_catalog.pg_type AS t
+        ON t.oid = a.atttypid
+      JOIN pg_catalog.pg_enum AS e
+        ON e.enumtypid = t.oid
+      WHERE n.nspname = $1
+        AND c.relname = $2
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+      ORDER BY a.attnum ASC, e.enumsortorder ASC
+      `,
+      [table.schema, table.name],
+    )
+
     const primaryKey = pkResult.rows.map((row) => row.column_name)
     const primaryKeySet = new Set(primaryKey)
+    const enumValuesByColumn = new Map<string, string[]>()
 
-    const columns: ColumnDef[] = columnsResult.rows.map((row) => ({
-      name: row.column_name,
-      dataType: row.data_type === 'USER-DEFINED' ? row.udt_name : row.data_type,
-      nullable: row.is_nullable === 'YES',
-      defaultValue: row.column_default,
-      isPrimaryKey: primaryKeySet.has(row.column_name),
-    }))
+    for (const row of enumResult.rows) {
+      const current = enumValuesByColumn.get(row.column_name) ?? []
+      current.push(row.enum_label)
+      enumValuesByColumn.set(row.column_name, current)
+    }
+
+    const columns: ColumnDef[] = columnsResult.rows.map((row) => {
+      const enumValues = enumValuesByColumn.get(row.column_name)
+
+      return {
+        name: row.column_name,
+        dataType: row.data_type === 'USER-DEFINED' ? row.udt_name : row.data_type,
+        enumValues,
+        nullable: row.is_nullable === 'YES',
+        defaultValue: row.column_default,
+        isPrimaryKey: primaryKeySet.has(row.column_name),
+      }
+    })
 
     await pool.query(`SELECT * FROM ${quotedSchema}.${quotedTable} LIMIT 0`)
 
@@ -1123,6 +1161,7 @@ export class DbService {
     const columns: ColumnDef[] = rows.map((row) => ({
       name: row.name,
       dataType: row.type,
+      enumValues: extractClickHouseEnumValues(row.type),
       nullable: row.type.startsWith('Nullable('),
       defaultValue: row.default_expression,
       isPrimaryKey: primaryKeySet.has(row.name),
@@ -1771,6 +1810,105 @@ function quoteSqliteIdentifier(identifier: string): string {
 
 function escapeSqlLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
+}
+
+function extractClickHouseEnumValues(dataType: string): string[] | undefined {
+  const enumMatch = /Enum(?:8|16)\s*\(/i.exec(dataType)
+  if (!enumMatch || enumMatch.index === undefined) {
+    return undefined
+  }
+
+  const openParenthesis = dataType.indexOf('(', enumMatch.index)
+  if (openParenthesis < 0) {
+    return undefined
+  }
+
+  const closeParenthesis = findMatchingClosingParenthesis(dataType, openParenthesis)
+  if (closeParenthesis < 0) {
+    return undefined
+  }
+
+  const enumDefinition = dataType.slice(openParenthesis + 1, closeParenthesis)
+  const labels: string[] = []
+
+  for (const match of enumDefinition.matchAll(/'((?:[^'\\]|\\.|'')*)'\s*=/g)) {
+    labels.push(unescapeClickHouseEnumLabel(match[1]))
+  }
+
+  return labels.length > 0 ? labels : undefined
+}
+
+function findMatchingClosingParenthesis(source: string, openIndex: number): number {
+  let depth = 0
+  let inSingleQuote = false
+  let isEscaped = false
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index]
+
+    if (inSingleQuote) {
+      if (isEscaped) {
+        isEscaped = false
+        continue
+      }
+
+      if (char === '\\') {
+        isEscaped = true
+        continue
+      }
+
+      if (char === "'") {
+        inSingleQuote = false
+      }
+
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      continue
+    }
+
+    if (char === '(') {
+      depth += 1
+      continue
+    }
+
+    if (char === ')') {
+      depth -= 1
+      if (depth === 0) {
+        return index
+      }
+    }
+  }
+
+  return -1
+}
+
+function unescapeClickHouseEnumLabel(value: string): string {
+  let result = ''
+  let isEscaped = false
+
+  for (const char of value) {
+    if (isEscaped) {
+      result += char
+      isEscaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      isEscaped = true
+      continue
+    }
+
+    result += char
+  }
+
+  if (isEscaped) {
+    result += '\\'
+  }
+
+  return result.replace(/''/g, "'")
 }
 
 function splitStatements(sql: string): string[] {

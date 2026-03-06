@@ -24,6 +24,49 @@ type JsonEditorCellState = {
   canEdit: boolean
 }
 
+const NULL_SELECT_VALUE = '__pointer_null__'
+const ENUM_SELECT_PREFIX = 'enum:'
+
+function encodeEnumSelectValue(value: string): string {
+  return `${ENUM_SELECT_PREFIX}${value}`
+}
+
+function decodeEnumSelectValue(value: string): string | null {
+  if (value === NULL_SELECT_VALUE) {
+    return null
+  }
+
+  if (value.startsWith(ENUM_SELECT_PREFIX)) {
+    return value.slice(ENUM_SELECT_PREFIX.length)
+  }
+
+  return value
+}
+
+function resolveEnumSelectValue(rawValue: unknown, nullable: boolean, fallbackValue: string): string {
+  if (rawValue === null) {
+    return NULL_SELECT_VALUE
+  }
+
+  if (typeof rawValue === 'string') {
+    if (rawValue === '' && nullable) {
+      return NULL_SELECT_VALUE
+    }
+
+    return encodeEnumSelectValue(rawValue)
+  }
+
+  if (rawValue === undefined) {
+    if (nullable) {
+      return NULL_SELECT_VALUE
+    }
+
+    return encodeEnumSelectValue(fallbackValue)
+  }
+
+  return encodeEnumSelectValue(String(rawValue))
+}
+
 function formatJsonEditorValue(value: unknown): string {
   if (value === null || value === undefined) {
     return ''
@@ -77,7 +120,7 @@ type TableWorkspacePanelProps = {
   setEditingCell: Dispatch<SetStateAction<EditingCell | null>>
   commitInlineEdit: (override?: EditingCell) => void
   cancelInlineEdit: () => void
-  updateInsertDraftValue: (columnName: string, value: string) => void
+  updateInsertDraftValue: (columnName: string, value: string | null) => void
   formatDraftInputValue: (value: unknown) => string
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableTab['table']) => string
@@ -338,6 +381,8 @@ export function TableWorkspacePanel({
                         editingCell.rowIndex === rowIndex &&
                         editingCell.column === column.name
                       const isJsonColumn = isJsonLikeDataType(column.dataType)
+                      const enumValues = column.enumValues ?? []
+                      const hasEnumColumnValues = enumValues.length > 0
                       const canEditCell =
                         !column.isPrimaryKey && activeTableTab.schema?.supportsRowEdit && !isPendingDelete
 
@@ -376,35 +421,73 @@ export function TableWorkspacePanel({
                           }}
                         >
                           {isEditing ? (
-                            <Input
-                              value={editingCell.value}
-                              autoFocus
-                              onChange={(event) =>
-                                setEditingCell((current) => {
-                                  if (!current) {
-                                    return null
+                            hasEnumColumnValues ? (
+                              <select
+                                value={resolveEnumSelectValue(editingCell.value, column.nullable, enumValues[0])}
+                                autoFocus
+                                onChange={(event) => {
+                                  const selected = decodeEnumSelectValue(event.target.value)
+                                  const nextEditingCell: EditingCell = {
+                                    tabId: activeTableTab.id,
+                                    rowIndex,
+                                    column: column.name,
+                                    value: selected ?? '',
+                                  }
+                                  setEditingCell(nextEditingCell)
+                                  commitInlineEdit(nextEditingCell)
+                                }}
+                                onBlur={() => commitInlineEdit()}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    commitInlineEdit()
                                   }
 
-                                  return {
-                                    ...current,
-                                    value: event.target.value,
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    cancelInlineEdit()
                                   }
-                                })
-                              }
-                              onBlur={() => commitInlineEdit()}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  commitInlineEdit()
-                                }
+                                }}
+                                className='h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100 outline-none ring-slate-300/45 focus:ring-2'
+                              >
+                                {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
+                                {enumValues.map((enumValue) => (
+                                  <option key={enumValue} value={encodeEnumSelectValue(enumValue)}>
+                                    {enumValue}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <Input
+                                value={editingCell.value}
+                                autoFocus
+                                onChange={(event) =>
+                                  setEditingCell((current) => {
+                                    if (!current) {
+                                      return null
+                                    }
 
-                                if (event.key === 'Escape') {
-                                  event.preventDefault()
-                                  cancelInlineEdit()
+                                    return {
+                                      ...current,
+                                      value: event.target.value,
+                                    }
+                                  })
                                 }
-                              }}
-                              className='h-8'
-                            />
+                                onBlur={() => commitInlineEdit()}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    commitInlineEdit()
+                                  }
+
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    cancelInlineEdit()
+                                  }
+                                }}
+                                className='h-8'
+                              />
+                            )
                           ) : (
                             <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
                               {isJsonColumn ? formatJsonPreviewValue(row[column.name]) : formatCell(row[column.name])}
@@ -418,16 +501,43 @@ export function TableWorkspacePanel({
               })}
               {activeTableTab.insertDraft && (
                 <tr className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'>
-                  {activeTableTab.schema?.columns.map((column) => (
-                    <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
-                      <Input
-                        value={formatDraftInputValue(activeTableTab.insertDraft?.[column.name])}
-                        placeholder={column.isPrimaryKey ? 'PK' : column.name}
-                        onChange={(event) => updateInsertDraftValue(column.name, event.target.value)}
-                        className='h-7 border-emerald-500/35 bg-slate-900/90 text-[12px] text-slate-100'
-                      />
-                    </td>
-                  ))}
+                  {activeTableTab.schema?.columns.map((column) => {
+                    const enumValues = column.enumValues ?? []
+                    const hasEnumColumnValues = enumValues.length > 0
+
+                    return (
+                      <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
+                        {hasEnumColumnValues ? (
+                          <select
+                            value={resolveEnumSelectValue(
+                              activeTableTab.insertDraft?.[column.name],
+                              column.nullable,
+                              enumValues[0],
+                            )}
+                            onChange={(event) => {
+                              const selected = decodeEnumSelectValue(event.target.value)
+                              updateInsertDraftValue(column.name, selected)
+                            }}
+                            className='h-7 w-full rounded-md border border-emerald-500/35 bg-slate-900/90 px-2 text-[12px] text-slate-100 outline-none ring-emerald-300/40 focus:ring-2'
+                          >
+                            {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
+                            {enumValues.map((enumValue) => (
+                              <option key={enumValue} value={encodeEnumSelectValue(enumValue)}>
+                                {enumValue}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Input
+                            value={formatDraftInputValue(activeTableTab.insertDraft?.[column.name])}
+                            placeholder={column.isPrimaryKey ? 'PK' : column.name}
+                            onChange={(event) => updateInsertDraftValue(column.name, event.target.value)}
+                            className='h-7 border-emerald-500/35 bg-slate-900/90 text-[12px] text-slate-100'
+                          />
+                        )}
+                      </td>
+                    )
+                  })}
                 </tr>
               )}
             </tbody>
