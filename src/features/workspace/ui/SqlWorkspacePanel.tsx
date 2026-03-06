@@ -123,7 +123,7 @@ export function SqlWorkspacePanel({
                     <span>{resultSet.command}</span>
                     <span>{resultSet.rowCount} linhas</span>
                   </div>
-                  <div className='max-h-56 overflow-auto'>
+                  <div className='overflow-auto'>
                     <table className='w-full min-w-max text-xs'>
                       <thead className='bg-slate-900'>
                         <tr>
