@@ -441,18 +441,32 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-export function coerceValueByOriginal(nextValue: string, originalValue: unknown): unknown {
-  if (nextValue === '') {
+export function coerceValueByOriginal(nextValue: string, originalValue: unknown, dataType?: string): unknown {
+  const trimmedValue = nextValue.trim()
+
+  if (trimmedValue === '') {
     return null
   }
 
+  if (dataType && isJsonLikeDataType(dataType)) {
+    if (trimmedValue.toLowerCase() === 'null') {
+      return null
+    }
+
+    try {
+      return JSON.parse(trimmedValue)
+    } catch {
+      return nextValue
+    }
+  }
+
   if (typeof originalValue === 'number') {
-    const parsed = Number(nextValue)
+    const parsed = Number(trimmedValue)
     return Number.isNaN(parsed) ? nextValue : parsed
   }
 
   if (typeof originalValue === 'boolean') {
-    const normalized = nextValue.trim().toLowerCase()
+    const normalized = trimmedValue.toLowerCase()
     if (normalized === 'true') {
       return true
     }
@@ -523,6 +537,6 @@ function isNumericDataType(dataType: string): boolean {
   return /(int|numeric|decimal|float|double|real|serial)/i.test(dataType)
 }
 
-function isJsonLikeDataType(dataType: string): boolean {
+export function isJsonLikeDataType(dataType: string): boolean {
   return /(json|map|array|object)/i.test(dataType)
 }
