@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
+import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { Play } from 'lucide-react'
@@ -18,6 +18,49 @@ type SqlWorkspacePanelProps = {
   formatCell: (value: unknown) => string
 }
 
+type ResultSetSortState = {
+  field: string
+  clickCount: number
+}
+
+function nextSortState(current: ResultSetSortState | undefined, field: string): ResultSetSortState {
+  if (!current || current.field !== field) {
+    return { field, clickCount: 1 }
+  }
+
+  return { field, clickCount: current.clickCount + 1 }
+}
+
+function compareUnknownValues(left: unknown, right: unknown): number {
+  if (left === right) {
+    return 0
+  }
+
+  if (left === null || left === undefined) {
+    return -1
+  }
+
+  if (right === null || right === undefined) {
+    return 1
+  }
+
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right
+  }
+
+  if (typeof left === 'boolean' && typeof right === 'boolean') {
+    return Number(left) - Number(right)
+  }
+
+  const leftText = typeof left === 'object' ? JSON.stringify(left) : String(left)
+  const rightText = typeof right === 'object' ? JSON.stringify(right) : String(right)
+
+  return leftText.localeCompare(rightText, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  })
+}
+
 export function SqlWorkspacePanel({
   activeSqlTab,
   updateSqlTab,
@@ -29,6 +72,8 @@ export function SqlWorkspacePanel({
   setResizingSqlTabId,
   formatCell,
 }: SqlWorkspacePanelProps): JSX.Element {
+  const [resultSetSortByKey, setResultSetSortByKey] = useState<Record<string, ResultSetSortState>>({})
+
   return (
     <div className='flex h-full flex-col rounded-lg border border-slate-800/65 bg-[#0b1220]'>
       <div className='flex items-center justify-between border-b border-slate-800/70 px-3 py-2.5'>
@@ -118,6 +163,37 @@ export function SqlWorkspacePanel({
           {activeSqlTab.sqlResult ? (
             <div className='space-y-3 pb-2'>
               {activeSqlTab.sqlResult.resultSets.map((resultSet, index) => (
+                (() => {
+                  const sortKey = `${activeSqlTab.id}:${index}`
+                  const sortState = resultSetSortByKey[sortKey]
+                  const sortPhase = sortState ? ((sortState.clickCount % 3) as 0 | 1 | 2) : 0
+                  const effectiveSort =
+                    sortState &&
+                    sortPhase !== 0 &&
+                    resultSet.fields.includes(sortState.field)
+                      ? sortState
+                      : undefined
+                  const sortedRows = resultSet.rows
+                    .map((row, originalIndex) => ({ row, originalIndex }))
+                    .sort((left, right) => {
+                      if (!effectiveSort) {
+                        return left.originalIndex - right.originalIndex
+                      }
+
+                      const comparison = compareUnknownValues(
+                        left.row[effectiveSort.field],
+                        right.row[effectiveSort.field],
+                      )
+
+                      if (comparison !== 0) {
+                        return sortPhase === 1 ? comparison : -comparison
+                      }
+
+                      return left.originalIndex - right.originalIndex
+                    })
+                    .map(({ row }) => row)
+
+                  return (
                 <div key={`${resultSet.command}-${index}`} className='rounded-md border border-slate-800/65 bg-slate-950/35'>
                   <div className='flex items-center justify-between border-b border-slate-800/80 px-3 py-1.5 text-xs text-slate-400'>
                     <span>{resultSet.command}</span>
@@ -128,14 +204,38 @@ export function SqlWorkspacePanel({
                       <thead className='bg-slate-900'>
                         <tr>
                           {resultSet.fields.map((field) => (
-                            <th key={field} className='px-2 py-1 text-left font-semibold text-slate-300'>
-                              {field}
+                            <th
+                              key={field}
+                              className='cursor-pointer select-none px-2 py-1 text-left font-semibold text-slate-300'
+                              onMouseDown={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+
+                                setResultSetSortByKey((current) => {
+                                  const currentSort = current[sortKey]
+                                  const nextSort = nextSortState(currentSort, field)
+
+                                  return {
+                                    ...current,
+                                    [sortKey]: nextSort,
+                                  }
+                                })
+                              }}
+                            >
+                              <span className='inline-flex items-center gap-1'>
+                                <span>{field}</span>
+                                {effectiveSort?.field === field && (
+                                  <span className='text-slate-300'>
+                                    {sortPhase === 1 ? '↑' : '↓'}
+                                  </span>
+                                )}
+                              </span>
                             </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {resultSet.rows.slice(0, 300).map((row, rowIndex) => (
+                        {sortedRows.slice(0, 300).map((row, rowIndex) => (
                           <tr key={`${rowIndex}-${JSON.stringify(row)}`} className='border-t border-slate-800/70'>
                             {resultSet.fields.map((field) => (
                               <td key={`${field}-${rowIndex}`} className='px-2 py-1 text-slate-200 whitespace-nowrap'>
@@ -148,6 +248,8 @@ export function SqlWorkspacePanel({
                     </table>
                   </div>
                 </div>
+                  )
+                })()
               ))}
             </div>
           ) : (

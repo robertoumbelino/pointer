@@ -262,7 +262,8 @@ export function useWorkspaceActions({
     }
 
     const nextPage = overrides?.page ?? tab.page
-    const nextSort = overrides?.sort ?? tab.sort
+    const hasSortOverride = Boolean(overrides && Object.prototype.hasOwnProperty.call(overrides, 'sort'))
+    const nextSort = hasSortOverride ? overrides?.sort : tab.sort
     const nextFilterColumn = overrides?.filterColumn ?? tab.filterColumn
     const nextFilterOperator = overrides?.filterOperator ?? tab.filterOperator
     const nextFilterValue = overrides?.filterValue ?? tab.filterValue
