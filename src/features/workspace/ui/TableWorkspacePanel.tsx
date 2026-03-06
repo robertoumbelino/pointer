@@ -255,13 +255,6 @@ export function TableWorkspacePanel({
       </div>
 
       <div className='flex-1 overflow-auto'>
-        {activeTableTab.loading && (
-          <div className='flex items-center gap-2 border-b border-slate-800/80 px-4 py-2 text-sm text-slate-400'>
-            <RefreshCw className='h-3.5 w-3.5 animate-spin' />
-            <span>Carregando...</span>
-          </div>
-        )}
-
         <div className='h-full overflow-auto'>
           <table className='min-w-max border-collapse text-sm'>
             <thead className='sticky top-0 z-10 bg-slate-900'>
@@ -305,7 +298,9 @@ export function TableWorkspacePanel({
                       }}
                     >
                       <span>{column.name}</span>
-                      {activeTableTab.sort?.column === column.name && (
+                      {activeTableTab.loading && activeTableTab.sort?.column === column.name ? (
+                        <RefreshCw className='h-3.5 w-3.5 animate-spin text-slate-300' />
+                      ) : activeTableTab.sort?.column === column.name && (
                         <span className='text-slate-300'>
                           {activeTableTab.sort.direction === 'asc' ? '↑' : '↓'}
                         </span>
