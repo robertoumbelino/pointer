@@ -506,7 +506,7 @@ export function TableWorkspacePanel({
           }
         }}
       >
-        <DialogContent className='max-w-2xl'>
+        <DialogContent className='max-w-2xl space-y-3'>
           <DialogHeader>
             <DialogTitle>Editar JSON</DialogTitle>
             <DialogDescription>

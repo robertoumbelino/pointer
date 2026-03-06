@@ -1314,6 +1314,7 @@ export class DbService {
   private async insertPostgresRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<Record<string, unknown>> {
     const pool = await this.getPostgresPool(connection)
     const schema = await this.describePostgresTable(connection, table)
+    const columnByName = new Map(schema.columns.map((column) => [column.name, column]))
 
     const allowedColumns = new Set(schema.columns.map((column) => column.name))
     const keys = Object.keys(row).filter((key) => allowedColumns.has(key))
@@ -1326,7 +1327,7 @@ export class DbService {
     } else {
       const columnList = keys.map((key) => quotePostgresIdentifier(key)).join(', ')
       const placeholders = keys.map((_, index) => `$${index + 1}`).join(', ')
-      const values = keys.map((key) => normalizeValue(row[key]))
+      const values = keys.map((key) => normalizePostgresColumnValue(row[key], columnByName.get(key)))
 
       result = await pool.query(
         `INSERT INTO ${quotedTarget} (${columnList}) VALUES (${placeholders}) RETURNING *`,
@@ -1391,6 +1392,7 @@ export class DbService {
   private async updatePostgresRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<{ affected: number }> {
     const pool = await this.getPostgresPool(connection)
     const schema = await this.describePostgresTable(connection, table)
+    const columnByName = new Map(schema.columns.map((column) => [column.name, column]))
 
     if (schema.primaryKey.length === 0) {
       throw new Error('A tabela não possui chave primária para update.')
@@ -1415,14 +1417,14 @@ export class DbService {
 
     const setClause = patchKeys
       .map((key) => {
-        values.push(normalizeValue(row[key]))
+        values.push(normalizePostgresColumnValue(row[key], columnByName.get(key)))
         return `${quotePostgresIdentifier(key)} = $${values.length}`
       })
       .join(', ')
 
     const whereClause = schema.primaryKey
       .map((pk) => {
-        values.push(normalizeValue(row[pk]))
+        values.push(normalizePostgresColumnValue(row[pk], columnByName.get(pk)))
         return `${quotePostgresIdentifier(pk)} = $${values.length}`
       })
       .join(' AND ')
@@ -1438,6 +1440,7 @@ export class DbService {
   private async deletePostgresRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<{ affected: number }> {
     const pool = await this.getPostgresPool(connection)
     const schema = await this.describePostgresTable(connection, table)
+    const columnByName = new Map(schema.columns.map((column) => [column.name, column]))
 
     if (schema.primaryKey.length === 0) {
       throw new Error('A tabela não possui chave primária para delete.')
@@ -1453,7 +1456,7 @@ export class DbService {
     const values: unknown[] = []
     const whereClause = schema.primaryKey
       .map((pkColumn) => {
-        values.push(normalizeValue(row[pkColumn]))
+        values.push(normalizePostgresColumnValue(row[pkColumn], columnByName.get(pkColumn)))
         return `${quotePostgresIdentifier(pkColumn)} = $${values.length}`
       })
       .join(' AND ')
@@ -1614,6 +1617,36 @@ function normalizeValue(value: unknown): unknown {
   }
 
   return value
+}
+
+function normalizePostgresColumnValue(value: unknown, column?: ColumnDef): unknown {
+  const normalized = normalizeValue(value)
+  if (!column || !isPostgresJsonColumn(column) || normalized === null || normalized === undefined) {
+    return normalized
+  }
+
+  if (typeof normalized === 'string') {
+    const trimmed = normalized.trim()
+    if (trimmed === '') {
+      return null
+    }
+
+    try {
+      return JSON.stringify(JSON.parse(trimmed))
+    } catch {
+      throw new Error(`Valor inválido para coluna JSON "${column.name}".`)
+    }
+  }
+
+  try {
+    return JSON.stringify(normalized)
+  } catch {
+    throw new Error(`Valor inválido para coluna JSON "${column.name}".`)
+  }
+}
+
+function isPostgresJsonColumn(column: ColumnDef): boolean {
+  return /^jsonb?$/i.test(column.dataType.trim())
 }
 
 function sanitizePort(port: number): number {
