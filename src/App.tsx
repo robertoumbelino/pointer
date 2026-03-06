@@ -51,6 +51,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandShortcut,
 } from './components/ui/command'
 import {
   Dialog,
@@ -308,6 +309,7 @@ function App(): JSX.Element {
   const sqlSplitContainerRef = useRef<HTMLDivElement | null>(null)
   const commandColumnInputRef = useRef<HTMLSelectElement | null>(null)
   const commandValueInputRef = useRef<HTMLInputElement | null>(null)
+  const commandItemRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const sqlCursorByTabRef = useRef<Record<string, number>>({})
   const environmentWorkspaceRef = useRef<Record<string, EnvironmentWorkspaceSnapshot>>({})
   const previousEnvironmentIdRef = useRef<string>('')
@@ -437,25 +439,40 @@ function App(): JSX.Element {
   const groupedCommandHits = useMemo(() => {
     const groups = new Map<
       string,
-      { connectionId: string; heading: string; items: Array<{ hit: TableSearchHit; index: number }> }
+      { connectionId: string; heading: string; items: TableSearchHit[] }
     >()
 
-    commandHits.forEach((hit, index) => {
+    commandHits.forEach((hit) => {
       const existing = groups.get(hit.connectionId)
       if (existing) {
-        existing.items.push({ hit, index })
+        existing.items.push(hit)
         return
       }
 
       groups.set(hit.connectionId, {
         connectionId: hit.connectionId,
         heading: hit.connectionName,
-        items: [{ hit, index }],
+        items: [hit],
       })
     })
 
-    return Array.from(groups.values())
+    const grouped = Array.from(groups.values())
+    let displayIndex = 0
+
+    return grouped.map((group) => ({
+      ...group,
+      items: group.items.map((hit) => {
+        const indexed = { hit, displayIndex }
+        displayIndex += 1
+        return indexed
+      }),
+    }))
   }, [commandHits])
+
+  const orderedCommandHits = useMemo(
+    () => groupedCommandHits.flatMap((group) => group.items.map((item) => item.hit)),
+    [groupedCommandHits],
+  )
 
   const sqlCompletionSource = useMemo(() => {
     return (context: CompletionContext) => {
@@ -619,13 +636,13 @@ function App(): JSX.Element {
       return
     }
 
-    if (commandHits.length === 0) {
+    if (orderedCommandHits.length === 0) {
       setCommandIndex(0)
       return
     }
 
-    setCommandIndex((current) => Math.max(0, Math.min(current, commandHits.length - 1)))
-  }, [commandHits, commandScopedTarget, isCommandOpen])
+    setCommandIndex((current) => Math.max(0, Math.min(current, orderedCommandHits.length - 1)))
+  }, [commandScopedTarget, isCommandOpen, orderedCommandHits.length])
 
   useEffect(() => {
     if (!isCommandOpen || commandScopedTarget) {
@@ -634,6 +651,15 @@ function App(): JSX.Element {
 
     setCommandIndex(0)
   }, [commandQuery, commandScopedTarget, isCommandOpen])
+
+  useEffect(() => {
+    if (!isCommandOpen || commandScopedTarget) {
+      return
+    }
+
+    const activeItem = commandItemRefs.current[commandIndex]
+    activeItem?.scrollIntoView({ block: 'nearest' })
+  }, [commandIndex, commandScopedTarget, isCommandOpen, orderedCommandHits.length])
 
   useEffect(() => {
     if (selectedSchema === 'all') {
@@ -973,25 +999,28 @@ function App(): JSX.Element {
       return
     }
 
-    if (commandHits.length === 0) {
+    if (orderedCommandHits.length === 0) {
       return
     }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setCommandIndex((current) => Math.max(0, Math.min(current + 1, commandHits.length - 1)))
+      event.stopPropagation()
+      setCommandIndex((current) => Math.max(0, Math.min(current + 1, orderedCommandHits.length - 1)))
       return
     }
 
     if (event.key === 'ArrowUp') {
       event.preventDefault()
+      event.stopPropagation()
       setCommandIndex((current) => Math.max(0, current - 1))
       return
     }
 
     if (event.key === 'Tab') {
       event.preventDefault()
-      const target = commandHits[commandIndex] ?? commandHits[0]
+      event.stopPropagation()
+      const target = orderedCommandHits[commandIndex] ?? orderedCommandHits[0]
       if (target) {
         void enterCommandScopedMode(target)
       }
@@ -1000,7 +1029,8 @@ function App(): JSX.Element {
 
     if (event.key === 'Enter') {
       event.preventDefault()
-      const target = commandHits[commandIndex] ?? commandHits[0]
+      event.stopPropagation()
+      const target = orderedCommandHits[commandIndex] ?? orderedCommandHits[0]
       if (target) {
         setIsCommandOpen(false)
         void openTableTab(target)
@@ -3431,23 +3461,39 @@ function App(): JSX.Element {
                   heading={group.heading}
                   className={cn(groupIndex > 0 && 'mt-1 border-t border-slate-800 pt-2')}
                 >
-                  {group.items.map(({ hit, index }) => (
+                  {group.items.map(({ hit, displayIndex }) => (
                     <CommandItem
                       key={`${hit.connectionId}:${hit.table.fqName}`}
+                      ref={(node) => {
+                        commandItemRefs.current[displayIndex] = node
+                      }}
                       value={`${hit.connectionName} ${hit.table.fqName}`}
                       onSelect={() => {
                         setIsCommandOpen(false)
                         void openTableTab(hit)
                       }}
-                      onMouseEnter={() => setCommandIndex(index)}
-                      onFocus={() => setCommandIndex(index)}
-                      className={cn('cursor-pointer', commandIndex === index && 'bg-slate-700/40')}
+                      onMouseMove={() => setCommandIndex(displayIndex)}
+                      data-manual-active={commandIndex === displayIndex ? 'true' : 'false'}
+                      className={cn(
+                        'cursor-pointer text-slate-300 data-[selected=true]:bg-transparent data-[selected=true]:text-slate-300 data-[selected=true]:shadow-none aria-selected:bg-transparent aria-selected:text-slate-300',
+                        'data-[manual-active=true]:!bg-slate-700/55 data-[manual-active=true]:!text-slate-50 data-[manual-active=true]:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]',
+                      )}
                     >
                       <Table2 className='h-4 w-4' />
                       <span className='truncate'>{formatTableLabel(hit.table)}</span>
-                      <span className='ml-auto text-[10px] uppercase tracking-wide text-slate-400'>
-                        {engineShortLabel(hit.engine)}
-                      </span>
+                      <div className='ml-auto flex items-center gap-2'>
+                        {commandIndex === displayIndex && (
+                          <CommandShortcut className='ml-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-slate-300'>
+                            <kbd className='inline-flex h-5 min-w-6 items-center justify-center rounded border border-slate-600/70 bg-slate-800/80 px-1.5 text-[10px] font-semibold tracking-[0.02em] text-slate-100'>
+                              Tab
+                            </kbd>
+                            <span className='text-slate-400'>filtrar</span>
+                          </CommandShortcut>
+                        )}
+                        <span className='text-[10px] uppercase tracking-wide text-slate-400'>
+                          {engineShortLabel(hit.engine)}
+                        </span>
+                      </div>
                     </CommandItem>
                   ))}
                 </CommandGroup>
