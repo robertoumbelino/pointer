@@ -10,6 +10,7 @@ import {
   cloneRows,
   coerceValueByOriginal,
   createInitialInsertDraft,
+  formatDraftInputValue,
   formatTableLabel,
   getErrorMessage,
   getSqlStatementAtCursor,
@@ -55,7 +56,7 @@ type UseWorkspaceActionsResult = {
   closeSqlTab: (tabId: string) => void
   closeActiveTab: () => void
   beginInlineEdit: (rowIndex: number, column: string) => void
-  commitInlineEdit: () => void
+  commitInlineEdit: (override?: EditingCell) => void
   cancelInlineEdit: () => void
   saveActiveTableChanges: () => Promise<void>
   handleToggleInsertDraftRow: () => void
@@ -399,32 +400,34 @@ export function useWorkspaceActions({
       tabId: activeTableTab.id,
       rowIndex,
       column,
-      value: original === null || original === undefined ? '' : String(original),
+      value: formatDraftInputValue(original),
     })
   }
 
-  function commitInlineEdit(): void {
-    if (!editingCell) {
+  function commitInlineEdit(override?: EditingCell): void {
+    const targetEdit = override ?? editingCell
+    if (!targetEdit) {
       return
     }
 
-    const tab = getTableTab(editingCell.tabId)
+    const tab = getTableTab(targetEdit.tabId)
 
     if (!tab?.data) {
       setEditingCell(null)
       return
     }
 
-    const row = tab.data.rows[editingCell.rowIndex]
+    const row = tab.data.rows[targetEdit.rowIndex]
     if (!row) {
       setEditingCell(null)
       return
     }
 
-    const currentValue = row[editingCell.column]
-    const baseRow = tab.baseRows?.[editingCell.rowIndex] ?? null
-    const baseValue = baseRow ? baseRow[editingCell.column] : undefined
-    const nextValue = coerceValueByOriginal(editingCell.value, currentValue)
+    const currentValue = row[targetEdit.column]
+    const baseRow = tab.baseRows?.[targetEdit.rowIndex] ?? null
+    const baseValue = baseRow ? baseRow[targetEdit.column] : undefined
+    const columnDataType = tab.schema?.columns.find((column) => column.name === targetEdit.column)?.dataType
+    const nextValue = coerceValueByOriginal(targetEdit.value, currentValue, columnDataType)
     const hasChanged = !valuesEqual(currentValue, nextValue)
 
     if (!hasChanged) {
@@ -432,19 +435,19 @@ export function useWorkspaceActions({
       return
     }
 
-    updateTableTab(editingCell.tabId, (current) => {
+    updateTableTab(targetEdit.tabId, (current) => {
       if (!current.data) {
         return current
       }
 
       const nextRows = current.data.rows.map((currentRow, index) => {
-        if (index !== editingCell.rowIndex) {
+        if (index !== targetEdit.rowIndex) {
           return currentRow
         }
 
         return {
           ...currentRow,
-          [editingCell.column]: nextValue,
+          [targetEdit.column]: nextValue,
         }
       })
 
@@ -456,18 +459,18 @@ export function useWorkspaceActions({
         },
         pendingUpdates: (() => {
           const nextPendingUpdates: RowPendingUpdates = { ...current.pendingUpdates }
-          const rowPendingUpdate = { ...(nextPendingUpdates[editingCell.rowIndex] ?? {}) }
+          const rowPendingUpdate = { ...(nextPendingUpdates[targetEdit.rowIndex] ?? {}) }
 
           if (valuesEqual(nextValue, baseValue)) {
-            delete rowPendingUpdate[editingCell.column]
+            delete rowPendingUpdate[targetEdit.column]
           } else {
-            rowPendingUpdate[editingCell.column] = nextValue
+            rowPendingUpdate[targetEdit.column] = nextValue
           }
 
           if (Object.keys(rowPendingUpdate).length === 0) {
-            delete nextPendingUpdates[editingCell.rowIndex]
+            delete nextPendingUpdates[targetEdit.rowIndex]
           } else {
-            nextPendingUpdates[editingCell.rowIndex] = rowPendingUpdate
+            nextPendingUpdates[targetEdit.rowIndex] = rowPendingUpdate
           }
 
           return nextPendingUpdates

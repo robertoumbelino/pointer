@@ -1,11 +1,69 @@
-import type { Dispatch, SetStateAction } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import type { TableFilterOperator, TableSort } from '../../../../shared/db-types'
 import type { EditingCell, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
+import { Textarea } from '../../../components/ui/textarea'
 import { cn } from '../../../lib/utils'
+import { isJsonLikeDataType } from '../../../shared/lib/workspace-utils'
+
+type JsonEditorCellState = {
+  rowIndex: number
+  columnName: string
+  canEdit: boolean
+}
+
+function formatJsonEditorValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return JSON.stringify(parsed, null, 2)
+    } catch {
+      return value
+    }
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function formatJsonPreviewValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return 'NULL'
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value))
+    } catch {
+      return value
+    }
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
 
 type TableWorkspacePanelProps = {
   activeTableTab: TableTab
@@ -17,7 +75,7 @@ type TableWorkspacePanelProps = {
   beginInlineEdit: (rowIndex: number, column: string) => void
   editingCell: EditingCell | null
   setEditingCell: Dispatch<SetStateAction<EditingCell | null>>
-  commitInlineEdit: () => void
+  commitInlineEdit: (override?: EditingCell) => void
   cancelInlineEdit: () => void
   updateInsertDraftValue: (columnName: string, value: string) => void
   formatDraftInputValue: (value: unknown) => string
@@ -46,6 +104,50 @@ export function TableWorkspacePanel({
   engineLabel,
   pageSize,
 }: TableWorkspacePanelProps): JSX.Element {
+  const [jsonEditorCell, setJsonEditorCell] = useState<JsonEditorCellState | null>(null)
+  const [jsonEditorValue, setJsonEditorValue] = useState('')
+
+  const closeJsonEditor = (): void => {
+    setJsonEditorCell(null)
+    setJsonEditorValue('')
+  }
+
+  const saveJsonEditor = (): void => {
+    if (!jsonEditorCell) {
+      return
+    }
+
+    if (!jsonEditorCell.canEdit) {
+      closeJsonEditor()
+      return
+    }
+
+    const trimmed = jsonEditorValue.trim()
+    if (!trimmed) {
+      commitInlineEdit({
+        tabId: activeTableTab.id,
+        rowIndex: jsonEditorCell.rowIndex,
+        column: jsonEditorCell.columnName,
+        value: '',
+      })
+      closeJsonEditor()
+      return
+    }
+
+    try {
+      const normalizedJson = JSON.stringify(JSON.parse(trimmed))
+      commitInlineEdit({
+        tabId: activeTableTab.id,
+        rowIndex: jsonEditorCell.rowIndex,
+        column: jsonEditorCell.columnName,
+        value: normalizedJson,
+      })
+      closeJsonEditor()
+    } catch {
+      toast.error('JSON inválido. Corrija o conteúdo antes de salvar.')
+    }
+  }
+
   return (
     <div className='flex h-full flex-col rounded-lg border border-slate-800/65 bg-[#0b1220]'>
       <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/70 px-3 py-2.5'>
@@ -240,12 +342,16 @@ export function TableWorkspacePanel({
                         editingCell?.tabId === activeTableTab.id &&
                         editingCell.rowIndex === rowIndex &&
                         editingCell.column === column.name
+                      const isJsonColumn = isJsonLikeDataType(column.dataType)
+                      const canEditCell =
+                        !column.isPrimaryKey && activeTableTab.schema?.supportsRowEdit && !isPendingDelete
 
                       return (
                         <td
                           key={column.name}
                           className={cn(
                             'min-w-[190px] px-3 py-2 text-slate-200 whitespace-nowrap',
+                            isJsonColumn && 'cursor-pointer',
                             isPendingDelete
                               ? 'bg-red-500/20'
                               : isPendingUpdate
@@ -258,11 +364,18 @@ export function TableWorkspacePanel({
                               selectedRowIndex: rowIndex,
                             }))
 
-                            if (
-                              !column.isPrimaryKey &&
-                              activeTableTab.schema?.supportsRowEdit &&
-                              !isPendingDelete
-                            ) {
+                            if (isJsonColumn) {
+                              cancelInlineEdit()
+                              setJsonEditorCell({
+                                rowIndex,
+                                columnName: column.name,
+                                canEdit: Boolean(canEditCell),
+                              })
+                              setJsonEditorValue(formatJsonEditorValue(row[column.name]))
+                              return
+                            }
+
+                            if (canEditCell) {
                               beginInlineEdit(rowIndex, column.name)
                             }
                           }}
@@ -283,7 +396,7 @@ export function TableWorkspacePanel({
                                   }
                                 })
                               }
-                              onBlur={commitInlineEdit}
+                              onBlur={() => commitInlineEdit()}
                               onKeyDown={(event) => {
                                 if (event.key === 'Enter') {
                                   event.preventDefault()
@@ -298,7 +411,9 @@ export function TableWorkspacePanel({
                               className='h-8'
                             />
                           ) : (
-                            <span>{formatCell(row[column.name])}</span>
+                            <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
+                              {isJsonColumn ? formatJsonPreviewValue(row[column.name]) : formatCell(row[column.name])}
+                            </span>
                           )}
                         </td>
                       )
@@ -382,6 +497,40 @@ export function TableWorkspacePanel({
           </Button>
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(jsonEditorCell)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeJsonEditor()
+          }
+        }}
+      >
+        <DialogContent className='max-w-2xl'>
+          <DialogHeader>
+            <DialogTitle>Editar JSON</DialogTitle>
+            <DialogDescription>
+              {jsonEditorCell
+                ? `Coluna ${jsonEditorCell.columnName} • linha ${jsonEditorCell.rowIndex + 1}`
+                : 'Visualização JSON'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Textarea
+            value={jsonEditorValue}
+            onChange={(event) => setJsonEditorValue(event.target.value)}
+            className='min-h-[300px] font-mono text-xs leading-5'
+            readOnly={!jsonEditorCell?.canEdit}
+          />
+
+          <DialogFooter>
+            <Button variant='ghost' onClick={closeJsonEditor}>
+              Fechar
+            </Button>
+            {jsonEditorCell?.canEdit && <Button onClick={saveJsonEditor}>Salvar JSON</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
