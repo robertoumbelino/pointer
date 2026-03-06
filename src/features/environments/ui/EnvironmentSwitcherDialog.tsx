@@ -59,7 +59,7 @@ export function EnvironmentSwitcherDialog({
           />
           <CommandList>
             <CommandEmpty>Nenhum ambiente encontrado.</CommandEmpty>
-            <CommandGroup heading='Ambientes'>
+            <CommandGroup>
               {environmentCommandResults.map((environment, index) => (
                 <CommandItem
                   key={environment.id}
