@@ -16,6 +16,7 @@ import {
   Copy,
   Database,
   FileCode2,
+  FolderOpen,
   Pencil,
   Play,
   Plus,
@@ -213,6 +214,7 @@ function createConnectionDraft(environmentId: string): ConnectionDraft {
     environmentId,
     engine: 'postgres',
     name: '',
+    filePath: '',
     host: 'localhost',
     port: 5432,
     database: '',
@@ -227,6 +229,7 @@ function createConnectionDraftFromConnection(connection: ConnectionSummary): Con
     environmentId: connection.environmentId,
     engine: connection.engine,
     name: connection.name,
+    filePath: connection.filePath,
     host: connection.host,
     port: connection.port,
     database: connection.database,
@@ -1148,6 +1151,7 @@ function App(): JSX.Element {
         ...connectionDraft,
         environmentId: selectedEnvironmentId,
         name: connectionDraft.name.trim(),
+        filePath: connectionDraft.filePath.trim(),
         host: connectionDraft.host.trim(),
         database: connectionDraft.database.trim(),
         user: connectionDraft.user.trim(),
@@ -1157,7 +1161,15 @@ function App(): JSX.Element {
         throw new Error('Selecione um ambiente antes de criar conexão.')
       }
 
-      if (!payload.name || !payload.host || !payload.database || !payload.user) {
+      if (!payload.name) {
+        throw new Error('Informe o nome da conexão.')
+      }
+
+      if (payload.engine === 'sqlite') {
+        if (!payload.filePath) {
+          throw new Error('Selecione o arquivo do banco SQLite.')
+        }
+      } else if (!payload.host || !payload.database || !payload.user) {
         throw new Error('Preencha os campos obrigatórios da conexão.')
       }
 
@@ -1189,6 +1201,7 @@ function App(): JSX.Element {
         ...connectionDraft,
         environmentId: selectedEnvironmentId,
         name: connectionDraft.name.trim(),
+        filePath: connectionDraft.filePath.trim(),
         host: connectionDraft.host.trim(),
         database: connectionDraft.database.trim(),
         user: connectionDraft.user.trim(),
@@ -1220,12 +1233,21 @@ function App(): JSX.Element {
         ...connectionEditDraft,
         environmentId: selectedEnvironmentId,
         name: connectionEditDraft.name.trim(),
+        filePath: connectionEditDraft.filePath.trim(),
         host: connectionEditDraft.host.trim(),
         database: connectionEditDraft.database.trim(),
         user: connectionEditDraft.user.trim(),
       }
 
-      if (!payload.name || !payload.host || !payload.database || !payload.user) {
+      if (!payload.name) {
+        throw new Error('Informe o nome da conexão.')
+      }
+
+      if (payload.engine === 'sqlite') {
+        if (!payload.filePath) {
+          throw new Error('Selecione o arquivo do banco SQLite.')
+        }
+      } else if (!payload.host || !payload.database || !payload.user) {
         throw new Error('Preencha os campos obrigatórios da conexão.')
       }
 
@@ -1255,6 +1277,7 @@ function App(): JSX.Element {
         ...connectionEditDraft,
         environmentId: selectedEnvironmentId,
         name: connectionEditDraft.name.trim(),
+        filePath: connectionEditDraft.filePath.trim(),
         host: connectionEditDraft.host.trim(),
         database: connectionEditDraft.database.trim(),
         user: connectionEditDraft.user.trim(),
@@ -1266,6 +1289,32 @@ function App(): JSX.Element {
       toast.error(getErrorMessage(error))
     } finally {
       setIsEditConnectionTesting(false)
+    }
+  }
+
+  async function handlePickSqliteFile(target: 'create' | 'edit'): Promise<void> {
+    try {
+      const selectedPath = await window.pointerApi.pickSqliteFile()
+      if (!selectedPath) {
+        return
+      }
+
+      if (target === 'create') {
+        setConnectionDraft((current) => ({
+          ...current,
+          filePath: selectedPath,
+          database: current.database || extractSqliteDatabaseName(selectedPath),
+        }))
+        return
+      }
+
+      setConnectionEditDraft((current) => ({
+        ...current,
+        filePath: selectedPath,
+        database: current.database || extractSqliteDatabaseName(selectedPath),
+      }))
+    } catch (error) {
+      toast.error(getErrorMessage(error))
     }
   }
 
@@ -2165,7 +2214,7 @@ function App(): JSX.Element {
                         <Database className='h-3.5 w-3.5 shrink-0' />
                         <span className='truncate'>{connection.name}</span>
                         <span className='ml-auto rounded border border-slate-700/80 bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-300'>
-                          {connection.engine === 'postgres' ? 'PG' : 'CH'}
+                          {engineShortLabel(connection.engine)}
                         </span>
                       </div>
                       <Button
@@ -2236,67 +2285,96 @@ function App(): JSX.Element {
                             ...current,
                             engine,
                             port: defaultPortByEngine(engine),
+                            host: engine === 'sqlite' ? '' : current.host || 'localhost',
+                            user: engine === 'sqlite' ? '' : current.user,
+                            sslMode: engine === 'sqlite' ? 'disable' : current.sslMode,
+                            password: engine === 'sqlite' ? '' : current.password,
                           }))
                         }}
                       >
                         <option value='postgres'>PostgreSQL</option>
                         <option value='clickhouse'>ClickHouse</option>
+                        <option value='sqlite'>SQLite</option>
                       </select>
-                      <select
-                        className='h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm outline-none ring-slate-300/45 focus:ring-2'
-                        value={connectionDraft.sslMode}
-                        onChange={(event) =>
-                          setConnectionDraft((current) => ({
-                            ...current,
-                            sslMode: event.target.value as ConnectionInput['sslMode'],
-                          }))
-                        }
-                      >
-                        <option value='disable'>SSL desabilitado</option>
-                        <option value='require'>SSL obrigatório</option>
-                      </select>
-                      <div className='col-span-2'>
-                        <Input
-                          placeholder='Host'
-                          value={connectionDraft.host}
-                          onChange={(event) =>
-                            setConnectionDraft((current) => ({ ...current, host: event.target.value }))
-                          }
-                        />
-                      </div>
-                      <Input
-                        placeholder='Porta'
-                        type='number'
-                        value={connectionDraft.port}
-                        onChange={(event) =>
-                          setConnectionDraft((current) => ({
-                            ...current,
-                            port: Number(event.target.value) || defaultPortByEngine(current.engine),
-                          }))
-                        }
-                      />
-                      <Input
-                        placeholder={connectionDraft.engine === 'clickhouse' ? 'Database (ex: default)' : 'Database'}
-                        value={connectionDraft.database}
-                        onChange={(event) =>
-                          setConnectionDraft((current) => ({ ...current, database: event.target.value }))
-                        }
-                      />
-                      <Input
-                        placeholder='Usuário'
-                        value={connectionDraft.user}
-                        onChange={(event) =>
-                          setConnectionDraft((current) => ({ ...current, user: event.target.value }))
-                        }
-                      />
-                      <Input
-                        placeholder='Senha'
-                        type='password'
-                        value={connectionDraft.password}
-                        onChange={(event) =>
-                          setConnectionDraft((current) => ({ ...current, password: event.target.value }))
-                        }
-                      />
+                      {connectionDraft.engine === 'sqlite' ? (
+                        <div className='col-span-2 flex items-center gap-2'>
+                          <Input
+                            className='flex-1'
+                            placeholder='Arquivo SQLite (.db, .sqlite, .sqlite3)'
+                            value={connectionDraft.filePath}
+                            onChange={(event) =>
+                              setConnectionDraft((current) => ({ ...current, filePath: event.target.value }))
+                            }
+                          />
+                          <Button
+                            type='button'
+                            variant='outline'
+                            className='h-9 shrink-0'
+                            onClick={() => void handlePickSqliteFile('create')}
+                          >
+                            <FolderOpen className='mr-1.5 h-3.5 w-3.5' />
+                            Selecionar arquivo
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            className='h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm outline-none ring-slate-300/45 focus:ring-2'
+                            value={connectionDraft.sslMode}
+                            onChange={(event) =>
+                              setConnectionDraft((current) => ({
+                                ...current,
+                                sslMode: event.target.value as ConnectionInput['sslMode'],
+                              }))
+                            }
+                          >
+                            <option value='disable'>SSL desabilitado</option>
+                            <option value='require'>SSL obrigatório</option>
+                          </select>
+                          <div className='col-span-2'>
+                            <Input
+                              placeholder='Host'
+                              value={connectionDraft.host}
+                              onChange={(event) =>
+                                setConnectionDraft((current) => ({ ...current, host: event.target.value }))
+                              }
+                            />
+                          </div>
+                          <Input
+                            placeholder='Porta'
+                            type='number'
+                            value={connectionDraft.port}
+                            onChange={(event) =>
+                              setConnectionDraft((current) => ({
+                                ...current,
+                                port: Number(event.target.value) || defaultPortByEngine(current.engine),
+                              }))
+                            }
+                          />
+                          <Input
+                            placeholder={connectionDraft.engine === 'clickhouse' ? 'Database (ex: default)' : 'Database'}
+                            value={connectionDraft.database}
+                            onChange={(event) =>
+                              setConnectionDraft((current) => ({ ...current, database: event.target.value }))
+                            }
+                          />
+                          <Input
+                            placeholder='Usuário'
+                            value={connectionDraft.user}
+                            onChange={(event) =>
+                              setConnectionDraft((current) => ({ ...current, user: event.target.value }))
+                            }
+                          />
+                          <Input
+                            placeholder='Senha'
+                            type='password'
+                            value={connectionDraft.password}
+                            onChange={(event) =>
+                              setConnectionDraft((current) => ({ ...current, password: event.target.value }))
+                            }
+                          />
+                        </>
+                      )}
                     </div>
 
                     <DialogFooter>
@@ -2363,67 +2441,96 @@ function App(): JSX.Element {
                             ...current,
                             engine,
                             port: defaultPortByEngine(engine),
+                            host: engine === 'sqlite' ? '' : current.host || 'localhost',
+                            user: engine === 'sqlite' ? '' : current.user,
+                            sslMode: engine === 'sqlite' ? 'disable' : current.sslMode,
+                            password: engine === 'sqlite' ? '' : current.password,
                           }))
                         }}
                       >
                         <option value='postgres'>PostgreSQL</option>
                         <option value='clickhouse'>ClickHouse</option>
+                        <option value='sqlite'>SQLite</option>
                       </select>
-                      <select
-                        className='h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm outline-none ring-slate-300/45 focus:ring-2'
-                        value={connectionEditDraft.sslMode}
-                        onChange={(event) =>
-                          setConnectionEditDraft((current) => ({
-                            ...current,
-                            sslMode: event.target.value as ConnectionInput['sslMode'],
-                          }))
-                        }
-                      >
-                        <option value='disable'>SSL desabilitado</option>
-                        <option value='require'>SSL obrigatório</option>
-                      </select>
-                      <div className='col-span-2'>
-                        <Input
-                          placeholder='Host'
-                          value={connectionEditDraft.host}
-                          onChange={(event) =>
-                            setConnectionEditDraft((current) => ({ ...current, host: event.target.value }))
-                          }
-                        />
-                      </div>
-                      <Input
-                        placeholder='Porta'
-                        type='number'
-                        value={connectionEditDraft.port}
-                        onChange={(event) =>
-                          setConnectionEditDraft((current) => ({
-                            ...current,
-                            port: Number(event.target.value) || defaultPortByEngine(current.engine),
-                          }))
-                        }
-                      />
-                      <Input
-                        placeholder={connectionEditDraft.engine === 'clickhouse' ? 'Database (ex: default)' : 'Database'}
-                        value={connectionEditDraft.database}
-                        onChange={(event) =>
-                          setConnectionEditDraft((current) => ({ ...current, database: event.target.value }))
-                        }
-                      />
-                      <Input
-                        placeholder='Usuário'
-                        value={connectionEditDraft.user}
-                        onChange={(event) =>
-                          setConnectionEditDraft((current) => ({ ...current, user: event.target.value }))
-                        }
-                      />
-                      <Input
-                        placeholder='Nova senha (opcional)'
-                        type='password'
-                        value={connectionEditDraft.password}
-                        onChange={(event) =>
-                          setConnectionEditDraft((current) => ({ ...current, password: event.target.value }))
-                        }
-                      />
+                      {connectionEditDraft.engine === 'sqlite' ? (
+                        <div className='col-span-2 flex items-center gap-2'>
+                          <Input
+                            className='flex-1'
+                            placeholder='Arquivo SQLite (.db, .sqlite, .sqlite3)'
+                            value={connectionEditDraft.filePath}
+                            onChange={(event) =>
+                              setConnectionEditDraft((current) => ({ ...current, filePath: event.target.value }))
+                            }
+                          />
+                          <Button
+                            type='button'
+                            variant='outline'
+                            className='h-9 shrink-0'
+                            onClick={() => void handlePickSqliteFile('edit')}
+                          >
+                            <FolderOpen className='mr-1.5 h-3.5 w-3.5' />
+                            Selecionar arquivo
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            className='h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm outline-none ring-slate-300/45 focus:ring-2'
+                            value={connectionEditDraft.sslMode}
+                            onChange={(event) =>
+                              setConnectionEditDraft((current) => ({
+                                ...current,
+                                sslMode: event.target.value as ConnectionInput['sslMode'],
+                              }))
+                            }
+                          >
+                            <option value='disable'>SSL desabilitado</option>
+                            <option value='require'>SSL obrigatório</option>
+                          </select>
+                          <div className='col-span-2'>
+                            <Input
+                              placeholder='Host'
+                              value={connectionEditDraft.host}
+                              onChange={(event) =>
+                                setConnectionEditDraft((current) => ({ ...current, host: event.target.value }))
+                              }
+                            />
+                          </div>
+                          <Input
+                            placeholder='Porta'
+                            type='number'
+                            value={connectionEditDraft.port}
+                            onChange={(event) =>
+                              setConnectionEditDraft((current) => ({
+                                ...current,
+                                port: Number(event.target.value) || defaultPortByEngine(current.engine),
+                              }))
+                            }
+                          />
+                          <Input
+                            placeholder={connectionEditDraft.engine === 'clickhouse' ? 'Database (ex: default)' : 'Database'}
+                            value={connectionEditDraft.database}
+                            onChange={(event) =>
+                              setConnectionEditDraft((current) => ({ ...current, database: event.target.value }))
+                            }
+                          />
+                          <Input
+                            placeholder='Usuário'
+                            value={connectionEditDraft.user}
+                            onChange={(event) =>
+                              setConnectionEditDraft((current) => ({ ...current, user: event.target.value }))
+                            }
+                          />
+                          <Input
+                            placeholder='Nova senha (opcional)'
+                            type='password'
+                            value={connectionEditDraft.password}
+                            onChange={(event) =>
+                              setConnectionEditDraft((current) => ({ ...current, password: event.target.value }))
+                            }
+                          />
+                        </>
+                      )}
                     </div>
 
                     <DialogFooter>
@@ -2515,7 +2622,7 @@ function App(): JSX.Element {
                       <Table2 className='h-3.5 w-3.5 shrink-0' />
                       <span className='truncate'>{formatSidebarTableName(hit.table)}</span>
                       <span className='ml-auto rounded border border-slate-700/80 bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-300'>
-                        {hit.engine === 'postgres' ? 'PG' : 'CH'}
+                        {engineShortLabel(hit.engine)}
                       </span>
                     </button>
                   )
@@ -2535,7 +2642,7 @@ function App(): JSX.Element {
                   <p className='text-[11px] uppercase tracking-[0.2em] text-slate-500'>Primeiros passos</p>
                   <h2 className='mt-2 text-xl font-semibold tracking-tight'>Configure seu primeiro ambiente</h2>
                   <p className='mt-2 text-sm text-slate-400'>
-                    Crie um ambiente (ex: Local, Produção) e depois adicione conexões PostgreSQL e/ou ClickHouse.
+                    Crie um ambiente (ex: Local, Produção) e depois adicione conexões PostgreSQL, ClickHouse e/ou SQLite.
                   </p>
                   <div className='mt-5 flex flex-wrap items-center gap-2'>
                     <Button onClick={() => setIsCreateEnvironmentOpen(true)}>
@@ -2546,7 +2653,7 @@ function App(): JSX.Element {
                   <div className='mt-6 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4 text-xs text-slate-400'>
                     <p className='mb-1 font-medium text-slate-300'>Fluxo sugerido</p>
                     <p>1. Criar ambiente</p>
-                    <p>2. Adicionar conexão Postgres/ClickHouse</p>
+                    <p>2. Adicionar conexão Postgres/ClickHouse/SQLite</p>
                     <p>3. Usar Cmd+K para buscar tabelas no ambiente</p>
                   </div>
                 </div>
@@ -3339,7 +3446,7 @@ function App(): JSX.Element {
                       <Table2 className='h-4 w-4' />
                       <span className='truncate'>{formatTableLabel(hit.table)}</span>
                       <span className='ml-auto text-[10px] uppercase tracking-wide text-slate-400'>
-                        {hit.engine === 'postgres' ? 'PG' : 'CH'}
+                        {engineShortLabel(hit.engine)}
                       </span>
                     </CommandItem>
                   ))}
@@ -3768,11 +3875,44 @@ function formatSidebarTableName(table: TableRef): string {
 }
 
 function engineLabel(engine: DatabaseEngine): string {
-  return engine === 'postgres' ? 'Postgres' : 'ClickHouse'
+  if (engine === 'postgres') {
+    return 'Postgres'
+  }
+
+  if (engine === 'clickhouse') {
+    return 'ClickHouse'
+  }
+
+  return 'SQLite'
+}
+
+function engineShortLabel(engine: DatabaseEngine): string {
+  if (engine === 'postgres') {
+    return 'PG'
+  }
+
+  if (engine === 'clickhouse') {
+    return 'CH'
+  }
+
+  return 'SQ'
 }
 
 function defaultPortByEngine(engine: DatabaseEngine): number {
-  return engine === 'postgres' ? 5432 : 8123
+  if (engine === 'postgres') {
+    return 5432
+  }
+
+  if (engine === 'clickhouse') {
+    return 8123
+  }
+
+  return 0
+}
+
+function extractSqliteDatabaseName(filePath: string): string {
+  const filename = filePath.split(/[/\\]/).pop() ?? filePath
+  return filename.replace(/\.(sqlite3?|db)$/i, '')
 }
 
 function normalizeHexColor(color?: string): string {

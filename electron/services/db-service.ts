@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createClient, type ClickHouseClient } from '@clickhouse/client'
+import BetterSqlite3 from 'better-sqlite3'
 import Store from 'electron-store'
 import keytar from 'keytar'
 import { Pool, type QueryResult } from 'pg'
@@ -44,6 +45,7 @@ export class DbService {
 
   private readonly pgPools = new Map<string, Pool>()
   private readonly clickhouseClients = new Map<string, ClickHouseClient>()
+  private readonly sqliteClients = new Map<string, BetterSqlite3.Database>()
 
   constructor() {
     this.migrateLegacyStore()
@@ -150,15 +152,24 @@ export class DbService {
       environmentId: input.environmentId,
       engine: input.engine,
       name: input.name.trim(),
+      filePath: input.filePath.trim(),
       host: input.host.trim(),
-      port: Number(input.port),
+      port: sanitizePort(input.port),
       database: input.database.trim(),
       user: input.user.trim(),
       sslMode: input.sslMode,
       createdAt: new Date().toISOString(),
     }
 
-    if (!connection.name || !connection.host || !connection.database || !connection.user) {
+    if (!connection.name) {
+      throw new Error('Preencha o nome da conexão.')
+    }
+
+    if (connection.engine === 'sqlite') {
+      if (!connection.filePath) {
+        throw new Error('Selecione o arquivo do banco SQLite.')
+      }
+    } else if (!connection.host || !connection.database || !connection.user) {
       throw new Error('Preencha os campos obrigatórios da conexão.')
     }
 
@@ -169,7 +180,11 @@ export class DbService {
     connections.push(connection)
     this.store.set(CONNECTIONS_KEY, connections)
 
-    await keytar.setPassword(CREDENTIAL_SERVICE, connection.id, password)
+    if (password.trim().length > 0) {
+      await keytar.setPassword(CREDENTIAL_SERVICE, connection.id, password)
+    } else {
+      await keytar.deletePassword(CREDENTIAL_SERVICE, connection.id)
+    }
     return connection
   }
 
@@ -182,14 +197,23 @@ export class DbService {
       environmentId: input.environmentId,
       engine: input.engine,
       name: input.name.trim(),
+      filePath: input.filePath.trim(),
       host: input.host.trim(),
-      port: Number(input.port),
+      port: sanitizePort(input.port),
       database: input.database.trim(),
       user: input.user.trim(),
       sslMode: input.sslMode,
     }
 
-    if (!updated.name || !updated.host || !updated.database || !updated.user) {
+    if (!updated.name) {
+      throw new Error('Preencha o nome da conexão.')
+    }
+
+    if (updated.engine === 'sqlite') {
+      if (!updated.filePath) {
+        throw new Error('Selecione o arquivo do banco SQLite.')
+      }
+    } else if (!updated.host || !updated.database || !updated.user) {
       throw new Error('Preencha os campos obrigatórios da conexão.')
     }
 
@@ -205,6 +229,8 @@ export class DbService {
 
     if (input.password.trim().length > 0) {
       await keytar.setPassword(CREDENTIAL_SERVICE, id, nextPassword)
+    } else {
+      await keytar.deletePassword(CREDENTIAL_SERVICE, id)
     }
 
     return updated
@@ -221,15 +247,20 @@ export class DbService {
       environmentId: input.environmentId,
       engine: input.engine,
       name: input.name.trim() || 'temp',
+      filePath: input.filePath.trim(),
       host: input.host.trim(),
-      port: Number(input.port),
+      port: sanitizePort(input.port),
       database: input.database.trim(),
       user: input.user.trim(),
       sslMode: input.sslMode,
       createdAt: new Date().toISOString(),
     }
 
-    if (!connection.host || !connection.database || !connection.user) {
+    if (connection.engine === 'sqlite') {
+      if (!connection.filePath) {
+        throw new Error('Selecione o arquivo do banco SQLite para testar a conexão.')
+      }
+    } else if (!connection.host || !connection.database || !connection.user) {
       throw new Error('Preencha host, database e usuário para testar a conexão.')
     }
 
@@ -269,6 +300,9 @@ export class DbService {
     if (connection.engine === 'postgres') {
       const pool = await this.getPostgresPool(connection)
       await pool.query('SELECT 1')
+    } else if (connection.engine === 'sqlite') {
+      const db = await this.getSqliteDb(connection)
+      db.prepare('SELECT 1').get()
     } else {
       const client = await this.getClickHouseClient(connection)
       const result = await client.query({ query: 'SELECT 1 AS ok', format: 'JSONEachRow' })
@@ -296,6 +330,10 @@ export class DbService {
       return result.rows.map((row) => ({ name: row.schema_name }))
     }
 
+    if (connection.engine === 'sqlite') {
+      return this.listSqliteSchemas(connection)
+    }
+
     const client = await this.getClickHouseClient(connection)
     const result = await client.query({
       query: `
@@ -318,6 +356,10 @@ export class DbService {
       return this.listPostgresTables(connection, schema)
     }
 
+    if (connection.engine === 'sqlite') {
+      return this.listSqliteTables(connection, schema)
+    }
+
     return this.listClickHouseTables(connection, schema)
   }
 
@@ -326,6 +368,10 @@ export class DbService {
 
     if (connection.engine === 'postgres') {
       return this.searchPostgresTables(connection, query)
+    }
+
+    if (connection.engine === 'sqlite') {
+      return this.searchSqliteTables(connection, query)
     }
 
     return this.searchClickHouseTables(connection, query)
@@ -381,6 +427,10 @@ export class DbService {
       return this.describePostgresTable(connection, table)
     }
 
+    if (connection.engine === 'sqlite') {
+      return this.describeSqliteTable(connection, table)
+    }
+
     return this.describeClickHouseTable(connection, table)
   }
 
@@ -389,6 +439,10 @@ export class DbService {
 
     if (connection.engine === 'postgres') {
       return this.readPostgresTable(connection, table, input)
+    }
+
+    if (connection.engine === 'sqlite') {
+      return this.readSqliteTable(connection, table, input)
     }
 
     return this.readClickHouseTable(connection, table, input)
@@ -401,6 +455,10 @@ export class DbService {
       return this.insertPostgresRow(connection, table, row)
     }
 
+    if (connection.engine === 'sqlite') {
+      return this.insertSqliteRow(connection, table, row)
+    }
+
     return this.insertClickHouseRow(connection, table, row)
   }
 
@@ -411,6 +469,10 @@ export class DbService {
       throw new Error('Update inline não é suportado para ClickHouse nesta versão.')
     }
 
+    if (connection.engine === 'sqlite') {
+      return this.updateSqliteRow(connection, table, row)
+    }
+
     return this.updatePostgresRow(connection, table, row)
   }
 
@@ -419,6 +481,10 @@ export class DbService {
 
     if (connection.engine === 'clickhouse') {
       throw new Error('Delete por linha não é suportado para ClickHouse nesta versão.')
+    }
+
+    if (connection.engine === 'sqlite') {
+      return this.deleteSqliteRow(connection, table, row)
     }
 
     return this.deletePostgresRow(connection, table, row)
@@ -494,11 +560,17 @@ export class DbService {
           rows: result.rows,
         })
       }
-    } else {
+    } else if (connection.engine === 'clickhouse') {
       const client = await this.getClickHouseClient(connection)
 
       for (const statement of statements) {
         resultSets.push(await this.executeClickHouseStatement(client, statement))
+      }
+    } else {
+      const db = await this.getSqliteDb(connection)
+
+      for (const statement of statements) {
+        resultSets.push(this.executeSqliteStatement(db, statement))
       }
     }
 
@@ -517,8 +589,13 @@ export class DbService {
       await client.close()
     }
 
+    for (const db of this.sqliteClients.values()) {
+      db.close()
+    }
+
     this.pgPools.clear()
     this.clickhouseClients.clear()
+    this.sqliteClients.clear()
   }
 
   private migrateLegacyStore(): void {
@@ -538,6 +615,7 @@ export class DbService {
     const rawConnections = this.store.get(CONNECTIONS_KEY, []) as Array<ConnectionSummary & {
       environmentId?: string
       engine?: DatabaseEngine
+      filePath?: string
     }>
 
     const environments = normalizedEnvironments
@@ -566,6 +644,7 @@ export class DbService {
       ...connection,
       environmentId: connection.environmentId ?? firstEnvironmentId ?? '',
       engine: connection.engine ?? 'postgres',
+      filePath: connection.filePath ?? '',
     }))
 
     this.store.set(CONNECTIONS_KEY, migratedConnections)
@@ -626,11 +705,22 @@ export class DbService {
       await clickhouseClient.close()
       this.clickhouseClients.delete(connection.id)
     }
+
+    const sqliteClient = this.sqliteClients.get(connection.id)
+    if (sqliteClient) {
+      sqliteClient.close()
+      this.sqliteClients.delete(connection.id)
+    }
   }
 
   private async validateConnectionConfig(connection: ConnectionSummary, password: string): Promise<void> {
     if (connection.engine === 'postgres') {
       await this.validatePostgresConfig(connection, password)
+      return
+    }
+
+    if (connection.engine === 'sqlite') {
+      await this.validateSqliteConfig(connection)
       return
     }
 
@@ -690,6 +780,27 @@ export class DbService {
     return client
   }
 
+  private async getSqliteDb(connection: ConnectionSummary): Promise<BetterSqlite3.Database> {
+    const existing = this.sqliteClients.get(connection.id)
+    if (existing) {
+      return existing
+    }
+
+    const filePath = connection.filePath.trim()
+    if (!filePath) {
+      throw new Error('Arquivo SQLite não configurado nesta conexão.')
+    }
+
+    let db: BetterSqlite3.Database
+    try {
+      db = new BetterSqlite3(filePath, { fileMustExist: true })
+    } catch (error) {
+      throw normalizeSqliteClientError(error)
+    }
+    this.sqliteClients.set(connection.id, db)
+    return db
+  }
+
   private async validatePostgresConfig(connection: ConnectionSummary, password: string): Promise<void> {
     const pool = new Pool({
       host: connection.host,
@@ -725,6 +836,25 @@ export class DbService {
       await result.json<Record<string, unknown>>()
     } finally {
       await client.close()
+    }
+  }
+
+  private async validateSqliteConfig(connection: ConnectionSummary): Promise<void> {
+    const filePath = connection.filePath.trim()
+    if (!filePath) {
+      throw new Error('Selecione o arquivo SQLite.')
+    }
+
+    let db: BetterSqlite3.Database
+    try {
+      db = new BetterSqlite3(filePath, { fileMustExist: true, readonly: true })
+    } catch (error) {
+      throw normalizeSqliteClientError(error)
+    }
+    try {
+      db.prepare('SELECT 1').get()
+    } finally {
+      db.close()
     }
   }
 
@@ -837,6 +967,69 @@ export class DbService {
     }))
   }
 
+  private async listSqliteSchemas(connection: ConnectionSummary): Promise<SchemaInfo[]> {
+    const db = await this.getSqliteDb(connection)
+    const rows = db.prepare('PRAGMA database_list').all() as Array<{ name?: string }>
+
+    return rows
+      .map((row) => row.name?.trim() ?? '')
+      .filter((name) => name.length > 0 && name.toLowerCase() !== 'temp')
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ name }))
+  }
+
+  private async listSqliteTables(connection: ConnectionSummary, schema?: string): Promise<TableRef[]> {
+    const db = await this.getSqliteDb(connection)
+    const schemas = await this.listSqliteSchemas(connection)
+
+    const schemaNames =
+      schema && schema !== 'all'
+        ? schemas.map((item) => item.name).filter((name) => name === schema)
+        : schemas.map((item) => item.name)
+
+    const tables: TableRef[] = []
+    for (const schemaName of schemaNames) {
+      const target = quoteSqliteIdentifier(schemaName)
+      const rows = db
+        .prepare(
+          `
+          SELECT name AS table_name
+          FROM ${target}.sqlite_master
+          WHERE type = 'table'
+            AND name NOT LIKE 'sqlite_%'
+          ORDER BY name ASC
+          `,
+        )
+        .all() as Array<{ table_name: string }>
+
+      for (const row of rows) {
+        tables.push({
+          schema: schemaName,
+          name: row.table_name,
+          fqName: `${schemaName}.${row.table_name}`,
+        })
+      }
+    }
+
+    return tables.sort((a, b) => a.fqName.localeCompare(b.fqName))
+  }
+
+  private async searchSqliteTables(connection: ConnectionSummary, query: string): Promise<TableRef[]> {
+    const term = query.trim().toLowerCase()
+    const tables = await this.listSqliteTables(connection)
+    if (!term) {
+      return tables.slice(0, 180)
+    }
+
+    return tables
+      .filter((table) => {
+        const tableName = table.name.toLowerCase()
+        const fqName = table.fqName.toLowerCase()
+        return tableName.includes(term) || fqName.includes(term)
+      })
+      .slice(0, 180)
+  }
+
   private async describePostgresTable(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
     const pool = await this.getPostgresPool(connection)
     const quotedSchema = quotePostgresIdentifier(table.schema)
@@ -947,6 +1140,52 @@ export class DbService {
     }
   }
 
+  private async describeSqliteTable(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
+    const db = await this.getSqliteDb(connection)
+    const schemaName = quoteSqliteIdentifier(table.schema)
+    const tableName = quoteSqliteIdentifier(table.name)
+
+    const rows = db
+      .prepare(
+        `
+        SELECT name, type, "notnull" AS not_null, dflt_value AS default_value, pk
+        FROM ${schemaName}.pragma_table_info(${escapeSqlLiteral(table.name)})
+        ORDER BY cid ASC
+        `,
+      )
+      .all() as Array<{
+      name: string
+      type: string
+      not_null: number
+      default_value: string | null
+      pk: number
+    }>
+
+    const primaryKey = rows
+      .filter((row) => row.pk > 0)
+      .sort((a, b) => a.pk - b.pk)
+      .map((row) => row.name)
+    const primaryKeySet = new Set(primaryKey)
+
+    const columns: ColumnDef[] = rows.map((row) => ({
+      name: row.name,
+      dataType: row.type || 'TEXT',
+      nullable: row.not_null === 0,
+      defaultValue: row.default_value,
+      isPrimaryKey: primaryKeySet.has(row.name),
+    }))
+
+    db.prepare(`SELECT * FROM ${schemaName}.${tableName} LIMIT 0`).all()
+
+    return {
+      table,
+      columns,
+      primaryKey,
+      engine: 'sqlite',
+      supportsRowEdit: primaryKey.length > 0,
+    }
+  }
+
   private async readPostgresTable(connection: ConnectionSummary, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
     const pool = await this.getPostgresPool(connection)
     const schema = await this.describePostgresTable(connection, table)
@@ -1036,6 +1275,42 @@ export class DbService {
     }
   }
 
+  private async readSqliteTable(connection: ConnectionSummary, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
+    const db = await this.getSqliteDb(connection)
+    const schema = await this.describeSqliteTable(connection, table)
+
+    const filters = input.filters ?? []
+    const where = buildSqliteWhereClause(filters, schema.columns.map((column) => column.name))
+    const sort = this.buildSqliteSort(schema.columns.map((column) => column.name), input.sort)
+
+    const offset = Math.max(input.page, 0) * Math.max(input.pageSize, 1)
+    const limit = Math.min(Math.max(input.pageSize, 1), 500)
+
+    const target = `${quoteSqliteIdentifier(table.schema)}.${quoteSqliteIdentifier(table.name)}`
+
+    const countStmt = db.prepare(`SELECT COUNT(*) AS total FROM ${target} ${where.sql}`)
+    const countRow = countStmt.get(...where.values) as { total?: number } | undefined
+
+    const dataStmt = db.prepare(
+      `
+      SELECT *
+      FROM ${target}
+      ${where.sql}
+      ${sort}
+      LIMIT ?
+      OFFSET ?
+      `,
+    )
+    const rows = dataStmt.all(...where.values, limit, offset) as Record<string, unknown>[]
+
+    return {
+      rows,
+      total: Number(countRow?.total ?? 0),
+      page: input.page,
+      pageSize: limit,
+    }
+  }
+
   private async insertPostgresRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<Record<string, unknown>> {
     const pool = await this.getPostgresPool(connection)
     const schema = await this.describePostgresTable(connection, table)
@@ -1084,6 +1359,32 @@ export class DbService {
       format: 'JSONEachRow',
     })
 
+    return payload
+  }
+
+  private async insertSqliteRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const db = await this.getSqliteDb(connection)
+    const schema = await this.describeSqliteTable(connection, table)
+
+    const allowedColumns = new Set(schema.columns.map((column) => column.name))
+    const keys = Object.keys(row).filter((key) => allowedColumns.has(key))
+    const target = `${quoteSqliteIdentifier(table.schema)}.${quoteSqliteIdentifier(table.name)}`
+
+    if (keys.length === 0) {
+      db.prepare(`INSERT INTO ${target} DEFAULT VALUES`).run()
+      return {}
+    }
+
+    const columnList = keys.map((key) => quoteSqliteIdentifier(key)).join(', ')
+    const placeholders = keys.map(() => '?').join(', ')
+    const values = keys.map((key) => normalizeValue(row[key]))
+
+    db.prepare(`INSERT INTO ${target} (${columnList}) VALUES (${placeholders})`).run(...values)
+
+    const payload: Record<string, unknown> = {}
+    for (const key of keys) {
+      payload[key] = normalizeValue(row[key])
+    }
     return payload
   }
 
@@ -1161,6 +1462,72 @@ export class DbService {
     return { affected: result.rowCount ?? 0 }
   }
 
+  private async updateSqliteRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<{ affected: number }> {
+    const db = await this.getSqliteDb(connection)
+    const schema = await this.describeSqliteTable(connection, table)
+
+    if (schema.primaryKey.length === 0) {
+      throw new Error('A tabela não possui chave primária para update.')
+    }
+
+    const availableColumns = new Set(schema.columns.map((column) => column.name))
+    const patchKeys = Object.keys(row).filter(
+      (key) => availableColumns.has(key) && !schema.primaryKey.includes(key),
+    )
+
+    if (patchKeys.length === 0) {
+      throw new Error('Nenhuma coluna para atualizar foi enviada.')
+    }
+
+    const missingPk = schema.primaryKey.filter((pkColumn) => !(pkColumn in row))
+    if (missingPk.length > 0) {
+      throw new Error(`Colunas da chave primária ausentes: ${missingPk.join(', ')}`)
+    }
+
+    const target = `${quoteSqliteIdentifier(table.schema)}.${quoteSqliteIdentifier(table.name)}`
+    const values: unknown[] = []
+
+    const setClause = patchKeys
+      .map((key) => {
+        values.push(normalizeValue(row[key]))
+        return `${quoteSqliteIdentifier(key)} = ?`
+      })
+      .join(', ')
+
+    const whereClause = schema.primaryKey
+      .map((pk) => {
+        values.push(normalizeValue(row[pk]))
+        return `${quoteSqliteIdentifier(pk)} = ?`
+      })
+      .join(' AND ')
+
+    const result = db.prepare(`UPDATE ${target} SET ${setClause} WHERE ${whereClause}`).run(...values)
+    return { affected: result.changes }
+  }
+
+  private async deleteSqliteRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<{ affected: number }> {
+    const db = await this.getSqliteDb(connection)
+    const schema = await this.describeSqliteTable(connection, table)
+
+    if (schema.primaryKey.length === 0) {
+      throw new Error('A tabela não possui chave primária para delete.')
+    }
+
+    const missingPk = schema.primaryKey.filter((pkColumn) => !(pkColumn in row))
+    if (missingPk.length > 0) {
+      throw new Error(`Colunas da chave primária ausentes: ${missingPk.join(', ')}`)
+    }
+
+    const target = `${quoteSqliteIdentifier(table.schema)}.${quoteSqliteIdentifier(table.name)}`
+    const values = schema.primaryKey.map((pkColumn) => normalizeValue(row[pkColumn]))
+    const whereClause = schema.primaryKey
+      .map((pkColumn) => `${quoteSqliteIdentifier(pkColumn)} = ?`)
+      .join(' AND ')
+
+    const result = db.prepare(`DELETE FROM ${target} WHERE ${whereClause}`).run(...values)
+    return { affected: result.changes }
+  }
+
   private async executeClickHouseStatement(client: ClickHouseClient, statement: string): Promise<SqlResultSet> {
     const keyword = firstSqlKeyword(statement)
     const readKeywords = new Set(['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'WITH'])
@@ -1188,6 +1555,31 @@ export class DbService {
     }
   }
 
+  private executeSqliteStatement(db: BetterSqlite3.Database, statement: string): SqlResultSet {
+    const keyword = firstSqlKeyword(statement)
+    const readKeywords = new Set(['SELECT', 'PRAGMA', 'WITH', 'EXPLAIN'])
+
+    if (readKeywords.has(keyword)) {
+      const rows = db.prepare(statement).all() as Record<string, unknown>[]
+      const fields = rows.length > 0 ? Object.keys(rows[0]) : []
+
+      return {
+        command: keyword || 'SELECT',
+        rowCount: rows.length,
+        fields,
+        rows,
+      }
+    }
+
+    const result = db.prepare(statement).run()
+    return {
+      command: keyword || 'COMMAND',
+      rowCount: result.changes,
+      fields: [],
+      rows: [],
+    }
+  }
+
   private buildPostgresSort(columns: string[], sort?: TableSort): string {
     if (!sort || !columns.includes(sort.column)) {
       return ''
@@ -1205,6 +1597,15 @@ export class DbService {
     const direction = sort.direction === 'desc' ? 'DESC' : 'ASC'
     return `ORDER BY ${quoteClickHouseIdentifier(sort.column)} ${direction}`
   }
+
+  private buildSqliteSort(columns: string[], sort?: TableSort): string {
+    if (!sort || !columns.includes(sort.column)) {
+      return ''
+    }
+
+    const direction = sort.direction === 'desc' ? 'DESC' : 'ASC'
+    return `ORDER BY ${quoteSqliteIdentifier(sort.column)} ${direction}`
+  }
 }
 
 function normalizeValue(value: unknown): unknown {
@@ -1213,6 +1614,11 @@ function normalizeValue(value: unknown): unknown {
   }
 
   return value
+}
+
+function sanitizePort(port: number): number {
+  const normalized = Number(port)
+  return Number.isFinite(normalized) ? normalized : 0
 }
 
 function buildPostgresWhereClause(filters: TableFilter[], availableColumns: string[]): { sql: string; values: string[] } {
@@ -1285,12 +1691,53 @@ function buildClickHouseWhereClause(
   }
 }
 
+function buildSqliteWhereClause(filters: TableFilter[], availableColumns: string[]): { sql: string; values: string[] } {
+  if (filters.length === 0) {
+    return { sql: '', values: [] }
+  }
+
+  const values: string[] = []
+  const parts: string[] = []
+
+  for (const filter of filters) {
+    if (!availableColumns.includes(filter.column)) {
+      continue
+    }
+
+    if (filter.operator === 'eq') {
+      values.push(filter.value)
+      parts.push(`CAST(${quoteSqliteIdentifier(filter.column)} AS TEXT) = ?`)
+      continue
+    }
+
+    values.push(`%${filter.value}%`)
+    parts.push(`CAST(${quoteSqliteIdentifier(filter.column)} AS TEXT) LIKE ? COLLATE NOCASE`)
+  }
+
+  if (parts.length === 0) {
+    return { sql: '', values: [] }
+  }
+
+  return {
+    sql: `WHERE ${parts.join(' AND ')}`,
+    values,
+  }
+}
+
 function quotePostgresIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`
 }
 
 function quoteClickHouseIdentifier(identifier: string): string {
   return '`' + identifier.replace(/`/g, '``') + '`'
+}
+
+function quoteSqliteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`
+}
+
+function escapeSqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
 function splitStatements(sql: string): string[] {
@@ -1365,6 +1812,20 @@ function normalizeEnvironmentColor(color?: string): string {
   }
 
   return DEFAULT_ENVIRONMENT_COLOR
+}
+
+function normalizeSqliteClientError(error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error('Falha ao abrir banco SQLite.')
+  }
+
+  if (error.message.includes('Could not locate the bindings file')) {
+    return new Error(
+      'SQLite indisponível: o binário nativo não foi instalado. Rode "pnpm install" na raiz do projeto e tente novamente.',
+    )
+  }
+
+  return error
 }
 
 function rankTableMatch(table: TableRef, queryLower: string): number {
