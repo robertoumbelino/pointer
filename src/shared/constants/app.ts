@@ -1,6 +1,6 @@
 export const PAGE_SIZE = 500
 export const SAFE_CONFIRM_WORD = 'EXECUTAR'
-export const DEFAULT_SQL = 'SELECT NOW() AS current_time;'
+export const DEFAULT_SQL = 'SELECT NOW() AS current_time;\n\n\n\n'
 export const DEFAULT_ENVIRONMENT_COLOR = '#0EA5E9'
 export const WORKSPACE_STORAGE_KEY = 'pointer.workspace.v1'
 
