@@ -69,7 +69,7 @@ export function SqlWorkspacePanel({
 
       <div ref={sqlSplitContainerRef} className='flex h-full flex-1 flex-col overflow-hidden'>
         <div
-          className='min-h-[180px] border-b border-slate-800/80'
+          className='min-h-[180px] overflow-hidden border-b border-slate-800/80'
           style={{ height: `${activeSqlTab.splitRatio}%` }}
         >
           <CodeMirror

@@ -88,6 +88,10 @@ textarea {
   line-height: 1.45;
 }
 
+.cm-lineWrapping {
+  word-break: break-word;
+}
+
 .cm-gutters {
   background: rgba(2, 6, 23, 0.6) !important;
   border-right: 1px solid rgba(30, 41, 59, 0.8) !important;

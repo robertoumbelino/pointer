@@ -6,7 +6,7 @@ import {
   type CompletionContext,
   startCompletion,
 } from '@codemirror/autocomplete'
-import { keymap } from '@codemirror/view'
+import { EditorView, keymap } from '@codemirror/view'
 import { useAppUpdate } from '../features/app-update/model/useAppUpdate'
 import { AppTopBar } from '../features/app-update/ui/AppTopBar'
 import { useCommandPalette } from '../features/command-palette/model/useCommandPalette'
@@ -322,6 +322,7 @@ function App(): JSX.Element {
           },
         },
       ]),
+      EditorView.lineWrapping,
     ],
     [sqlCompletionSource],
   )
