@@ -86,7 +86,7 @@ export function TableCommandDialog({
         }
       }}
     >
-      <DialogContent className='max-w-xl overflow-hidden p-0'>
+      <DialogContent className='left-0 right-0 top-[12vh] mx-auto max-w-xl overflow-hidden p-0 !translate-x-0 !translate-y-0'>
         <Command
           className='bg-slate-900 text-slate-100 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-slate-500'
           shouldFilter={false}
