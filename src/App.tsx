@@ -322,6 +322,7 @@ function App(): JSX.Element {
   const commitInlineEditRef = useRef<() => void>()
   const toggleSelectedRowDeleteRef = useRef<() => void>()
   const openNewSqlTabRef = useRef<() => void>()
+  const closeActiveTabRef = useRef<() => void>()
 
   useEffect(() => {
     workTabsRef.current = workTabs
@@ -786,6 +787,13 @@ function App(): JSX.Element {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 't') {
         event.preventDefault()
         openNewSqlTabRef.current?.()
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'w') {
+        event.preventDefault()
+        event.stopPropagation()
+        closeActiveTabRef.current?.()
         return
       }
 
@@ -1651,6 +1659,31 @@ function App(): JSX.Element {
     }
   }
 
+  function closeActiveTab(): void {
+    const activeId = activeTabIdRef.current
+    const currentTabs = workTabsRef.current
+
+    if (currentTabs.length <= 1) {
+      return
+    }
+
+    const activeIndex = currentTabs.findIndex((tab) => tab.id === activeId)
+    if (activeIndex < 0) {
+      return
+    }
+
+    const nextTabs = currentTabs.filter((tab) => tab.id !== activeId)
+    if (nextTabs.length === 0) {
+      return
+    }
+
+    const fallbackTab = nextTabs[activeIndex] ?? nextTabs[activeIndex - 1] ?? nextTabs[0]
+
+    setWorkTabs(nextTabs)
+    setActiveTabId(fallbackTab.id)
+    setEditingCell((current) => (current?.tabId === activeId ? null : current))
+  }
+
   function beginInlineEdit(rowIndex: number, column: string): void {
     if (!activeTableTab?.data || !activeTableTab.schema?.supportsRowEdit) {
       return
@@ -2016,6 +2049,7 @@ function App(): JSX.Element {
   commitInlineEditRef.current = commitInlineEdit
   toggleSelectedRowDeleteRef.current = handleDeleteRow
   openNewSqlTabRef.current = openNewSqlTab
+  closeActiveTabRef.current = closeActiveTab
 
   return (
     <div className='h-screen w-screen overflow-hidden text-[13px] text-slate-100'>
