@@ -25,6 +25,10 @@ export function createInitialInsertDraft(schema: TableSchema): InsertDraftRow {
     if ((normalizedName === 'created_at' || normalizedName === 'updated_at') && isDateTimeDataType(column.dataType)) {
       draft[column.name] = nowIso
     }
+
+    if (column.enumValues && column.enumValues.length > 0 && draft[column.name] === undefined) {
+      draft[column.name] = column.nullable ? null : column.enumValues[0]
+    }
   }
 
   return draft

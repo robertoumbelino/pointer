@@ -41,7 +41,7 @@ type WorkspaceMainProps = {
   setEditingCell: Dispatch<SetStateAction<EditingCell | null>>
   commitInlineEdit: (override?: EditingCell) => void
   cancelInlineEdit: () => void
-  updateInsertDraftValue: (columnName: string, value: string) => void
+  updateInsertDraftValue: (columnName: string, value: string | null) => void
   formatDraftInputValue: (value: unknown) => string
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableRef) => string

@@ -60,7 +60,7 @@ type UseWorkspaceActionsResult = {
   cancelInlineEdit: () => void
   saveActiveTableChanges: () => Promise<void>
   handleToggleInsertDraftRow: () => void
-  updateInsertDraftValue: (columnName: string, value: string) => void
+  updateInsertDraftValue: (columnName: string, value: string | null) => void
   handleDeleteRow: () => void
   runSql: (force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>
 }
@@ -593,7 +593,7 @@ export function useWorkspaceActions({
     })
   }
 
-  function updateInsertDraftValue(columnName: string, value: string): void {
+  function updateInsertDraftValue(columnName: string, value: string | null): void {
     if (!activeTableTab?.insertDraft) {
       return
     }
