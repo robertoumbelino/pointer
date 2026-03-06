@@ -14,7 +14,15 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['keytar', 'pg', 'pg-native', '@clickhouse/client'],
+              external: [
+                'keytar',
+                'pg',
+                'pg-native',
+                '@clickhouse/client',
+                'better-sqlite3',
+                'bindings',
+                'file-uri-to-path',
+              ],
             },
           },
         },

@@ -1,6 +1,6 @@
 export type RiskLevel = 'safe' | 'write' | 'destructive'
 export type SortDirection = 'asc' | 'desc'
-export type DatabaseEngine = 'postgres' | 'clickhouse'
+export type DatabaseEngine = 'postgres' | 'clickhouse' | 'sqlite'
 
 export interface EnvironmentSummary {
   id: string
@@ -13,6 +13,7 @@ export interface ConnectionInput {
   environmentId: string
   engine: DatabaseEngine
   name: string
+  filePath: string
   host: string
   port: number
   database: string
@@ -26,6 +27,7 @@ export interface ConnectionSummary {
   environmentId: string
   engine: DatabaseEngine
   name: string
+  filePath: string
   host: string
   port: number
   database: string
@@ -128,6 +130,7 @@ export interface AppUpdateInstallResult {
 export interface PointerApi {
   getAppVersion: () => Promise<string>
   copyToClipboard: (text: string) => Promise<void>
+  pickSqliteFile: () => Promise<string | null>
 
   listEnvironments: () => Promise<EnvironmentSummary[]>
   createEnvironment: (name: string, color?: string) => Promise<EnvironmentSummary>

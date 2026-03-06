@@ -1,4 +1,4 @@
-import { app, clipboard, ipcMain } from 'electron'
+import { app, clipboard, dialog, BrowserWindow, ipcMain, type OpenDialogOptions } from 'electron'
 import type { ConnectionInput, TableReadInput, TableRef } from '../../shared/db-types'
 import { DbService } from './db-service'
 import { UpdaterService } from './updater-service'
@@ -34,12 +34,32 @@ export const IPC_CHANNELS = {
   installLatestUpdate: 'pointer:app:update:install',
   getAppVersion: 'pointer:app:version',
   copyToClipboard: 'pointer:clipboard:write',
+  pickSqliteFile: 'pointer:sqlite:pick-file',
 } as const
 
 export function registerIpc(dbService: DbService, updaterService: UpdaterService): void {
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
   ipcMain.handle(IPC_CHANNELS.copyToClipboard, (_, text: string) => {
     clipboard.writeText(text)
+  })
+  ipcMain.handle(IPC_CHANNELS.pickSqliteFile, async () => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    const options: OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [
+        { name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    }
+    const result = focusedWindow
+      ? await dialog.showOpenDialog(focusedWindow, options)
+      : await dialog.showOpenDialog(options)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    return result.filePaths[0] ?? null
   })
 
   ipcMain.handle(IPC_CHANNELS.listEnvironments, () => wrap(() => dbService.listEnvironments()))
