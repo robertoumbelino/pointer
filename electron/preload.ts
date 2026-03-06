@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { PointerApi } from '../shared/db-types'
 import { IPC_CHANNELS } from './services/ipc'
 
+const RENDERER_RUN_SQL_SHORTCUT_CHANNEL = 'pointer:shortcut:run-sql'
+
 const pointerApi: PointerApi = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   copyToClipboard: (text) => ipcRenderer.invoke(IPC_CHANNELS.copyToClipboard, text),
@@ -39,5 +41,16 @@ const pointerApi: PointerApi = {
   checkForAppUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.checkForAppUpdate),
   installLatestUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.installLatestUpdate),
 }
+
+ipcRenderer.on(RENDERER_RUN_SQL_SHORTCUT_CHANNEL, () => {
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', {
+      key: 'F5',
+      code: 'F5',
+      bubbles: true,
+      cancelable: true,
+    }),
+  )
+})
 
 contextBridge.exposeInMainWorld('pointerApi', pointerApi)

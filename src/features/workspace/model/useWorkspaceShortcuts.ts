@@ -35,6 +35,24 @@ export function useWorkspaceShortcuts({
 }: UseWorkspaceShortcutsParams): void {
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
+      const isF5 = (event.key === 'F5' || event.code === 'F5') && !event.metaKey && !event.ctrlKey && !event.altKey
+      if (isF5) {
+        event.preventDefault()
+        event.stopPropagation()
+
+        if (activeTabId.startsWith('sql:')) {
+          const cursorOffset = sqlCursorByTabRef.current[activeTabId]
+          void runSqlRef.current?.(
+            false,
+            typeof cursorOffset === 'number' ? cursorOffset : undefined,
+            undefined,
+            activeTabId,
+          )
+        }
+
+        return
+      }
+
       const isModEnter =
         (event.metaKey || event.ctrlKey) &&
         (event.key === 'Enter' || event.code === 'Enter' || event.code === 'NumpadEnter')

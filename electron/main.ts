@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, globalShortcut } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { DbService } from './services/db-service'
@@ -20,6 +20,33 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 const dbService = new DbService()
 const updaterService = new UpdaterService()
 let mainWindow: BrowserWindow | null = null
+const RENDERER_RUN_SQL_SHORTCUT_CHANNEL = 'pointer:shortcut:run-sql'
+let isF5ShortcutRegistered = false
+
+function registerFocusedWindowShortcuts(): void {
+  if (isF5ShortcutRegistered) {
+    return
+  }
+
+  const ok = globalShortcut.register('F5', () => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()) {
+      return
+    }
+
+    mainWindow.webContents.send(RENDERER_RUN_SQL_SHORTCUT_CHANNEL)
+  })
+
+  isF5ShortcutRegistered = ok
+}
+
+function unregisterFocusedWindowShortcuts(): void {
+  if (!isF5ShortcutRegistered) {
+    return
+  }
+
+  globalShortcut.unregister('F5')
+  isF5ShortcutRegistered = false
+}
 
 registerIpc(dbService, updaterService)
 
@@ -47,6 +74,34 @@ function createMainWindow(): void {
   } else {
     void mainWindow.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isPlainF5 =
+      input.type === 'keyDown' &&
+      !input.control &&
+      !input.meta &&
+      !input.alt &&
+      (input.key === 'F5' || input.code === 'F5')
+
+    if (!isPlainF5) {
+      return
+    }
+
+    event.preventDefault()
+    mainWindow?.webContents.send(RENDERER_RUN_SQL_SHORTCUT_CHANNEL)
+  })
+
+  mainWindow.on('focus', () => {
+    registerFocusedWindowShortcuts()
+  })
+
+  mainWindow.on('blur', () => {
+    unregisterFocusedWindowShortcuts()
+  })
+
+  mainWindow.on('closed', () => {
+    unregisterFocusedWindowShortcuts()
+  })
 }
 
 app.on('window-all-closed', () => {
@@ -57,6 +112,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
+  unregisterFocusedWindowShortcuts()
   await dbService.close()
 })
 
