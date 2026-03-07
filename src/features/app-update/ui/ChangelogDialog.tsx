@@ -64,7 +64,7 @@ export function ChangelogDialog({
                   <Button
                     type='button'
                     variant='ghost'
-                    className='h-auto w-full justify-between rounded-none px-6 py-4 text-left hover:bg-slate-800/45 hover:text-slate-50'
+                    className='h-auto w-full justify-between rounded-none px-6 py-4 text-left hover:bg-slate-800/45 hover:text-slate-50 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-slate-500/40'
                     onClick={() => setExpandedIndex((current) => (current === index ? -1 : index))}
                   >
                     <div className='flex min-w-0 items-center gap-2'>
@@ -86,7 +86,7 @@ export function ChangelogDialog({
                   </Button>
 
                   {isExpanded ? (
-                    <div className='space-y-4 px-6 pb-5'>
+                    <div className='space-y-4 border-t border-slate-800/60 px-6 pb-5 pt-4'>
                       {entry.sections.map((section) => (
                         <section key={`${entry.version}:${section.title}`}>
                           <h4 className='mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400'>
