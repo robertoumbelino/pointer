@@ -17,6 +17,26 @@ type CommandGroup = {
   items: Array<{ hit: TableSearchHit; displayIndex: number }>
 }
 
+export type CommandActionId = 'open-changelog' | 'check-app-update'
+
+export type CommandActionItem = {
+  id: CommandActionId
+  label: string
+  description: string
+  displayIndex: number
+}
+
+type OrderedCommandItem =
+  | {
+      kind: 'action'
+      action: CommandActionItem
+    }
+  | {
+      kind: 'table'
+      hit: TableSearchHit
+      displayIndex: number
+    }
+
 type UseCommandPaletteActionsParams = {
   selectedEnvironmentId: string
   commandHits: TableSearchHit[]
@@ -39,13 +59,16 @@ type UseCommandPaletteActionsParams = {
   commandColumnInputRef: MutableRefObject<HTMLSelectElement | null>
   setTableContextMenu: Dispatch<SetStateAction<SidebarTableContextMenuState | null>>
   openTableTab: (hit: TableSearchHit, initialLoad?: TableReloadOverrides) => Promise<void>
+  openChangelog: () => void
+  checkForAppUpdate: (showToastWhenCurrent?: boolean) => Promise<void>
 }
 
 type UseCommandPaletteActionsResult = {
+  commandActions: CommandActionItem[]
   groupedCommandHits: CommandGroup[]
-  orderedCommandHits: TableSearchHit[]
   handleCommandInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   applyCommandScopedFilter: () => Promise<void>
+  selectCommandAction: (actionId: CommandActionId) => Promise<void>
   handleCopyTableStructureSql: (hit: TableSearchHit) => Promise<void>
   handleCopyInsertTemplateSql: (hit: TableSearchHit) => Promise<void>
 }
@@ -72,7 +95,41 @@ export function useCommandPaletteActions({
   commandColumnInputRef,
   setTableContextMenu,
   openTableTab,
+  openChangelog,
+  checkForAppUpdate,
 }: UseCommandPaletteActionsParams): UseCommandPaletteActionsResult {
+  const commandActions = useMemo<CommandActionItem[]>(() => {
+    const query = commandQuery.trim().toLowerCase()
+    const actions: Array<Omit<CommandActionItem, 'displayIndex'> & { keywords: string[] }> = [
+      {
+        id: 'open-changelog',
+        label: 'Abrir changelog',
+        description: 'Ver novidades e histórico de versões do app',
+        keywords: ['changelog', 'novidades', 'release', 'versao', 'versão', 'historico'],
+      },
+      {
+        id: 'check-app-update',
+        label: 'Checar atualizações',
+        description: 'Buscar nova versão disponível do app',
+        keywords: ['atualizar', 'atualizacao', 'atualização', 'update', 'upgrade', 'nova versao', 'nova versão'],
+      },
+    ]
+
+    const filtered = query
+      ? actions.filter((action) => {
+          const searchable = [action.label, action.description, ...action.keywords].join(' ').toLowerCase()
+          return searchable.includes(query)
+        })
+      : actions
+
+    return filtered.map((action, displayIndex) => ({
+      id: action.id,
+      label: action.label,
+      description: action.description,
+      displayIndex,
+    }))
+  }, [commandQuery])
+
   const groupedCommandHits = useMemo(() => {
     const groups = new Map<string, { connectionId: string; heading: string; items: TableSearchHit[] }>()
 
@@ -91,7 +148,7 @@ export function useCommandPaletteActions({
     })
 
     const grouped = Array.from(groups.values())
-    let displayIndex = 0
+    let displayIndex = commandActions.length
 
     return grouped.map((group) => ({
       ...group,
@@ -101,12 +158,24 @@ export function useCommandPaletteActions({
         return indexed
       }),
     }))
-  }, [commandHits])
+  }, [commandActions.length, commandHits])
 
-  const orderedCommandHits = useMemo(
-    () => groupedCommandHits.flatMap((group) => group.items.map((item) => item.hit)),
-    [groupedCommandHits],
-  )
+  const orderedCommandItems = useMemo<OrderedCommandItem[]>(() => {
+    const actionItems: OrderedCommandItem[] = commandActions.map((action) => ({
+      kind: 'action',
+      action,
+    }))
+
+    const tableItems: OrderedCommandItem[] = groupedCommandHits.flatMap((group) =>
+      group.items.map((item) => ({
+        kind: 'table',
+        hit: item.hit,
+        displayIndex: item.displayIndex,
+      })),
+    )
+
+    return [...actionItems, ...tableItems]
+  }, [commandActions, groupedCommandHits])
 
   useEffect(() => {
     if (!isCommandOpen || !selectedEnvironmentId) {
@@ -136,13 +205,13 @@ export function useCommandPaletteActions({
       return
     }
 
-    if (orderedCommandHits.length === 0) {
+    if (orderedCommandItems.length === 0) {
       setCommandIndex(0)
       return
     }
 
-    setCommandIndex((current) => Math.max(0, Math.min(current, orderedCommandHits.length - 1)))
-  }, [commandScopedTarget, isCommandOpen, orderedCommandHits.length, setCommandIndex])
+    setCommandIndex((current) => Math.max(0, Math.min(current, orderedCommandItems.length - 1)))
+  }, [commandScopedTarget, isCommandOpen, orderedCommandItems.length, setCommandIndex])
 
   useEffect(() => {
     if (!isCommandOpen || commandScopedTarget) {
@@ -159,7 +228,7 @@ export function useCommandPaletteActions({
 
     const activeItem = commandItemRefs.current[commandIndex]
     activeItem?.scrollIntoView({ block: 'nearest' })
-  }, [commandIndex, commandScopedTarget, commandItemRefs, isCommandOpen, orderedCommandHits.length])
+  }, [commandIndex, commandScopedTarget, commandItemRefs, isCommandOpen, orderedCommandItems.length])
 
   async function enterCommandScopedMode(hit: TableSearchHit): Promise<void> {
     try {
@@ -182,19 +251,32 @@ export function useCommandPaletteActions({
     }
   }
 
+  async function selectCommandAction(actionId: CommandActionId): Promise<void> {
+    try {
+      if (actionId === 'open-changelog') {
+        openChangelog()
+        return
+      }
+
+      await checkForAppUpdate(true)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   function handleCommandInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (commandScopedTarget) {
       return
     }
 
-    if (orderedCommandHits.length === 0) {
+    if (orderedCommandItems.length === 0) {
       return
     }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       event.stopPropagation()
-      setCommandIndex((current) => Math.max(0, Math.min(current + 1, orderedCommandHits.length - 1)))
+      setCommandIndex((current) => Math.max(0, Math.min(current + 1, orderedCommandItems.length - 1)))
       return
     }
 
@@ -208,9 +290,13 @@ export function useCommandPaletteActions({
     if (event.key === 'Tab') {
       event.preventDefault()
       event.stopPropagation()
-      const target = orderedCommandHits[commandIndex] ?? orderedCommandHits[0]
-      if (target) {
-        void enterCommandScopedMode(target)
+      const currentTarget = orderedCommandItems[commandIndex] ?? orderedCommandItems[0]
+      const fallbackTableTarget = orderedCommandItems.find((item) => item.kind === 'table')
+      const tableTarget =
+        currentTarget?.kind === 'table' ? currentTarget : fallbackTableTarget?.kind === 'table' ? fallbackTableTarget : null
+
+      if (tableTarget?.kind === 'table') {
+        void enterCommandScopedMode(tableTarget.hit)
       }
       return
     }
@@ -218,10 +304,19 @@ export function useCommandPaletteActions({
     if (event.key === 'Enter') {
       event.preventDefault()
       event.stopPropagation()
-      const target = orderedCommandHits[commandIndex] ?? orderedCommandHits[0]
-      if (target) {
-        setIsCommandOpen(false)
-        void openTableTab(target)
+      const target = orderedCommandItems[commandIndex] ?? orderedCommandItems[0]
+      if (!target) {
+        return
+      }
+
+      setIsCommandOpen(false)
+      if (target.kind === 'action') {
+        void selectCommandAction(target.action.id)
+        return
+      }
+
+      if (target.kind === 'table') {
+        void openTableTab(target.hit)
       }
     }
   }
@@ -280,10 +375,11 @@ export function useCommandPaletteActions({
   }
 
   return {
+    commandActions,
     groupedCommandHits,
-    orderedCommandHits,
     handleCommandInputKeyDown,
     applyCommandScopedFilter,
+    selectCommandAction,
     handleCopyTableStructureSql,
     handleCopyInsertTemplateSql,
   }

@@ -8,6 +8,7 @@ Este histórico documenta as versões do Pointer com foco no impacto para quem u
 - Execução de SQL por atalho `F5`, acelerando o fluxo de trabalho em abas SQL.
 - Suporte à visualização e edição inline de valores JSON/JSONB em células de tabela.
 - Suporte a colunas `ENUM` com seleção inline para edição mais segura e rápida.
+- `Cmd+K` evoluído para busca universal com seção de ações (incluindo abrir changelog e checar atualizações).
 
 ### 🐛 Correções
 - Correção na serialização de colunas JSON/JSONB durante o salvamento de alterações em tabela.

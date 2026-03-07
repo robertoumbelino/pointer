@@ -1,4 +1,4 @@
-import { Table2 } from 'lucide-react'
+import { Diff, RefreshCw, Table2 } from 'lucide-react'
 import type { KeyboardEvent, MutableRefObject, SetStateAction } from 'react'
 import type { TableSchema, TableSearchHit } from '../../../../shared/db-types'
 import { Button } from '../../../components/ui/button'
@@ -15,6 +15,7 @@ import { Dialog, DialogContent } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
 import { cn } from '../../../lib/utils'
 import { formatTableLabel } from '../../../shared/lib/workspace-utils'
+import type { CommandActionId, CommandActionItem } from '../model/useCommandPaletteActions'
 
 type GroupedCommandHits = Array<{
   connectionId: string
@@ -39,6 +40,8 @@ type TableCommandDialogProps = {
   commandColumnInputRef: MutableRefObject<HTMLSelectElement | null>
   commandValueInputRef: MutableRefObject<HTMLInputElement | null>
   applyCommandScopedFilter: () => Promise<void>
+  commandActions: CommandActionItem[]
+  selectCommandAction: (actionId: CommandActionId) => Promise<void>
   groupedCommandHits: GroupedCommandHits
   commandItemRefs: MutableRefObject<Record<number, HTMLDivElement | null>>
   commandIndex: number
@@ -64,6 +67,8 @@ export function TableCommandDialog({
   commandColumnInputRef,
   commandValueInputRef,
   applyCommandScopedFilter,
+  commandActions,
+  selectCommandAction,
   groupedCommandHits,
   commandItemRefs,
   commandIndex,
@@ -97,7 +102,7 @@ export function TableCommandDialog({
             placeholder={
               commandScopedTarget
                 ? `Filtro rápido em ${formatTableLabel(commandScopedTarget.table)}`
-                : 'Buscar tabela em todo o ambiente...'
+                : 'Buscar tabelas e ações...'
             }
             onKeyDown={handleCommandInputKeyDown}
           />
@@ -146,12 +151,50 @@ export function TableCommandDialog({
                 </div>
               </div>
             )}
-            <CommandEmpty>Nenhuma tabela encontrada.</CommandEmpty>
+            <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+            {commandActions.length > 0 && (
+              <CommandGroup heading='Ações'>
+                {commandActions.map((action) => (
+                  <CommandItem
+                    key={action.id}
+                    ref={(node) => {
+                      commandItemRefs.current[action.displayIndex] = node
+                    }}
+                    value={`${action.label} ${action.description}`}
+                    onSelect={() => {
+                      onOpenChange(false)
+                      void selectCommandAction(action.id)
+                    }}
+                    onMouseMove={() => setCommandIndex(action.displayIndex)}
+                    data-manual-active={commandIndex === action.displayIndex ? 'true' : 'false'}
+                    className={cn(
+                      'cursor-pointer text-slate-300 data-[selected=true]:bg-transparent data-[selected=true]:text-slate-300 data-[selected=true]:shadow-none aria-selected:bg-transparent aria-selected:text-slate-300',
+                      'data-[manual-active=true]:!bg-slate-700/55 data-[manual-active=true]:!text-slate-50 data-[manual-active=true]:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]',
+                    )}
+                  >
+                    {action.id === 'open-changelog' ? (
+                      <Diff className='h-4 w-4' />
+                    ) : (
+                      <RefreshCw className='h-4 w-4' />
+                    )}
+                    <div className='min-w-0'>
+                      <p className='truncate text-[13px]'>{action.label}</p>
+                      <p className='truncate text-[11px] text-slate-400'>{action.description}</p>
+                    </div>
+                    {commandIndex === action.displayIndex && (
+                      <CommandShortcut className='text-[10px] uppercase tracking-[0.08em] text-slate-400'>
+                        Enter
+                      </CommandShortcut>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             {groupedCommandHits.map((group, groupIndex) => (
               <CommandGroup
                 key={group.connectionId}
                 heading={group.heading}
-                className={cn(groupIndex > 0 && 'mt-1 border-t border-slate-800 pt-2')}
+                className={cn((groupIndex > 0 || commandActions.length > 0) && 'mt-1 border-t border-slate-800 pt-2')}
               >
                 {group.items.map(({ hit, displayIndex }) => (
                   <CommandItem
