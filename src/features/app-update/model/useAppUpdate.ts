@@ -1,9 +1,12 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { AppUpdateInfo } from '../../../../shared/db-types'
+import changelogMarkdown from '../../../../CHANGELOG.md?raw'
 import { toast } from 'sonner'
 import { pointerApi } from '../../../shared/api/pointer-api'
+import { CHANGELOG_LAST_SEEN_VERSION_KEY } from '../../../shared/constants/app'
 import { getErrorMessage } from '../../../shared/lib/workspace-utils'
+import { normalizeVersion, parseChangelog, type ChangelogEntry } from './changelog'
 
 type UseAppUpdateResult = {
   appUpdateInfo: AppUpdateInfo | null
@@ -14,6 +17,10 @@ type UseAppUpdateResult = {
   setIsInstallingAppUpdate: Dispatch<SetStateAction<boolean>>
   appVersion: string
   setAppVersion: Dispatch<SetStateAction<string>>
+  changelogEntries: ChangelogEntry[]
+  isChangelogOpen: boolean
+  setIsChangelogOpen: Dispatch<SetStateAction<boolean>>
+  openChangelog: () => void
   checkForAppUpdate: (showToastWhenCurrent?: boolean) => Promise<void>
   installLatestAppUpdate: () => Promise<void>
 }
@@ -22,7 +29,28 @@ export function useAppUpdate(): UseAppUpdateResult {
   const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null)
   const [isCheckingAppUpdate, setIsCheckingAppUpdate] = useState(false)
   const [isInstallingAppUpdate, setIsInstallingAppUpdate] = useState(false)
-  const [appVersion, setAppVersion] = useState('0.0.0')
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
+  const changelogEntries = useMemo(() => parseChangelog(changelogMarkdown), [])
+
+  useEffect(() => {
+    if (!appVersion) {
+      return
+    }
+
+    const currentVersion = normalizeVersion(appVersion)
+    if (!currentVersion) {
+      return
+    }
+
+    const lastSeenVersion = readLastSeenVersion()
+    if (currentVersion === lastSeenVersion) {
+      return
+    }
+
+    setIsChangelogOpen(true)
+    persistLastSeenVersion(currentVersion)
+  }, [appVersion])
 
   const checkForAppUpdate = useCallback(async (showToastWhenCurrent = false): Promise<void> => {
     try {
@@ -71,6 +99,10 @@ export function useAppUpdate(): UseAppUpdateResult {
     }
   }, [appUpdateInfo])
 
+  const openChangelog = useCallback(() => {
+    setIsChangelogOpen(true)
+  }, [])
+
   return {
     appUpdateInfo,
     setAppUpdateInfo,
@@ -80,7 +112,27 @@ export function useAppUpdate(): UseAppUpdateResult {
     setIsInstallingAppUpdate,
     appVersion,
     setAppVersion,
+    changelogEntries,
+    isChangelogOpen,
+    setIsChangelogOpen,
+    openChangelog,
     checkForAppUpdate,
     installLatestAppUpdate,
+  }
+}
+
+function readLastSeenVersion(): string {
+  try {
+    return normalizeVersion(window.localStorage.getItem(CHANGELOG_LAST_SEEN_VERSION_KEY) ?? '')
+  } catch {
+    return ''
+  }
+}
+
+function persistLastSeenVersion(version: string): void {
+  try {
+    window.localStorage.setItem(CHANGELOG_LAST_SEEN_VERSION_KEY, version)
+  } catch {
+    // LocalStorage can be unavailable in edge cases; keep app functional without persistence.
   }
 }

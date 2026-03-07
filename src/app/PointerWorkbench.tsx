@@ -9,6 +9,7 @@ import {
 import { EditorView, keymap } from '@codemirror/view'
 import { useAppUpdate } from '../features/app-update/model/useAppUpdate'
 import { AppTopBar } from '../features/app-update/ui/AppTopBar'
+import { ChangelogDialog } from '../features/app-update/ui/ChangelogDialog'
 import { useCommandPalette } from '../features/command-palette/model/useCommandPalette'
 import { useCommandPaletteActions } from '../features/command-palette/model/useCommandPaletteActions'
 import { TableCommandDialog } from '../features/command-palette/ui/TableCommandDialog'
@@ -176,6 +177,10 @@ function App(): JSX.Element {
     isInstallingAppUpdate,
     appVersion,
     setAppVersion,
+    changelogEntries,
+    isChangelogOpen,
+    setIsChangelogOpen,
+    openChangelog,
     checkForAppUpdate,
     installLatestAppUpdate,
   } = useAppUpdate()
@@ -402,7 +407,7 @@ function App(): JSX.Element {
         const version = await pointerApi.getAppVersion()
         setAppVersion(version)
       } catch {
-        setAppVersion('0.0.0')
+        setAppVersion('')
       }
     })()
   }, [setAppVersion])
@@ -533,6 +538,7 @@ function App(): JSX.Element {
           appUpdateInfo={appUpdateInfo}
           isCheckingAppUpdate={isCheckingAppUpdate}
           isInstallingAppUpdate={isInstallingAppUpdate}
+          onOpenChangelog={openChangelog}
           onCheckForUpdate={checkForAppUpdate}
           onInstallUpdate={installLatestAppUpdate}
         />
@@ -639,6 +645,13 @@ function App(): JSX.Element {
         setTableContextMenu={setTableContextMenu}
         onCopyStructureSql={handleCopyTableStructureSql}
         onCopyInsertSql={handleCopyInsertTemplateSql}
+      />
+
+      <ChangelogDialog
+        isOpen={isChangelogOpen}
+        onOpenChange={setIsChangelogOpen}
+        appVersion={appVersion}
+        entries={changelogEntries}
       />
 
       <SqlTabRenameDialog

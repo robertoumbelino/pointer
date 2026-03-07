@@ -27,6 +27,19 @@ O frontend do Pointer segue arquitetura orientada a features, com composição n
 - Fluxos SQL/table edit devem manter mensagens e confirmação de risco.
 - Não alterar intencionalmente layout/visual sem pedido explícito.
 
+## Política de release e changelog
+
+- Toda nova release deve atualizar obrigatoriamente o `CHANGELOG.md` na raiz.
+- O conteúdo do changelog deve ser escrito em PT-BR com linguagem clara, bonita e apresentável para usuário final.
+- O preenchimento deve revisar os commits desde a última versão publicada.
+- Regra de versionamento:
+  - `feat` relevante sem breaking change: bump `minor`.
+  - `fix`/`refactor`/`chore`/`docs` sem feature relevante: bump `patch`.
+- Base histórica do changelog:
+  - usar tags Git existentes;
+  - incluir versões citadas explicitamente em mensagens de commit;
+  - commits sem versão explícita entram no bloco da próxima versão publicada.
+
 ## Checklist obrigatório antes de merge
 
 - `pnpm run typecheck`
