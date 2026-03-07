@@ -46,7 +46,6 @@ type WorkspaceMainProps = {
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableRef) => string
   engineLabel: (engine: DatabaseEngine) => string
-  pageSize: number
 }
 
 export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
@@ -84,7 +83,6 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     formatCell,
     formatTableLabel,
     engineLabel,
-    pageSize,
   } = props
 
   return (
@@ -137,7 +135,6 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 formatCell={formatCell}
                 formatTableLabel={formatTableLabel}
                 engineLabel={engineLabel}
-                pageSize={pageSize}
               />
             ) : (
               <div className='pointer-card-soft flex h-full items-center justify-center border-dashed text-slate-500'>

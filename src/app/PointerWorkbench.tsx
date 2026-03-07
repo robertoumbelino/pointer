@@ -27,7 +27,7 @@ import { SqlTabRenameDialog } from '../features/workspace/ui/SqlTabRenameDialog'
 import { TableContextMenu } from '../features/workspace/ui/TableContextMenu'
 import { WorkspaceMain } from '../features/workspace/ui/WorkspaceMain'
 import { pointerApi } from '../shared/api/pointer-api'
-import { DEFAULT_ENVIRONMENT_COLOR, PAGE_SIZE } from '../shared/constants/app'
+import { DEFAULT_ENVIRONMENT_COLOR } from '../shared/constants/app'
 import {
   engineLabel,
   engineShortLabel,
@@ -639,7 +639,6 @@ function App(): JSX.Element {
             formatCell={formatCell}
             formatTableLabel={formatTableLabel}
             engineLabel={engineLabel}
-            pageSize={PAGE_SIZE}
           />
         </div>
       </div>

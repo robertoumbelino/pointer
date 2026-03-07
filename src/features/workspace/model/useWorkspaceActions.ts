@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { ConnectionSummary, SqlExecutionResult, TableSearchHit } from '../../../../shared/db-types'
 import { pointerApi } from '../../../shared/api/pointer-api'
-import { PAGE_SIZE } from '../../../shared/constants/app'
+import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
 import {
   buildClickHouseUnknownTableFallbackSql,
   buildInsertPayload,
@@ -65,6 +65,14 @@ type UseWorkspaceActionsResult = {
   runSql: (force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>
 }
 
+function normalizeRequestedPageSize(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return PAGE_SIZE
+  }
+
+  return Math.min(TABLE_PAGE_SIZE_MAX, Math.max(1, Math.trunc(value)))
+}
+
 export function useWorkspaceActions({
   activeTabId,
   setActiveTabId,
@@ -100,6 +108,8 @@ export function useWorkspaceActions({
 
       try {
         const nextPage = initialLoad?.page ?? 0
+        const existingTab = getTableTab(tabId)
+        const nextPageSize = normalizeRequestedPageSize(initialLoad?.pageSize ?? existingTab?.pageSize)
         const nextSort = initialLoad?.sort
         const nextFilterColumn = initialLoad?.filterColumn ?? ''
         const nextFilterOperator = initialLoad?.filterOperator ?? 'ilike'
@@ -114,7 +124,7 @@ export function useWorkspaceActions({
 
         const data = await pointerApi.readTable(hit.connectionId, hit.table, {
           page: nextPage,
-          pageSize: PAGE_SIZE,
+          pageSize: nextPageSize,
           sort: nextSort,
           filters,
         })
@@ -130,6 +140,7 @@ export function useWorkspaceActions({
               schema,
               data,
               page: nextPage,
+              pageSize: data.pageSize,
               sort: nextSort,
               filterColumn: resolvedFilterColumn,
               filterOperator: nextFilterOperator,
@@ -150,7 +161,7 @@ export function useWorkspaceActions({
         toast.error(getErrorMessage(error))
       }
     },
-    [setWorkTabs],
+    [getTableTab, setWorkTabs],
   )
 
   useEffect(() => {
@@ -210,6 +221,7 @@ export function useWorkspaceActions({
         updateTableTab(tabId, (tab) => ({
           ...tab,
           page: initialLoad.page ?? tab.page,
+          pageSize: normalizeRequestedPageSize(initialLoad.pageSize ?? tab.pageSize),
           sort: initialLoad.sort ?? tab.sort,
           filterColumn: initialLoad.filterColumn ?? tab.filterColumn,
           filterOperator: initialLoad.filterOperator ?? tab.filterOperator,
@@ -238,6 +250,7 @@ export function useWorkspaceActions({
         schema: null,
         data: null,
         page: initialLoad?.page ?? 0,
+        pageSize: normalizeRequestedPageSize(initialLoad?.pageSize),
         sort: initialLoad?.sort,
         filterColumn: initialLoad?.filterColumn ?? '',
         filterOperator: initialLoad?.filterOperator ?? 'ilike',
@@ -262,6 +275,7 @@ export function useWorkspaceActions({
     }
 
     const nextPage = overrides?.page ?? tab.page
+    const nextPageSize = normalizeRequestedPageSize(overrides?.pageSize ?? tab.pageSize)
     const hasSortOverride = Boolean(overrides && Object.prototype.hasOwnProperty.call(overrides, 'sort'))
     const nextSort = hasSortOverride ? overrides?.sort : tab.sort
     const nextFilterColumn = overrides?.filterColumn ?? tab.filterColumn
@@ -278,7 +292,7 @@ export function useWorkspaceActions({
 
       const result = await pointerApi.readTable(tab.connectionId, tab.table, {
         page: nextPage,
-        pageSize: PAGE_SIZE,
+        pageSize: nextPageSize,
         sort: nextSort,
         filters,
       })
@@ -296,6 +310,7 @@ export function useWorkspaceActions({
         pendingDeletes: [],
         insertDraft: null,
         baseRows: cloneRows(result.rows),
+        pageSize: result.pageSize,
         loading: false,
       }))
       setEditingCell(null)

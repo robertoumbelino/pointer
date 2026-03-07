@@ -1237,11 +1237,6 @@ export class DbService {
     const offset = Math.max(input.page, 0) * Math.max(input.pageSize, 1)
     const limit = Math.min(Math.max(input.pageSize, 1), 500)
 
-    const countResult = await pool.query<{ total: string }>(
-      `SELECT COUNT(*)::text AS total FROM ${quotedTarget} ${where.sql}`,
-      where.values,
-    )
-
     const dataResult = await pool.query(
       `
       SELECT *
@@ -1256,7 +1251,7 @@ export class DbService {
 
     return {
       rows: dataResult.rows,
-      total: Number(countResult.rows[0]?.total ?? '0'),
+      total: -1,
       page: input.page,
       pageSize: limit,
     }
@@ -1274,18 +1269,6 @@ export class DbService {
     const limit = Math.min(Math.max(input.pageSize, 1), 500)
 
     const target = `${quoteClickHouseIdentifier(table.schema)}.${quoteClickHouseIdentifier(table.name)}`
-
-    const countResult = await client.query({
-      query: `
-        SELECT toUInt64(count()) AS total
-        FROM ${target}
-        ${where.sql}
-      `,
-      query_params: where.params,
-      format: 'JSONEachRow',
-    })
-
-    const countRows = await countResult.json<{ total: string | number }>()
 
     const dataResult = await client.query({
       query: `
@@ -1308,7 +1291,7 @@ export class DbService {
 
     return {
       rows,
-      total: Number(countRows[0]?.total ?? 0),
+      total: -1,
       page: input.page,
       pageSize: limit,
     }
@@ -1327,9 +1310,6 @@ export class DbService {
 
     const target = `${quoteSqliteIdentifier(table.schema)}.${quoteSqliteIdentifier(table.name)}`
 
-    const countStmt = db.prepare(`SELECT COUNT(*) AS total FROM ${target} ${where.sql}`)
-    const countRow = countStmt.get(...where.values) as { total?: number } | undefined
-
     const dataStmt = db.prepare(
       `
       SELECT *
@@ -1344,7 +1324,7 @@ export class DbService {
 
     return {
       rows,
-      total: Number(countRow?.total ?? 0),
+      total: -1,
       page: input.page,
       pageSize: limit,
     }
