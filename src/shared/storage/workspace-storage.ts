@@ -8,6 +8,7 @@ import type {
   WorkTab,
 } from '../../entities/workspace/types'
 import { createSqlTab } from '../../entities/workspace/types'
+import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../constants/app'
 
 export function buildPersistedWorkspaceStorage(
   snapshots: Record<string, EnvironmentWorkspaceSnapshot>,
@@ -74,11 +75,20 @@ function serializeWorkTab(tab: WorkTab): PersistedWorkTab {
     connectionName: tab.connectionName,
     table: tab.table,
     page: tab.page,
+    pageSize: tab.pageSize,
     sort: tab.sort,
     filterColumn: tab.filterColumn,
     filterOperator: tab.filterOperator,
     filterValue: tab.filterValue,
   }
+}
+
+function normalizeTablePageSize(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return PAGE_SIZE
+  }
+
+  return Math.min(TABLE_PAGE_SIZE_MAX, Math.max(1, Math.trunc(value)))
 }
 
 function deserializeEnvironmentWorkspaceSnapshot(
@@ -110,6 +120,7 @@ function deserializeEnvironmentWorkspaceSnapshot(
           schema: null,
           data: null,
           page: typeof tab.page === 'number' ? tab.page : 0,
+          pageSize: normalizeTablePageSize(tab.pageSize),
           sort: tab.sort,
           filterColumn: tab.filterColumn ?? '',
           filterOperator: tab.filterOperator ?? 'ilike',

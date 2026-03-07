@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { TableFilterOperator, TableSort } from '../../../../shared/db-types'
@@ -16,6 +16,7 @@ import {
 import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
 import { cn } from '../../../lib/utils'
+import { TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
 import { isJsonLikeDataType } from '../../../shared/lib/workspace-utils'
 
 type JsonEditorCellState = {
@@ -125,7 +126,6 @@ type TableWorkspacePanelProps = {
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableTab['table']) => string
   engineLabel: (engine: TableTab['engine']) => string
-  pageSize: number
 }
 
 export function TableWorkspacePanel({
@@ -145,10 +145,15 @@ export function TableWorkspacePanel({
   formatCell,
   formatTableLabel,
   engineLabel,
-  pageSize,
 }: TableWorkspacePanelProps): JSX.Element {
   const [jsonEditorCell, setJsonEditorCell] = useState<JsonEditorCellState | null>(null)
   const [jsonEditorValue, setJsonEditorValue] = useState('')
+  const [pageSizeInput, setPageSizeInput] = useState(() => String(activeTableTab.pageSize))
+  const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
+
+  useEffect(() => {
+    setPageSizeInput(String(activeTableTab.pageSize))
+  }, [activeTableTab.id, activeTableTab.pageSize])
 
   const closeJsonEditor = (): void => {
     setJsonEditorCell(null)
@@ -189,6 +194,33 @@ export function TableWorkspacePanel({
     } catch {
       toast.error('JSON inválido. Corrija o conteúdo antes de salvar.')
     }
+  }
+
+  const applyPageSize = (): void => {
+    const parsed = Number.parseInt(pageSizeInput, 10)
+    if (!Number.isFinite(parsed)) {
+      toast.error(`Informe um limite entre 1 e ${TABLE_PAGE_SIZE_MAX}.`)
+      setPageSizeInput(String(activeTableTab.pageSize))
+      return
+    }
+
+    const normalized = Math.min(TABLE_PAGE_SIZE_MAX, Math.max(1, Math.trunc(parsed)))
+    setPageSizeInput(String(normalized))
+
+    if (normalized === activeTableTab.pageSize) {
+      return
+    }
+
+    updateTableTab(activeTableTab.id, (tab) => ({
+      ...tab,
+      page: 0,
+      pageSize: normalized,
+    }))
+
+    void reloadTableTab(activeTableTab.id, {
+      page: 0,
+      pageSize: normalized,
+    })
   }
 
   return (
@@ -552,8 +584,26 @@ export function TableWorkspacePanel({
       </div>
 
       <div className='flex items-center justify-between border-t border-slate-800/80 px-3 pb-3 pt-2 text-sm text-slate-400'>
-        <p>
-          Página {activeTableTab.page + 1} • {activeTableTab.data?.total ?? 0} registros
+        <p className='flex items-center gap-1.5'>
+          <span>Página {activeTableTab.page + 1} • limite de</span>
+          <Input
+            type='number'
+            min={1}
+            max={TABLE_PAGE_SIZE_MAX}
+            step={1}
+            value={pageSizeInput}
+            disabled={activeTableTab.loading}
+            onChange={(event) => setPageSizeInput(event.target.value)}
+            onBlur={applyPageSize}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                applyPageSize()
+              }
+            }}
+            className='h-7 w-20 text-xs'
+          />
+          <span>registros por página</span>
           {(Object.keys(activeTableTab.pendingUpdates).length > 0 ||
             activeTableTab.pendingDeletes.length > 0 ||
             Boolean(activeTableTab.insertDraft)) && (
@@ -592,11 +642,11 @@ export function TableWorkspacePanel({
                 page: nextPage,
               }))
 
-              if ((activeTableTab.data?.rows.length ?? 0) === pageSize) {
+              if ((activeTableTab.data?.rows.length ?? 0) === effectivePageSize) {
                 void reloadTableTab(activeTableTab.id, { page: nextPage })
               }
             }}
-            disabled={(activeTableTab.data?.rows.length ?? 0) < pageSize}
+            disabled={(activeTableTab.data?.rows.length ?? 0) < effectivePageSize}
           >
             <ChevronRight className='h-4 w-4' />
           </Button>

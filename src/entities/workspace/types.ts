@@ -39,6 +39,7 @@ export type TableTab = {
   schema: TableSchema | null
   data: TableReadResult | null
   page: number
+  pageSize: number
   sort?: TableSort
   filterColumn: string
   filterOperator: TableFilterOperator
@@ -68,6 +69,7 @@ export type SidebarTableContextMenuState = {
 
 export type TableReloadOverrides = {
   page?: number
+  pageSize?: number
   sort?: TableSort
   filterColumn?: string
   filterOperator?: TableFilterOperator
@@ -99,6 +101,7 @@ export type PersistedTableTab = {
   connectionName: string
   table: TableRef
   page: number
+  pageSize?: number
   sort?: TableSort
   filterColumn: string
   filterOperator: TableFilterOperator
