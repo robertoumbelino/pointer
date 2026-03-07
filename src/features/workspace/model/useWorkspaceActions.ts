@@ -103,7 +103,9 @@ export function useWorkspaceActions({
   const initializeTableTab = useCallback(
     async (tabId: string, hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> => {
       setWorkTabs((current) =>
-        current.map((tab) => (tab.id === tabId && tab.type === 'table' ? { ...tab, loading: true } : tab)),
+        current.map((tab) =>
+          tab.id === tabId && tab.type === 'table' ? { ...tab, loading: true, loadError: null } : tab,
+        ),
       )
 
       try {
@@ -151,14 +153,18 @@ export function useWorkspaceActions({
               insertDraft: null,
               baseRows: cloneRows(data.rows),
               loading: false,
+              loadError: null,
             }
           }),
         )
       } catch (error) {
+        const message = getErrorMessage(error)
         setWorkTabs((current) =>
-          current.map((tab) => (tab.id === tabId && tab.type === 'table' ? { ...tab, loading: false } : tab)),
+          current.map((tab) =>
+            tab.id === tabId && tab.type === 'table' ? { ...tab, loading: false, loadError: message } : tab,
+          ),
         )
-        toast.error(getErrorMessage(error))
+        toast.error(message)
       }
     },
     [getTableTab, setWorkTabs],
@@ -166,6 +172,10 @@ export function useWorkspaceActions({
 
   useEffect(() => {
     if (!activeTableTab || activeTableTab.loading) {
+      return
+    }
+
+    if (activeTableTab.loadError) {
       return
     }
 
@@ -261,6 +271,7 @@ export function useWorkspaceActions({
         insertDraft: null,
         baseRows: null,
         loading: true,
+        loadError: null,
       },
     ])
 
@@ -282,7 +293,7 @@ export function useWorkspaceActions({
     const nextFilterOperator = overrides?.filterOperator ?? tab.filterOperator
     const nextFilterValue = overrides?.filterValue ?? tab.filterValue
 
-    updateTableTab(tabId, (current) => ({ ...current, loading: true }))
+    updateTableTab(tabId, (current) => ({ ...current, loading: true, loadError: null }))
 
     try {
       const filters =
@@ -312,11 +323,13 @@ export function useWorkspaceActions({
         baseRows: cloneRows(result.rows),
         pageSize: result.pageSize,
         loading: false,
+        loadError: null,
       }))
       setEditingCell(null)
     } catch (error) {
-      updateTableTab(tabId, (current) => ({ ...current, loading: false }))
-      toast.error(getErrorMessage(error))
+      const message = getErrorMessage(error)
+      updateTableTab(tabId, (current) => ({ ...current, loading: false, loadError: message }))
+      toast.error(message)
     }
   }
 

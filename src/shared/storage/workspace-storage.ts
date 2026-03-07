@@ -131,6 +131,7 @@ function deserializeEnvironmentWorkspaceSnapshot(
           insertDraft: null,
           baseRows: null,
           loading: false,
+          loadError: null,
         } as TableTab
       })
     : []

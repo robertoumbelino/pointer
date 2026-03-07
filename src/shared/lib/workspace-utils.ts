@@ -492,11 +492,47 @@ export function coerceValueByOriginal(nextValue: string, originalValue: unknown,
 }
 
 export function getErrorMessage(error: unknown): string {
+  let rawMessage = ''
+
   if (error instanceof Error) {
-    return error.message
+    rawMessage = error.message
+  } else if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    rawMessage = (error as { message: string }).message
   }
 
-  return 'Erro inesperado.'
+  if (!rawMessage) {
+    return 'Erro inesperado.'
+  }
+
+  let message = rawMessage.trim()
+  let ipcChannel = ''
+
+  let ipcMatch = message.match(/^Error invoking remote method '([^']+)':\s*(.*)$/)
+  while (ipcMatch) {
+    ipcChannel = ipcMatch[1]
+    message = (ipcMatch[2] || '').trim()
+    ipcMatch = message.match(/^Error invoking remote method '([^']+)':\s*(.*)$/)
+  }
+
+  if (!message || message === 'Error') {
+    if (
+      ipcChannel === 'pointer:tables:describe' ||
+      ipcChannel === 'pointer:tables:read' ||
+      ipcChannel === 'pointer:sql:preview-risk' ||
+      ipcChannel === 'pointer:sql:execute'
+    ) {
+      return 'Não foi possível conectar ao banco desta conexão. Verifique se o banco está online e tente reconectar.'
+    }
+
+    return 'Erro inesperado.'
+  }
+
+  return message
 }
 
 function generatePrimaryKeyDefault(dataType: string): string | undefined {

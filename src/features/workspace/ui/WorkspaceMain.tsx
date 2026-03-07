@@ -121,6 +121,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
               <TableWorkspacePanel
                 activeTableTab={activeTableTab}
                 reloadTableTab={reloadTableTab}
+                closeTableTab={closeTableTab}
                 handleToggleInsertDraftRow={handleToggleInsertDraftRow}
                 selectedRow={selectedRow}
                 handleDeleteRow={handleDeleteRow}
