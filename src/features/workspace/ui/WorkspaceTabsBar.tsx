@@ -26,8 +26,8 @@ export function WorkspaceTabsBar({
   saveActiveTableChanges,
 }: WorkspaceTabsBarProps): JSX.Element {
   return (
-    <div className='border-b border-slate-800/70 px-3 pt-1.5'>
-      <div className='flex items-center gap-2 pb-1.5'>
+    <div className='px-3 py-2'>
+      <div className='flex items-center gap-2'>
         <div className='min-w-0 flex-1 overflow-x-auto'>
           <div className='flex gap-1'>
             {workTabs.map((tab) => {
@@ -38,7 +38,7 @@ export function WorkspaceTabsBar({
                   key={tab.id}
                   type='button'
                   className={cn(
-                    'flex items-center gap-2 rounded-md border px-2.5 py-1 text-[12px] whitespace-nowrap',
+                    'flex items-center gap-2 rounded-xl border px-2.5 py-1 text-[12px] whitespace-nowrap',
                     activeTabId === tab.id
                       ? 'border-slate-300/35 bg-slate-200/10 text-slate-100'
                       : 'border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800',
@@ -56,7 +56,7 @@ export function WorkspaceTabsBar({
                     <span
                       role='button'
                       tabIndex={0}
-                      className='rounded p-0.5 hover:bg-slate-700'
+                      className='rounded-lg p-0.5 hover:bg-slate-700'
                       onClick={(event) => {
                         event.stopPropagation()
                         if (tab.type === 'table') {

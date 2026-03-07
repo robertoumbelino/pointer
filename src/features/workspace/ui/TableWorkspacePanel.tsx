@@ -192,7 +192,7 @@ export function TableWorkspacePanel({
   }
 
   return (
-    <div className='flex h-full flex-col rounded-lg border border-slate-800/65 bg-[#0b1220]'>
+    <div className='pointer-card flex h-full flex-col overflow-hidden'>
       <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/70 px-3 py-2.5'>
         <div>
           <p className='text-[11px] uppercase tracking-[0.2em] text-slate-500'>Tabela atual</p>
@@ -297,8 +297,8 @@ export function TableWorkspacePanel({
         </div>
       </div>
 
-      <div className='flex-1 overflow-auto'>
-        <div className='h-full overflow-auto'>
+      <div className='m-3 mb-2 min-h-0 flex-1 overflow-hidden'>
+        <div className='pointer-card-soft h-full overflow-auto'>
           <table className='min-w-max border-collapse text-sm'>
             <thead className='sticky top-0 z-10 bg-slate-900'>
               <tr>
@@ -551,7 +551,7 @@ export function TableWorkspacePanel({
         )}
       </div>
 
-      <div className='flex items-center justify-between border-t border-slate-800/80 p-3 text-sm text-slate-400'>
+      <div className='flex items-center justify-between border-t border-slate-800/80 px-3 pb-3 pt-2 text-sm text-slate-400'>
         <p>
           Página {activeTableTab.page + 1} • {activeTableTab.data?.total ?? 0} registros
           {(Object.keys(activeTableTab.pendingUpdates).length > 0 ||

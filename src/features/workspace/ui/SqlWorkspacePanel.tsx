@@ -75,7 +75,7 @@ export function SqlWorkspacePanel({
   const [resultSetSortByKey, setResultSetSortByKey] = useState<Record<string, ResultSetSortState>>({})
 
   return (
-    <div className='flex h-full flex-col rounded-lg border border-slate-800/65 bg-[#0b1220]'>
+    <div className='pointer-card flex h-full flex-col overflow-hidden'>
       <div className='flex items-center justify-between border-b border-slate-800/70 px-3 py-2.5'>
         <div>
           <h2 className='text-sm font-semibold'>{activeSqlTab.title}</h2>
@@ -112,9 +112,9 @@ export function SqlWorkspacePanel({
         </div>
       </div>
 
-      <div ref={sqlSplitContainerRef} className='flex h-full flex-1 flex-col overflow-hidden'>
+      <div ref={sqlSplitContainerRef} className='flex h-full flex-1 flex-col overflow-hidden p-3'>
         <div
-          className='min-h-[180px] overflow-hidden border-b border-slate-800/80'
+          className='pointer-card-soft min-h-[180px] overflow-hidden'
           style={{ height: `${activeSqlTab.splitRatio}%` }}
         >
           <CodeMirror
@@ -141,7 +141,7 @@ export function SqlWorkspacePanel({
         </div>
 
         <div
-          className='group flex h-2 cursor-row-resize items-center justify-center bg-slate-900/55'
+          className='group my-2.5 flex h-2 cursor-row-resize items-center justify-center rounded-full bg-slate-900/55'
           onMouseDown={(event) => {
             event.preventDefault()
             setResizingSqlTabId(activeSqlTab.id)
@@ -150,7 +150,7 @@ export function SqlWorkspacePanel({
           <div className='h-1 w-16 rounded-full bg-slate-700 transition-colors group-hover:bg-slate-300/55' />
         </div>
 
-        <div className='flex-1 overflow-auto px-3 py-2'>
+        <div className='pointer-card-soft flex-1 overflow-auto px-3 py-2'>
           <div className='mb-2 flex items-center justify-between text-xs uppercase tracking-[0.15em] text-slate-500'>
             <span>Resultado</span>
             {activeSqlTab.sqlResult && (

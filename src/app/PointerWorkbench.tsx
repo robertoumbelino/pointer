@@ -535,8 +535,8 @@ function App(): JSX.Element {
   const shortcutLabel = navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'
 
   return (
-    <div className='h-screen w-screen overflow-hidden text-[13px] text-slate-100'>
-      <div className='h-full w-full overflow-hidden border border-slate-800/70 bg-slate-950'>
+    <div className='h-screen w-screen overflow-hidden bg-slate-950 p-2.5 text-[13px] text-slate-100'>
+      <div className='pointer-shell h-full w-full overflow-hidden'>
         <AppTopBar
           appVersion={appVersion}
           appUpdateInfo={appUpdateInfo}
@@ -547,7 +547,7 @@ function App(): JSX.Element {
           onInstallUpdate={installLatestAppUpdate}
         />
 
-        <div className='no-drag flex h-[calc(100%-2.25rem)]'>
+        <div className='no-drag flex h-[calc(100%-2.25rem)] gap-3 p-3'>
           <EnvironmentSidebar
             environments={environments}
             connections={connections}
