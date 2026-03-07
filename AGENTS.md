@@ -40,6 +40,16 @@ O frontend do Pointer segue arquitetura orientada a features, com composição n
   - incluir versões citadas explicitamente em mensagens de commit;
   - commits sem versão explícita entram no bloco da próxima versão publicada.
 
+### Arquivos obrigatórios na release (GitHub)
+
+- Toda release de macOS deve anexar, no mínimo, os mesmos arquivos do padrão atual:
+  - `latest-mac.yml`
+  - `Pointer-Mac-<versão>.dmg`
+  - `Pointer-Mac-<versão>.dmg.blockmap`
+  - `Pointer-Mac-<versão>.zip`
+  - `Pointer-Mac-<versão>.zip.blockmap`
+- Publicar release sem esse conjunto completo é considerado release incompleta.
+
 ## Checklist obrigatório antes de merge
 
 - `pnpm run typecheck`
