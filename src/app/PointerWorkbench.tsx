@@ -461,9 +461,11 @@ function App(): JSX.Element {
   })
 
   const {
+    commandActions,
     groupedCommandHits,
     handleCommandInputKeyDown,
     applyCommandScopedFilter,
+    selectCommandAction,
     handleCopyTableStructureSql,
     handleCopyInsertTemplateSql,
   } = useCommandPaletteActions({
@@ -488,6 +490,8 @@ function App(): JSX.Element {
     commandColumnInputRef,
     setTableContextMenu,
     openTableTab,
+    openChangelog,
+    checkForAppUpdate,
   })
 
   const {
@@ -697,6 +701,8 @@ function App(): JSX.Element {
         commandColumnInputRef={commandColumnInputRef}
         commandValueInputRef={commandValueInputRef}
         applyCommandScopedFilter={applyCommandScopedFilter}
+        commandActions={commandActions}
+        selectCommandAction={selectCommandAction}
         groupedCommandHits={groupedCommandHits}
         commandItemRefs={commandItemRefs}
         commandIndex={commandIndex}
