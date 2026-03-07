@@ -1,7 +1,7 @@
 {
   "name": "pointer",
   "private": true,
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Desktop PostgreSQL explorer built with Electron and React",
   "author": "Roberto",
   "type": "module",

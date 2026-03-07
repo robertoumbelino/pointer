@@ -50,6 +50,7 @@ export type TableTab = {
   insertDraft: InsertDraftRow | null
   baseRows: Record<string, unknown>[] | null
   loading: boolean
+  loadError: string | null
 }
 
 export type WorkTab = SqlTab | TableTab

@@ -2,6 +2,22 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.4.5 - 2026-03-07
+
+### ✨ Novidades
+- Visualização de tabela ficou mais rápida em bases grandes: removemos a contagem total de registros na abertura da aba.
+- Limite por página agora começa em 100 registros e pode ser ajustado diretamente na interface por input numérico.
+- Novo estado de erro para tabela com ações explícitas de `Reconectar` e `Fechar aba`.
+
+### 🐛 Correções
+- Corrigido loop de toast quando a conexão cai ao abrir/restaurar uma aba de tabela.
+- Auto-retry infinito da tabela foi bloqueado após falha inicial; novas tentativas passam a ser somente manuais.
+- Mensagens genéricas de IPC foram traduzidas para erro amigável de conexão indisponível em leitura de tabela e execução SQL sem conexão.
+
+### ♻️ Melhorias
+- No estado de falha de carregamento, o cabeçalho da aba mostra `Conexão atual` com o nome da conexão e engine.
+- Mensagens de erro ficaram mais claras para orientar reconexão sem ambiguidade técnica.
+
 ## v0.4.3 - 2026-03-07
 
 ### ✨ Novidades
