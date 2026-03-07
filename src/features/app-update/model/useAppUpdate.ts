@@ -34,23 +34,23 @@ export function useAppUpdate(): UseAppUpdateResult {
   const changelogEntries = useMemo(() => parseChangelog(changelogMarkdown), [])
 
   useEffect(() => {
-    if (!appVersion) {
+    if (!appUpdateInfo?.hasUpdate) {
       return
     }
 
-    const currentVersion = normalizeVersion(appVersion)
-    if (!currentVersion) {
+    const latestVersion = normalizeVersion(appUpdateInfo.latestVersion)
+    if (!latestVersion) {
       return
     }
 
     const lastSeenVersion = readLastSeenVersion()
-    if (currentVersion === lastSeenVersion) {
+    if (latestVersion === lastSeenVersion) {
       return
     }
 
     setIsChangelogOpen(true)
-    persistLastSeenVersion(currentVersion)
-  }, [appVersion])
+    persistLastSeenVersion(latestVersion)
+  }, [appUpdateInfo])
 
   const checkForAppUpdate = useCallback(async (showToastWhenCurrent = false): Promise<void> => {
     try {

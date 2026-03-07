@@ -2,6 +2,25 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.4.3 - 2026-03-07
+
+### ✨ Novidades
+- Evolução visual do workbench para layout em cards arredondados, com separação mais clara entre sidebar, abas e painéis.
+- Painel SQL reorganizado com caixas internas para editor e resultado, mantendo o fluxo e atalhos existentes.
+- Redesign completo da tela de onboarding para um hero visual “neon” em duas colunas, com arte abstrata 100% CSS.
+- Novo bloco “Primeiro minuto no Pointer” com sequência rápida de passos e atalhos úteis.
+
+### 🐛 Correções
+- Ajuste do destaque visual no accordion do changelog para reduzir borda/foco excessivo no item selecionado.
+- Adição de espaçamento e separador entre cabeçalho da versão e conteúdo expandido no modal de changelog.
+- Changelog deixa de abrir em toda inicialização; agora abre automaticamente apenas quando há atualização nova ainda não visualizada.
+
+### ♻️ Melhorias
+- Padronização de raio/bordas entre blocos de interface para consistência visual geral.
+- Remoção de gradiente desnecessário no card de schema, mantendo destaque de cor no bloco superior.
+- Ajustes de layout do onboarding para melhor preenchimento de espaço, centralização e responsividade em janelas maiores.
+- Refinamento de bordas, recorte de cantos e transições de fundo no container principal da experiência de onboarding.
+
 ## v0.4.0 - 2026-03-07
 
 ### ✨ Novidades
