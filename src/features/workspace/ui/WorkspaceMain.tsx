@@ -88,23 +88,25 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
   } = props
 
   return (
-    <main className='flex flex-1 flex-col overflow-hidden bg-slate-950'>
+    <main className='flex min-w-0 flex-1 flex-col overflow-hidden'>
       {environments.length === 0 ? (
         <WorkspaceEmptyState onCreateEnvironment={() => setIsCreateEnvironmentOpen(true)} />
       ) : (
         <>
-          <WorkspaceTabsBar
-            workTabs={workTabs}
-            activeTabId={activeTabId}
-            setActiveTabId={setActiveTabId}
-            openRenameSqlTabDialog={openRenameSqlTabDialog}
-            closeTableTab={closeTableTab}
-            closeSqlTab={closeSqlTab}
-            activeTableTab={activeTableTab}
-            saveActiveTableChanges={saveActiveTableChanges}
-          />
+          <div className='pointer-card overflow-hidden'>
+            <WorkspaceTabsBar
+              workTabs={workTabs}
+              activeTabId={activeTabId}
+              setActiveTabId={setActiveTabId}
+              openRenameSqlTabDialog={openRenameSqlTabDialog}
+              closeTableTab={closeTableTab}
+              closeSqlTab={closeSqlTab}
+              activeTableTab={activeTableTab}
+              saveActiveTableChanges={saveActiveTableChanges}
+            />
+          </div>
 
-          <div className='flex-1 overflow-hidden p-3'>
+          <div className='mt-3 min-h-0 flex-1 overflow-hidden'>
             {activeSqlTab ? (
               <SqlWorkspacePanel
                 activeSqlTab={activeSqlTab}
@@ -138,7 +140,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 pageSize={pageSize}
               />
             ) : (
-              <div className='flex h-full items-center justify-center rounded-lg border border-dashed border-slate-800 bg-slate-900/30 text-slate-500'>
+              <div className='pointer-card-soft flex h-full items-center justify-center border-dashed text-slate-500'>
                 Aba não encontrada.
               </div>
             )}

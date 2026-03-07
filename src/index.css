@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .pointer-shell {
+    @apply rounded-2xl border border-slate-800/75 bg-slate-950 shadow-[0_16px_48px_rgba(2,6,23,0.55),inset_0_1px_0_rgba(51,65,85,0.35)];
+  }
+
+  .pointer-card {
+    @apply rounded-2xl border border-slate-800/75 bg-slate-900/45 shadow-[0_10px_32px_rgba(2,6,23,0.35),inset_0_1px_0_rgba(51,65,85,0.25)];
+  }
+
+  .pointer-card-soft {
+    @apply rounded-xl border border-slate-800/75 bg-slate-950/45 shadow-[inset_0_1px_0_rgba(51,65,85,0.2)];
+  }
+}
+
 :root {
   color-scheme: dark;
   --background: 222 47% 7%;

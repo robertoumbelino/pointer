@@ -122,12 +122,11 @@ export function EnvironmentSidebar({
   return (
     <aside
       className={cn(
-        'flex w-[292px] flex-col border-r border-slate-800/70 shadow-[inset_1px_0_0_rgba(30,41,59,0.8),inset_0_1px_0_rgba(30,41,59,0.8)]',
+        'flex w-[292px] shrink-0 flex-col gap-3 overflow-hidden',
         environments.length === 0 && 'hidden',
       )}
-      style={sidebarBackgroundStyle}
     >
-      <div className='border-b border-slate-800/70 p-3.5'>
+      <div className='pointer-card overflow-hidden p-3.5' style={sidebarBackgroundStyle}>
         <EnvironmentControls
           environments={environments}
           connectionsCount={connections.length}
@@ -181,17 +180,19 @@ export function EnvironmentSidebar({
         />
       </div>
 
-      <SchemaCatalogPanel
-        selectedSchema={selectedSchema}
-        setSelectedSchema={setSelectedSchema}
-        schemaOptions={schemaOptions}
-        shortcutLabel={shortcutLabel}
-        setIsCommandOpen={setIsCommandOpen}
-        filteredSidebarTables={filteredSidebarTables}
-        activeTabId={activeTabId}
-        setTableContextMenu={setTableContextMenu}
-        openTableTab={openTableTab}
-      />
+      <div className='pointer-card flex min-h-0 flex-1 flex-col overflow-hidden'>
+        <SchemaCatalogPanel
+          selectedSchema={selectedSchema}
+          setSelectedSchema={setSelectedSchema}
+          schemaOptions={schemaOptions}
+          shortcutLabel={shortcutLabel}
+          setIsCommandOpen={setIsCommandOpen}
+          filteredSidebarTables={filteredSidebarTables}
+          activeTabId={activeTabId}
+          setTableContextMenu={setTableContextMenu}
+          openTableTab={openTableTab}
+        />
+      </div>
     </aside>
   )
 }
