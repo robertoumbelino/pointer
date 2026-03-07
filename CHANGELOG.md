@@ -2,7 +2,7 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
-## v0.4.0 (Em preparação)
+## v0.4.0 - 2026-03-07
 
 ### ✨ Novidades
 - Execução de SQL por atalho `F5`, acelerando o fluxo de trabalho em abas SQL.
