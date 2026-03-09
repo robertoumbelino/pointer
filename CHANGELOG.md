@@ -2,6 +2,22 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.4.9 - 2026-03-09
+
+### ✨ Novidades
+- Exportação de resultados SQL direto pela aba de execução, com opção de baixar CSV do conjunto visível.
+
+### 🐛 Correções
+- Corrigido o scroll vertical por wheel/trackpad no editor SQL (CodeMirror), mantendo o scroll do resultado independente.
+- Ajustada a cadeia de layout do workspace para evitar clipping/estouro de painel em cenários de redimensionamento.
+- Refinado o alinhamento visual da barra superior no macOS, com centralização mais consistente das traffic lights.
+
+### ♻️ Melhorias
+- Ajustes de janela no macOS para equilibrar área de arraste da titlebar com a top bar do app.
+
+### 📚 Documentação
+- Documentado no release process o conjunto obrigatório de arquivos da release macOS (`latest-mac.yml`, `dmg/zip` e respectivos `blockmap`).
+
 ## v0.4.5 - 2026-03-07
 
 ### ✨ Novidades
