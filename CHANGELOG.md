@@ -2,6 +2,21 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.7.0 - 2026-03-09
+
+### ✨ Novidades
+- Nova navegação entre Workspace e Home: agora é possível sair do ambiente atual e voltar para a tela inicial sem perder o estado do workspace por ambiente.
+- A Home passou a listar os ambientes já configurados com ação direta de entrada, facilitando o acesso rápido entre contextos.
+- Command Palette (`Cmd+K`) ganhou a ação **Sair para Home**, permitindo navegar sem depender apenas dos controles da sidebar.
+- Ações de ambiente foram simplificadas na sidebar com menu de overflow (editar, excluir e sair), reduzindo ruído visual na barra de controles.
+
+### ♻️ Melhorias
+- O fluxo de atalhos foi refinado para contexto de Home vs Workspace, mantendo `Cmd+R` disponível para troca de ambiente e evitando ações invisíveis fora do workspace.
+- O diálogo de criação de ambiente foi extraído para componente reutilizável, garantindo consistência entre Home e sidebar.
+
+### 📚 Documentação
+- Atualizada a seção de skills locais no `AGENTS.md` com referência ao fluxo de commit e ao gerenciador de release.
+
 ## v0.6.0 - 2026-03-09
 
 ### ✨ Novidades
