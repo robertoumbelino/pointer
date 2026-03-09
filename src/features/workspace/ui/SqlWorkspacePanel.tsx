@@ -1,10 +1,11 @@
 import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { ChevronDown, Download, Play } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Play, X } from 'lucide-react'
 import type { ConnectionSummary } from '../../../../shared/db-types'
 import type { SqlTab } from '../../../entities/workspace/types'
 import { Button } from '../../../components/ui/button'
+import { ButtonGroup } from '../../../components/ui/button-group'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 
 type SqlWorkspacePanelProps = {
@@ -12,6 +13,7 @@ type SqlWorkspacePanelProps = {
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
   connections: ConnectionSummary[]
   runSql: () => Promise<void>
+  cancelSqlExecution: () => Promise<void>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlEditorExtensions: unknown[]
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
@@ -73,6 +75,7 @@ export function SqlWorkspacePanel({
   updateSqlTab,
   connections,
   runSql,
+  cancelSqlExecution,
   sqlSplitContainerRef,
   sqlEditorExtensions,
   sqlCursorByTabRef,
@@ -109,14 +112,34 @@ export function SqlWorkspacePanel({
               </option>
             ))}
           </select>
-          <Button
-            size='sm'
-            className='h-8 text-[13px]'
-            onClick={() => void runSql()}
-            disabled={activeSqlTab.sqlRunning || !activeSqlTab.connectionId}
-          >
-            <Play className='mr-1.5 h-3.5 w-3.5' /> {activeSqlTab.sqlRunning ? 'Executando...' : 'Executar'}
-          </Button>
+          <ButtonGroup>
+            <Button
+              size='sm'
+              className='h-8 text-[13px]'
+              onClick={() => void runSql()}
+              disabled={activeSqlTab.sqlRunning || !activeSqlTab.connectionId}
+            >
+              <Play className='mr-1.5 h-3.5 w-3.5' />{' '}
+              {activeSqlTab.sqlRunning ? (activeSqlTab.sqlCanceling ? 'Cancelando...' : 'Executando...') : 'Executar'}
+            </Button>
+            {activeSqlTab.sqlRunning && (
+              <Button
+                variant='outline'
+                size='icon'
+                className='h-8 w-8'
+                onClick={() => void cancelSqlExecution()}
+                disabled={activeSqlTab.sqlCanceling}
+                aria-label='Cancelar execução SQL'
+                title='Cancelar execução SQL'
+              >
+                {activeSqlTab.sqlCanceling ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  <X className='h-3.5 w-3.5' />
+                )}
+              </Button>
+            )}
+          </ButtonGroup>
         </div>
       </div>
 

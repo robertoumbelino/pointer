@@ -34,6 +34,7 @@ type WorkspaceMainProps = {
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
   connections: ConnectionSummary[]
   runSql: () => Promise<void>
+  cancelSqlExecution: () => Promise<void>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlEditorExtensions: unknown[]
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
@@ -81,6 +82,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     updateSqlTab,
     connections,
     runSql,
+    cancelSqlExecution,
     sqlSplitContainerRef,
     sqlEditorExtensions,
     sqlCursorByTabRef,
@@ -130,6 +132,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 updateSqlTab={updateSqlTab}
                 connections={connections}
                 runSql={runSql}
+                cancelSqlExecution={cancelSqlExecution}
                 sqlSplitContainerRef={sqlSplitContainerRef}
                 sqlEditorExtensions={sqlEditorExtensions}
                 sqlCursorByTabRef={sqlCursorByTabRef}

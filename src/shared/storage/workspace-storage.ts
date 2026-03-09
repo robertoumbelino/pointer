@@ -105,6 +105,7 @@ function deserializeEnvironmentWorkspaceSnapshot(
             sqlText: tab.sqlText,
             sqlResult: null,
             sqlRunning: false,
+            sqlCanceling: false,
             splitRatio: typeof tab.splitRatio === 'number' ? tab.splitRatio : 56,
           } as SqlTab
         }

@@ -157,6 +157,7 @@ function App(): JSX.Element {
     sqlTabCounterRef,
     sqlSplitContainerRef,
     sqlCursorByTabRef,
+    sqlExecutionByTabRef,
     environmentWorkspaceRef,
     previousEnvironmentIdRef,
     preferredEnvironmentIdRef,
@@ -434,6 +435,7 @@ function App(): JSX.Element {
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
     runSql,
+    cancelSqlExecution,
   } = useWorkspaceActions({
     activeTabId,
     setActiveTabId,
@@ -454,6 +456,7 @@ function App(): JSX.Element {
     setPendingSqlExecution,
     sqlTabCounterRef,
     sqlSplitContainerRef,
+    sqlExecutionByTabRef,
     workTabsRef,
     getTableTab,
     getSqlTab: (tabId) => {
@@ -625,6 +628,7 @@ function App(): JSX.Element {
           updateSqlTab={updateSqlTab}
           connections={connections}
           runSql={() => runSql()}
+          cancelSqlExecution={() => cancelSqlExecution()}
           sqlSplitContainerRef={sqlSplitContainerRef}
           sqlEditorExtensions={sqlEditorExtensions}
           sqlCursorByTabRef={sqlCursorByTabRef}

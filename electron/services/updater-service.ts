@@ -7,34 +7,28 @@ import type { AppUpdateInfo, AppUpdateInstallResult } from '../../shared/db-type
 
 const RELEASE_OWNER = 'robertoumbelino'
 const RELEASE_REPO = 'pointer'
-const RELEASE_API_URL = `https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest`
+const LATEST_RELEASE_URL = `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest`
+const LATEST_MAC_YML_URL = `${LATEST_RELEASE_URL}/download/latest-mac.yml`
 
-type GitHubReleaseAsset = {
-  name: string
-  browser_download_url: string
-}
-
-type GitHubLatestRelease = {
-  tag_name: string
-  html_url: string
-  published_at: string | null
-  body: string | null
-  assets: GitHubReleaseAsset[]
+type LatestMacManifest = {
+  version: string
+  path: string
+  releaseDate: string | null
 }
 
 export class UpdaterService {
   async checkForAppUpdate(): Promise<AppUpdateInfo> {
     const currentVersion = normalizeVersion(app.getVersion())
-    const release = await fetchLatestRelease()
-    const latestVersion = normalizeVersion(release.tag_name)
+    const manifest = await fetchLatestMacManifest()
+    const latestVersion = normalizeVersion(manifest.version)
 
     return {
       currentVersion,
       latestVersion,
       hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
-      releaseUrl: release.html_url ?? null,
-      publishedAt: release.published_at ?? null,
-      notes: release.body ?? null,
+      releaseUrl: LATEST_RELEASE_URL,
+      publishedAt: manifest.releaseDate ?? null,
+      notes: null,
     }
   }
 
@@ -44,8 +38,8 @@ export class UpdaterService {
     }
 
     const currentVersion = normalizeVersion(app.getVersion())
-    const release = await fetchLatestRelease()
-    const latestVersion = normalizeVersion(release.tag_name)
+    const manifest = await fetchLatestMacManifest()
+    const latestVersion = normalizeVersion(manifest.version)
 
     if (compareVersions(latestVersion, currentVersion) <= 0) {
       return {
@@ -54,14 +48,15 @@ export class UpdaterService {
       }
     }
 
-    const zipAsset = release.assets.find((asset) => asset.name.endsWith('.zip') && !asset.name.endsWith('.zip.blockmap'))
-    if (!zipAsset) {
+    const zipAssetPath = manifest.path.trim()
+    if (!zipAssetPath || !zipAssetPath.endsWith('.zip')) {
       throw new Error('Release sem arquivo .zip para atualização automática.')
     }
 
     const workspace = await mkdtemp(path.join(tmpdir(), 'pointer-update-'))
-    const zipPath = path.join(workspace, zipAsset.name)
-    await downloadFile(zipAsset.browser_download_url, zipPath)
+    const zipFilename = path.basename(zipAssetPath)
+    const zipPath = path.join(workspace, zipFilename)
+    await downloadFile(buildLatestReleaseAssetUrl(zipAssetPath), zipPath)
 
     const bundlePath = resolveBundlePathFromExecutable(app.getPath('exe'))
     const scriptPath = path.join(workspace, 'apply-update.sh')
@@ -92,19 +87,37 @@ export class UpdaterService {
   }
 }
 
-async function fetchLatestRelease(): Promise<GitHubLatestRelease> {
-  const response = await fetch(RELEASE_API_URL, {
+async function fetchLatestMacManifest(): Promise<LatestMacManifest> {
+  const response = await fetch(LATEST_MAC_YML_URL, {
     headers: {
-      Accept: 'application/vnd.github+json',
       'User-Agent': 'pointer-updater',
+      Accept: 'text/yaml, text/plain;q=0.9, */*;q=0.8',
     },
+    redirect: 'follow',
   })
 
   if (!response.ok) {
-    throw new Error(`Falha ao consultar release no GitHub (${response.status}).`)
+    throw new Error(`Falha ao consultar latest-mac.yml (${response.status}).`)
   }
 
-  return (await response.json()) as GitHubLatestRelease
+  const raw = await response.text()
+  const version = readYamlScalar(raw, 'version')
+  const zipPath = readYamlScalar(raw, 'path')
+  const releaseDate = readYamlScalar(raw, 'releaseDate')
+
+  if (!version) {
+    throw new Error('latest-mac.yml inválido: campo version ausente.')
+  }
+
+  if (!zipPath) {
+    throw new Error('latest-mac.yml inválido: campo path ausente.')
+  }
+
+  return {
+    version,
+    path: zipPath,
+    releaseDate: releaseDate || null,
+  }
 }
 
 async function downloadFile(url: string, destinationPath: string): Promise<void> {
@@ -120,6 +133,31 @@ async function downloadFile(url: string, destinationPath: string): Promise<void>
 
   const content = Buffer.from(await response.arrayBuffer())
   await writeFile(destinationPath, content)
+}
+
+function buildLatestReleaseAssetUrl(assetPath: string): string {
+  return `${LATEST_RELEASE_URL}/download/${assetPath
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')}`
+}
+
+function readYamlScalar(yamlText: string, key: string): string {
+  const pattern = new RegExp(`^${escapeRegExp(key)}:\\s*(.+)$`, 'm')
+  const match = yamlText.match(pattern)
+  if (!match) {
+    return ''
+  }
+
+  const rawValue = match[1].trim()
+  if (
+    (rawValue.startsWith("'") && rawValue.endsWith("'")) ||
+    (rawValue.startsWith('"') && rawValue.endsWith('"'))
+  ) {
+    return rawValue.slice(1, -1)
+  }
+
+  return rawValue
 }
 
 function normalizeVersion(version: string): string {
@@ -207,4 +245,8 @@ open "$APP_PATH"
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

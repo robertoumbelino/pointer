@@ -120,6 +120,8 @@ export interface SqlExecutionResult {
   resultSets: SqlResultSet[]
 }
 
+export const SQL_EXECUTION_CANCELED_MESSAGE = 'Execução cancelada pelo usuário.'
+
 export interface AppUpdateInfo {
   currentVersion: string
   latestVersion: string
@@ -164,6 +166,8 @@ export interface PointerApi {
 
   previewSqlRisk: (sql: string) => Promise<SqlPreviewRiskResult>
   executeSql: (connectionId: string, sql: string) => Promise<SqlExecutionResult>
+  executeSqlWithExecutionId: (connectionId: string, sql: string, executionId: string) => Promise<SqlExecutionResult>
+  cancelSqlExecution: (executionId: string) => Promise<void>
 
   checkForAppUpdate: () => Promise<AppUpdateInfo>
   installLatestUpdate: () => Promise<AppUpdateInstallResult>

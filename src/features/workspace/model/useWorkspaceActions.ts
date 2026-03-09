@@ -8,6 +8,7 @@ import type {
   TableFilter,
   TableSearchHit,
 } from '../../../../shared/db-types'
+import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../../../shared/db-types'
 import { pointerApi } from '../../../shared/api/pointer-api'
 import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
 import { buildCsvContent } from '../../../shared/lib/csv'
@@ -45,6 +46,7 @@ type UseWorkspaceActionsParams = {
   setPendingSqlExecution: Dispatch<SetStateAction<{ tabId: string; sql: string } | null>>
   sqlTabCounterRef: MutableRefObject<number>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
+  sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
   workTabsRef: MutableRefObject<WorkTab[]>
   getTableTab: (tabId: string) => TableTab | null
   getSqlTab: (tabId: string) => SqlTab | null
@@ -80,6 +82,7 @@ type UseWorkspaceActionsResult = {
   exportTableCurrentPageCsv: (tabId: string) => void
   exportTableAllPagesCsv: (tabId: string) => Promise<void>
   runSql: (force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>
+  cancelSqlExecution: (targetTabId?: string) => Promise<void>
 }
 
 function normalizeRequestedPageSize(value: number | undefined): number {
@@ -111,6 +114,20 @@ function buildTimestamp(): string {
 
   return `${year}${month}${day}-${hours}${minutes}${seconds}`
 }
+
+function buildSqlExecutionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `sql-exec-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function isSqlExecutionCanceledError(error: unknown): boolean {
+  return getErrorMessage(error) === SQL_EXECUTION_CANCELED_MESSAGE
+}
+
+const CANCEL_UNLOCK_TIMEOUT_MS = 6_000
 
 function triggerCsvDownload(filename: string, csvContent: string): void {
   const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8' })
@@ -168,6 +185,7 @@ export function useWorkspaceActions({
   setPendingSqlExecution,
   sqlTabCounterRef,
   sqlSplitContainerRef,
+  sqlExecutionByTabRef,
   workTabsRef,
   getTableTab,
   getSqlTab,
@@ -177,6 +195,17 @@ export function useWorkspaceActions({
 }: UseWorkspaceActionsParams): UseWorkspaceActionsResult {
   const [isSavingTableChanges, setIsSavingTableChanges] = useState(false)
   const isSavingTableChangesRef = useRef(false)
+  const sqlCancelRequestByTabRef = useRef<Record<string, string>>({})
+  const sqlCancelUnlockTimerByTabRef = useRef<Record<string, number>>({})
+
+  const clearSqlCancelFallback = useCallback((tabId: string): void => {
+    const timeoutId = sqlCancelUnlockTimerByTabRef.current[tabId]
+    if (typeof timeoutId === 'number') {
+      window.clearTimeout(timeoutId)
+      delete sqlCancelUnlockTimerByTabRef.current[tabId]
+    }
+    delete sqlCancelRequestByTabRef.current[tabId]
+  }, [])
 
   const initializeTableTab = useCallback(
     async (tabId: string, hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> => {
@@ -459,11 +488,69 @@ export function useWorkspaceActions({
     setEditingCell((current) => (current?.tabId === tabId ? null : current))
   }
 
+  async function cancelSqlExecution(targetTabId?: string): Promise<void> {
+    const tabId = targetTabId ?? activeTabId
+    const sqlTab = getSqlTab(tabId)
+    if (!sqlTab?.sqlRunning) {
+      console.info('[ui][sql-cancel] ignored because tab is not running', { tabId })
+      return
+    }
+
+    const executionId = sqlExecutionByTabRef.current[tabId]
+    if (!executionId) {
+      console.info('[ui][sql-cancel] missing execution id, forcing stop flag', { tabId })
+      clearSqlCancelFallback(tabId)
+      updateSqlTab(tabId, (tab) => ({ ...tab, sqlRunning: false, sqlCanceling: false }))
+      return
+    }
+
+    if (sqlCancelRequestByTabRef.current[tabId] === executionId) {
+      console.info('[ui][sql-cancel] duplicate click ignored', { tabId, executionId })
+      return
+    }
+
+    sqlCancelRequestByTabRef.current[tabId] = executionId
+    updateSqlTab(tabId, (tab) => ({ ...tab, sqlCanceling: true }))
+    const existingTimeoutId = sqlCancelUnlockTimerByTabRef.current[tabId]
+    if (typeof existingTimeoutId === 'number') {
+      window.clearTimeout(existingTimeoutId)
+    }
+    sqlCancelUnlockTimerByTabRef.current[tabId] = window.setTimeout(() => {
+      const latestExecutionId = sqlExecutionByTabRef.current[tabId]
+      const latestTab = getSqlTab(tabId)
+      if (!latestTab?.sqlRunning || latestExecutionId !== executionId) {
+        clearSqlCancelFallback(tabId)
+        return
+      }
+
+      console.info('[ui][sql-cancel] timeout unlock fallback', { tabId, executionId })
+      delete sqlExecutionByTabRef.current[tabId]
+      clearSqlCancelFallback(tabId)
+      updateSqlTab(tabId, (tab) => ({ ...tab, sqlRunning: false, sqlCanceling: false }))
+      toast.info('Cancelamento demorou para responder. A aba foi destravada.')
+    }, CANCEL_UNLOCK_TIMEOUT_MS)
+
+    try {
+      console.info('[ui][sql-cancel] sending cancel', { tabId, executionId })
+      await pointerApi.cancelSqlExecution(executionId)
+      console.info('[ui][sql-cancel] cancel request resolved', { tabId, executionId })
+    } catch (error) {
+      clearSqlCancelFallback(tabId)
+      updateSqlTab(tabId, (tab) => ({ ...tab, sqlCanceling: false }))
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   function closeSqlTab(tabId: string): void {
     const sqlTabs = workTabsRef.current.filter((tab): tab is SqlTab => tab.type === 'sql')
     if (sqlTabs.length <= 1) {
       return
     }
+
+    if (getSqlTab(tabId)?.sqlRunning) {
+      void cancelSqlExecution(tabId)
+    }
+    delete sqlExecutionByTabRef.current[tabId]
 
     setWorkTabs((current) => current.filter((tab) => tab.id !== tabId))
 
@@ -492,6 +579,12 @@ export function useWorkspaceActions({
     }
 
     const fallbackTab = nextTabs[activeIndex] ?? nextTabs[activeIndex - 1] ?? nextTabs[0]
+
+    const activeSqlTab = getSqlTab(activeId)
+    if (activeSqlTab?.sqlRunning) {
+      void cancelSqlExecution(activeSqlTab.id)
+    }
+    delete sqlExecutionByTabRef.current[activeId]
 
     setWorkTabs(nextTabs)
     setActiveTabId(fallbackTab.id)
@@ -927,10 +1020,16 @@ export function useWorkspaceActions({
       return
     }
 
+    if (sqlTab.sqlRunning) {
+      return
+    }
+
     if (!sqlTab.connectionId) {
       toast.error('Selecione uma conexão para esta aba SQL.')
       return
     }
+
+    const executionId = buildSqlExecutionId()
 
     try {
       const scopedSql =
@@ -958,12 +1057,19 @@ export function useWorkspaceActions({
         }
       }
 
-      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: true }))
+      sqlExecutionByTabRef.current[sqlTab.id] = executionId
+      clearSqlCancelFallback(sqlTab.id)
+      console.info('[ui][sql] execute start', { tabId: sqlTab.id, executionId, connectionId: sqlTab.connectionId })
+      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: true, sqlCanceling: false }))
       let result: SqlExecutionResult
 
       try {
-        result = await pointerApi.executeSql(sqlTab.connectionId, sqlToExecute)
+        result = await pointerApi.executeSqlWithExecutionId(sqlTab.connectionId, sqlToExecute, executionId)
       } catch (executionError) {
+        if (isSqlExecutionCanceledError(executionError)) {
+          throw executionError
+        }
+
         const fallbackSql = await buildClickHouseUnknownTableFallbackSql(
           connections,
           sqlTab.connectionId,
@@ -975,24 +1081,38 @@ export function useWorkspaceActions({
           throw executionError
         }
 
-        result = await pointerApi.executeSql(sqlTab.connectionId, fallbackSql)
+        result = await pointerApi.executeSqlWithExecutionId(sqlTab.connectionId, fallbackSql, executionId)
         toast.info('Tabela qualificada automaticamente com schema para ClickHouse.')
       }
 
-      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlResult: result }))
-      setSqlConfirmOpen(false)
-      setSqlConfirmText('')
-      setPendingSqlExecution(null)
-      toast.success(`Query executada em ${result.durationMs}ms`)
+      if (sqlExecutionByTabRef.current[sqlTab.id] === executionId) {
+        updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlResult: result }))
+        setSqlConfirmOpen(false)
+        setSqlConfirmText('')
+        setPendingSqlExecution(null)
+        toast.success(`Query executada em ${result.durationMs}ms`)
 
-      const currentTableTab = getTableTab(activeTabId)
-      if (currentTableTab) {
-        await reloadTableTab(currentTableTab.id)
+        const currentTableTab = getTableTab(activeTabId)
+        if (currentTableTab) {
+          await reloadTableTab(currentTableTab.id)
+        }
+      } else {
+        console.info('[ui][sql] stale result ignored', { tabId: sqlTab.id, executionId })
       }
     } catch (error) {
-      toast.error(getErrorMessage(error))
+      if (isSqlExecutionCanceledError(error)) {
+        toast.info('Execução cancelada.')
+      } else {
+        toast.error(getErrorMessage(error))
+      }
     } finally {
-      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: false }))
+      clearSqlCancelFallback(sqlTab.id)
+      if (sqlExecutionByTabRef.current[sqlTab.id] === executionId) {
+        delete sqlExecutionByTabRef.current[sqlTab.id]
+      }
+
+      console.info('[ui][sql] execute finalize', { tabId: sqlTab.id, executionId })
+      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: false, sqlCanceling: false }))
     }
   }
 
@@ -1018,5 +1138,6 @@ export function useWorkspaceActions({
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
     runSql,
+    cancelSqlExecution,
   }
 }

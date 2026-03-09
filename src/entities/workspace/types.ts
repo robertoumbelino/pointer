@@ -22,6 +22,7 @@ export type SqlTab = {
   sqlText: string
   sqlResult: SqlExecutionResult | null
   sqlRunning: boolean
+  sqlCanceling: boolean
   splitRatio: number
 }
 
@@ -133,6 +134,7 @@ export function createSqlTab(id: string, title: string, connectionId = ''): SqlT
     sqlText: DEFAULT_SQL,
     sqlResult: null,
     sqlRunning: false,
+    sqlCanceling: false,
     splitRatio: 56,
   }
 }

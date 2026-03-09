@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
+import { Worker } from 'node:worker_threads'
 import { createClient, type ClickHouseClient } from '@clickhouse/client'
 import BetterSqlite3 from 'better-sqlite3'
 import Store from 'electron-store'
 import keytar from 'keytar'
-import { Pool, type QueryResult } from 'pg'
+import { Client as PgClient, Pool, type PoolClient, type QueryResult } from 'pg'
+import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../shared/db-types'
 import type {
   ColumnDef,
   ColumnForeignKeyRef,
@@ -34,6 +36,78 @@ const ENVIRONMENTS_KEY = 'environments'
 const CONNECTIONS_KEY = 'connections'
 const CREDENTIAL_SERVICE = 'pointer-db-explorer'
 const DEFAULT_ENVIRONMENT_COLOR = '#0EA5E9'
+const CLICKHOUSE_READ_KEYWORDS = new Set(['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'WITH'])
+const SQLITE_WORKER_FAILURE_MESSAGE = 'Falha ao executar query no SQLite.'
+
+const SQLITE_SQL_EXECUTION_WORKER_SOURCE = `
+const { parentPort, workerData } = require('node:worker_threads')
+const Database = require('better-sqlite3')
+
+const sqliteReadKeywords = new Set(['SELECT', 'PRAGMA', 'WITH', 'EXPLAIN'])
+
+function firstSqlKeyword(statement) {
+  return statement
+    .replace(/\\/\\*[\\s\\S]*?\\*\\//g, ' ')
+    .replace(/--.*$/gm, ' ')
+    .trim()
+    .split(/\\s+/)[0]
+    ?.toUpperCase()
+}
+
+let db = null
+
+try {
+  const filePath = workerData && typeof workerData.filePath === 'string' ? workerData.filePath : ''
+  const statements = Array.isArray(workerData?.statements) ? workerData.statements : []
+  db = new Database(filePath, { fileMustExist: true })
+
+  const resultSets = []
+  for (const statement of statements) {
+    const keyword = firstSqlKeyword(statement)
+
+    if (sqliteReadKeywords.has(keyword)) {
+      const rows = db.prepare(statement).all()
+      const fields = rows.length > 0 ? Object.keys(rows[0]) : []
+      resultSets.push({
+        command: keyword || 'SELECT',
+        rowCount: rows.length,
+        fields,
+        rows,
+      })
+      continue
+    }
+
+    const result = db.prepare(statement).run()
+    resultSets.push({
+      command: keyword || 'COMMAND',
+      rowCount: result.changes,
+      fields: [],
+      rows: [],
+    })
+  }
+
+  parentPort?.postMessage({ type: 'success', resultSets })
+} catch (error) {
+  const message = error instanceof Error ? error.message : 'Erro inesperado.'
+  parentPort?.postMessage({ type: 'error', message })
+} finally {
+  if (db) {
+    try {
+      db.close()
+    } catch {}
+  }
+}
+`
+
+type SqlExecutionController = {
+  isCanceled: boolean
+  cancel: () => Promise<void>
+}
+
+type SqliteWorkerExecution = {
+  result: Promise<SqlResultSet[]>
+  terminate: () => Promise<void>
+}
 
 export class DbService {
   private readonly store = new Store<PointerStoreShape>({
@@ -47,6 +121,8 @@ export class DbService {
   private readonly pgPools = new Map<string, Pool>()
   private readonly clickhouseClients = new Map<string, ClickHouseClient>()
   private readonly sqliteClients = new Map<string, BetterSqlite3.Database>()
+  private readonly activeSqlExecutions = new Map<string, SqlExecutionController>()
+  private readonly pendingSqlExecutionCancels = new Set<string>()
 
   constructor() {
     this.migrateLegacyStore()
@@ -536,7 +612,16 @@ export class DbService {
   }
 
   async executeSql(connectionId: string, sql: string): Promise<SqlExecutionResult> {
+    return this.executeSqlWithExecutionId(connectionId, sql, randomUUID())
+  }
+
+  async executeSqlWithExecutionId(connectionId: string, sql: string, executionId: string): Promise<SqlExecutionResult> {
     const connection = this.getConnectionOrThrow(connectionId)
+    const normalizedExecutionId = executionId.trim()
+    if (!normalizedExecutionId) {
+      throw new Error('Identificador de execução inválido.')
+    }
+
     const statements = splitStatements(sql)
 
     if (statements.length === 0) {
@@ -548,40 +633,69 @@ export class DbService {
 
     const startedAt = performance.now()
     const resultSets: SqlResultSet[] = []
+    console.info('[sql-exec] start', {
+      executionId: normalizedExecutionId,
+      connectionId,
+      engine: connection.engine,
+      statements: statements.length,
+    })
 
     if (connection.engine === 'postgres') {
-      const pool = await this.getPostgresPool(connection)
-
-      for (const statement of statements) {
-        const result = await pool.query(statement)
-        resultSets.push({
-          command: result.command,
-          rowCount: result.rowCount ?? 0,
-          fields: result.fields.map((field) => field.name),
-          rows: result.rows,
-        })
-      }
+      await this.executePostgresSql(statements, connection, normalizedExecutionId, resultSets)
     } else if (connection.engine === 'clickhouse') {
-      const client = await this.getClickHouseClient(connection)
-
-      for (const statement of statements) {
-        resultSets.push(await this.executeClickHouseStatement(client, statement))
-      }
+      await this.executeClickHouseSql(statements, connection, normalizedExecutionId, resultSets)
     } else {
-      const db = await this.getSqliteDb(connection)
-
-      for (const statement of statements) {
-        resultSets.push(this.executeSqliteStatement(db, statement))
-      }
+      await this.executeSqliteSql(statements, connection, normalizedExecutionId, resultSets)
     }
 
-    return {
+    const finalResult = {
       durationMs: Math.round(performance.now() - startedAt),
       resultSets,
+    }
+    console.info('[sql-exec] done', {
+      executionId: normalizedExecutionId,
+      connectionId,
+      durationMs: finalResult.durationMs,
+      resultSets: finalResult.resultSets.length,
+    })
+    return finalResult
+  }
+
+  async cancelSqlExecution(executionId: string): Promise<void> {
+    const normalizedExecutionId = executionId.trim()
+    if (!normalizedExecutionId) {
+      console.info('[sql-cancel] ignored empty execution id')
+      return
+    }
+
+    const controller = this.activeSqlExecutions.get(normalizedExecutionId)
+    if (!controller) {
+      this.pendingSqlExecutionCancels.add(normalizedExecutionId)
+      console.info('[sql-cancel] queued before registration', { executionId: normalizedExecutionId })
+      return
+    }
+
+    console.info('[sql-cancel] cancel requested', { executionId: normalizedExecutionId })
+    try {
+      await controller.cancel()
+      console.info('[sql-cancel] cancel callback completed', { executionId: normalizedExecutionId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro inesperado no cancelamento.'
+      console.warn('[sql-cancel] cancel callback failed', { executionId: normalizedExecutionId, message })
     }
   }
 
   async close(): Promise<void> {
+    const activeExecutionControllers = Array.from(this.activeSqlExecutions.values())
+    for (const controller of activeExecutionControllers) {
+      try {
+        await controller.cancel()
+      } catch {
+        // Ignora falhas de cancelamento durante shutdown.
+      }
+    }
+    this.activeSqlExecutions.clear()
+
     for (const pool of this.pgPools.values()) {
       await pool.end()
     }
@@ -597,6 +711,431 @@ export class DbService {
     this.pgPools.clear()
     this.clickhouseClients.clear()
     this.sqliteClients.clear()
+  }
+
+  private registerSqlExecution(executionId: string, cancel: () => Promise<void> | void): SqlExecutionController {
+    if (this.activeSqlExecutions.has(executionId)) {
+      throw new Error('Já existe uma execução em andamento para este identificador.')
+    }
+
+    const controller: SqlExecutionController = {
+      isCanceled: false,
+      cancel: async () => {
+        if (controller.isCanceled) {
+          return
+        }
+
+        controller.isCanceled = true
+        await cancel()
+      },
+    }
+
+    this.activeSqlExecutions.set(executionId, controller)
+    console.info('[sql-exec] registered', { executionId, active: this.activeSqlExecutions.size })
+    if (this.pendingSqlExecutionCancels.delete(executionId)) {
+      console.info('[sql-cancel] draining queued cancel after registration', { executionId })
+      void controller.cancel().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Erro inesperado no cancelamento pendente.'
+        console.warn('[sql-cancel] queued cancel failed', { executionId, message })
+      })
+    }
+    return controller
+  }
+
+  private clearSqlExecution(executionId: string): void {
+    this.activeSqlExecutions.delete(executionId)
+    this.pendingSqlExecutionCancels.delete(executionId)
+    console.info('[sql-exec] cleared', { executionId, active: this.activeSqlExecutions.size })
+  }
+
+  private async executePostgresSql(
+    statements: string[],
+    connection: ConnectionSummary,
+    executionId: string,
+    resultSets: SqlResultSet[],
+  ): Promise<void> {
+    const pool = await this.getPostgresPool(connection)
+    const password = await this.getConnectionPassword(connection.id)
+    const client = await pool.connect()
+    let controller: SqlExecutionController | null = null
+    const pgClient = client as unknown as {
+      on: (event: string, listener: (error: Error) => void) => void
+      removeListener: (event: string, listener: (error: Error) => void) => void
+      connection?: { stream?: { destroyed?: boolean; destroy: () => void } }
+    }
+    const handlePgClientError = (error: Error): void => {
+      if (controller?.isCanceled) {
+        console.info('[sql-cancel][pg] swallowed client error after cancel', {
+          executionId,
+          message: error.message,
+        })
+        return
+      }
+
+      console.warn('[sql-exec][pg] client emitted error', {
+        executionId,
+        message: error.message,
+      })
+    }
+    pgClient.on('error', handlePgClientError)
+
+    let backendPid: number | null = null
+    let statementInFlight = false
+
+    const pidResult = await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+    backendPid = Number(pidResult.rows[0]?.pid ?? 0) || null
+    console.info('[sql-cancel][pg] execution attached', { executionId, backendPid, connectionId: connection.id })
+
+    controller = this.registerSqlExecution(executionId, async () => {
+      if (!backendPid) {
+        console.info('[sql-cancel][pg] missing backend pid', { executionId })
+        return
+      }
+
+      console.info('[sql-cancel][pg] cancel callback start', {
+        executionId,
+        backendPid,
+        statementInFlight,
+      })
+      try {
+        const cancelPacketSent = await this.cancelPostgresByProtocol(client, connection)
+        console.info('[sql-cancel][pg] protocol cancel packet', { executionId, cancelPacketSent })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha ao enviar pacote de cancelamento.'
+        console.warn('[sql-cancel][pg] protocol cancel failed', { executionId, message })
+      }
+
+      let canceledByBackend = false
+      try {
+        canceledByBackend = await this.cancelPostgresBackend(connection, password, backendPid)
+        console.info('[sql-cancel][pg] pg_cancel_backend result', { executionId, canceledByBackend })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha ao executar pg_cancel_backend.'
+        console.warn('[sql-cancel][pg] pg_cancel_backend failed', { executionId, message })
+      }
+
+      if (!canceledByBackend) {
+        try {
+          const terminatedByBackend = await this.terminatePostgresBackend(connection, password, backendPid)
+          console.info('[sql-cancel][pg] pg_terminate_backend result', { executionId, terminatedByBackend })
+          if (terminatedByBackend) {
+            return
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Falha ao executar pg_terminate_backend.'
+          console.warn('[sql-cancel][pg] pg_terminate_backend failed', { executionId, message })
+        }
+      }
+
+      try {
+        const stream = pgClient.connection?.stream
+        if (stream && !stream.destroyed) {
+          stream.destroy()
+          console.info('[sql-cancel][pg] fallback stream destroy', { executionId })
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha ao destruir socket do cliente.'
+        console.warn('[sql-cancel][pg] stream destroy failed', { executionId, message })
+      }
+    })
+
+    try {
+      for (const statement of statements) {
+        if (controller.isCanceled) {
+          console.info('[sql-cancel][pg] canceled before statement execution', { executionId })
+          throw createSqlExecutionCanceledError()
+        }
+
+        statementInFlight = true
+        if (controller.isCanceled) {
+          statementInFlight = false
+          console.info('[sql-cancel][pg] canceled right before query dispatch', { executionId })
+          throw createSqlExecutionCanceledError()
+        }
+
+        const result = await client.query(statement)
+        statementInFlight = false
+        resultSets.push({
+          command: result.command,
+          rowCount: result.rowCount ?? 0,
+          fields: result.fields.map((field) => field.name),
+          rows: result.rows,
+        })
+      }
+    } catch (error) {
+      if (isPostgresCancellationError(error, controller.isCanceled)) {
+        throw createSqlExecutionCanceledError()
+      }
+
+      throw error
+    } finally {
+      statementInFlight = false
+      this.clearSqlExecution(executionId)
+      client.release(controller.isCanceled ? true : undefined)
+    }
+  }
+
+  private async cancelPostgresByProtocol(client: PoolClient, connection: ConnectionSummary): Promise<boolean> {
+    const targetClient = client as unknown as {
+      processID?: number | null
+      secretKey?: number | null
+    }
+
+    if (!targetClient.processID || !targetClient.secretKey) {
+      return false
+    }
+
+    const cancelClient = new PgClient({
+      host: connection.host,
+      port: connection.port,
+      ssl: connection.sslMode === 'require' ? { rejectUnauthorized: false } : undefined,
+    })
+
+    const cancelConnection = (cancelClient as unknown as {
+      connection: {
+        connect: (...args: unknown[]) => void
+        on: (event: string, listener: (...args: unknown[]) => void) => void
+        cancel: (processID: number, secretKey: number) => void
+      }
+    }).connection
+
+    return await new Promise<boolean>((resolve) => {
+      let settled = false
+      const timeout = setTimeout(() => {
+        finish(false)
+      }, 2_000)
+
+      const finish = (value: boolean): void => {
+        if (settled) {
+          return
+        }
+
+        settled = true
+        clearTimeout(timeout)
+        resolve(value)
+      }
+
+      cancelConnection.on('error', () => {
+        finish(false)
+      })
+
+      cancelConnection.on('connect', () => {
+        try {
+          cancelConnection.cancel(targetClient.processID as number, targetClient.secretKey as number)
+          console.info('[sql-cancel][pg] cancel packet sent', {
+            processID: targetClient.processID,
+            host: connection.host,
+            port: connection.port,
+          })
+          finish(true)
+        } catch {
+          finish(false)
+        }
+      })
+
+      if (connection.host && connection.host.indexOf('/') === 0) {
+        cancelConnection.connect(`${connection.host}/.s.PGSQL.${connection.port}`)
+      } else {
+        cancelConnection.connect(connection.port, connection.host)
+      }
+    })
+  }
+
+  private async cancelPostgresBackend(connection: ConnectionSummary, password: string, backendPid: number): Promise<boolean> {
+    const cancelClient = new PgClient({
+      host: connection.host,
+      port: connection.port,
+      database: connection.database,
+      user: connection.user,
+      password,
+      ssl: connection.sslMode === 'require' ? { rejectUnauthorized: false } : undefined,
+    })
+
+    try {
+      await cancelClient.connect()
+      const result = await cancelClient.query<{ canceled: boolean }>(
+        'SELECT pg_cancel_backend($1) AS canceled',
+        [backendPid],
+      )
+      return Boolean(result.rows[0]?.canceled)
+    } catch {
+      // Ignore cancellation transport failures. The running query may already have finished.
+      return false
+    } finally {
+      await cancelClient.end().catch(() => undefined)
+    }
+  }
+
+  private async terminatePostgresBackend(
+    connection: ConnectionSummary,
+    password: string,
+    backendPid: number,
+  ): Promise<boolean> {
+    const cancelClient = new PgClient({
+      host: connection.host,
+      port: connection.port,
+      database: connection.database,
+      user: connection.user,
+      password,
+      ssl: connection.sslMode === 'require' ? { rejectUnauthorized: false } : undefined,
+    })
+
+    try {
+      await cancelClient.connect()
+      const result = await cancelClient.query<{ terminated: boolean }>(
+        'SELECT pg_terminate_backend($1) AS terminated',
+        [backendPid],
+      )
+      return Boolean(result.rows[0]?.terminated)
+    } catch {
+      return false
+    } finally {
+      await cancelClient.end().catch(() => undefined)
+    }
+  }
+
+  private async executeClickHouseSql(
+    statements: string[],
+    connection: ConnectionSummary,
+    executionId: string,
+    resultSets: SqlResultSet[],
+  ): Promise<void> {
+    const client = await this.getClickHouseClient(connection)
+    let abortController: AbortController | null = null
+
+    const controller = this.registerSqlExecution(executionId, () => {
+      abortController?.abort()
+    })
+
+    try {
+      for (const statement of statements) {
+        if (controller.isCanceled) {
+          throw createSqlExecutionCanceledError()
+        }
+
+        abortController = new AbortController()
+        resultSets.push(await this.executeClickHouseStatement(client, statement, abortController.signal))
+        abortController = null
+      }
+    } catch (error) {
+      if (isClickHouseAbortError(error, controller.isCanceled)) {
+        throw createSqlExecutionCanceledError()
+      }
+
+      throw error
+    } finally {
+      abortController = null
+      this.clearSqlExecution(executionId)
+    }
+  }
+
+  private async executeSqliteSql(
+    statements: string[],
+    connection: ConnectionSummary,
+    executionId: string,
+    resultSets: SqlResultSet[],
+  ): Promise<void> {
+    const filePath = connection.filePath.trim()
+    if (!filePath) {
+      throw new Error('Arquivo SQLite não configurado nesta conexão.')
+    }
+
+    const workerExecution = this.runSqliteStatementsInWorker(filePath, statements)
+    let controller: SqlExecutionController
+    try {
+      controller = this.registerSqlExecution(executionId, workerExecution.terminate)
+    } catch (error) {
+      await workerExecution.terminate().catch(() => undefined)
+      throw error
+    }
+
+    try {
+      if (controller.isCanceled) {
+        throw createSqlExecutionCanceledError()
+      }
+
+      resultSets.push(...(await workerExecution.result))
+    } catch (error) {
+      if (isSqliteCancellationError(error, controller.isCanceled)) {
+        throw createSqlExecutionCanceledError()
+      }
+
+      throw error
+    } finally {
+      this.clearSqlExecution(executionId)
+    }
+  }
+
+  private runSqliteStatementsInWorker(filePath: string, statements: string[]): SqliteWorkerExecution {
+    const worker = new Worker(SQLITE_SQL_EXECUTION_WORKER_SOURCE, {
+      eval: true,
+      workerData: { filePath, statements },
+    })
+
+    let settled = false
+    let rejectResult: ((reason?: unknown) => void) | null = null
+
+    const cleanup = (): void => {
+      worker.removeAllListeners('message')
+      worker.removeAllListeners('error')
+      worker.removeAllListeners('exit')
+    }
+
+    const settle = (callback: () => void): void => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      callback()
+    }
+
+    const result = new Promise<SqlResultSet[]>((resolve, reject) => {
+      rejectResult = reject
+
+      worker.on('message', (payload: unknown) => {
+        settle(() => {
+          const message = payload as { type?: string; resultSets?: SqlResultSet[]; message?: string }
+          if (message?.type === 'success') {
+            resolve(message.resultSets ?? [])
+            return
+          }
+
+          reject(new Error(message?.message || SQLITE_WORKER_FAILURE_MESSAGE))
+        })
+      })
+
+      worker.on('error', (error) => {
+        settle(() => reject(error))
+      })
+
+      worker.on('exit', () => {
+        settle(() => {
+          reject(new Error(SQLITE_WORKER_FAILURE_MESSAGE))
+        })
+      })
+    })
+
+    const terminate = async (): Promise<void> => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+
+      try {
+        await worker.terminate()
+      } catch {
+        // Ignora erros de término; o worker pode já ter finalizado.
+      }
+
+      rejectResult?.(createSqlExecutionCanceledError())
+      rejectResult = null
+    }
+
+    return { result, terminate }
   }
 
   private migrateLegacyStore(): void {
@@ -1641,12 +2180,15 @@ export class DbService {
     return { affected: result.changes }
   }
 
-  private async executeClickHouseStatement(client: ClickHouseClient, statement: string): Promise<SqlResultSet> {
+  private async executeClickHouseStatement(
+    client: ClickHouseClient,
+    statement: string,
+    abortSignal?: AbortSignal,
+  ): Promise<SqlResultSet> {
     const keyword = firstSqlKeyword(statement)
-    const readKeywords = new Set(['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'WITH'])
 
-    if (readKeywords.has(keyword)) {
-      const result = await client.query({ query: statement, format: 'JSONEachRow' })
+    if (CLICKHOUSE_READ_KEYWORDS.has(keyword)) {
+      const result = await client.query({ query: statement, format: 'JSONEachRow', abort_signal: abortSignal })
       const rows = await result.json<Record<string, unknown>>()
       const fields = rows.length > 0 ? Object.keys(rows[0]) : []
 
@@ -1658,36 +2200,11 @@ export class DbService {
       }
     }
 
-    await client.command({ query: statement })
+    await client.command({ query: statement, abort_signal: abortSignal })
 
     return {
       command: keyword || 'COMMAND',
       rowCount: 0,
-      fields: [],
-      rows: [],
-    }
-  }
-
-  private executeSqliteStatement(db: BetterSqlite3.Database, statement: string): SqlResultSet {
-    const keyword = firstSqlKeyword(statement)
-    const readKeywords = new Set(['SELECT', 'PRAGMA', 'WITH', 'EXPLAIN'])
-
-    if (readKeywords.has(keyword)) {
-      const rows = db.prepare(statement).all() as Record<string, unknown>[]
-      const fields = rows.length > 0 ? Object.keys(rows[0]) : []
-
-      return {
-        command: keyword || 'SELECT',
-        rowCount: rows.length,
-        fields,
-        rows,
-      }
-    }
-
-    const result = db.prepare(statement).run()
-    return {
-      command: keyword || 'COMMAND',
-      rowCount: result.changes,
       fields: [],
       rows: [],
     }
@@ -2034,6 +2551,63 @@ function firstSqlKeyword(statement: string): string {
     .trim()
     .split(/\s+/)[0]
     ?.toUpperCase()
+}
+
+function createSqlExecutionCanceledError(): Error {
+  return new Error(SQL_EXECUTION_CANCELED_MESSAGE)
+}
+
+function isPostgresCancellationError(error: unknown, isCanceled: boolean): boolean {
+  if (!isCanceled) {
+    return false
+  }
+
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const candidate = error as { code?: string; message?: string }
+  if (candidate.code === '57014') {
+    return true
+  }
+
+  const message = candidate.message?.toLowerCase() ?? ''
+  return (
+    message.includes('canceling statement due to user request') ||
+    message.includes('connection terminated unexpectedly') ||
+    message.includes('terminating connection') ||
+    message.includes('socket hang up')
+  )
+}
+
+function isClickHouseAbortError(error: unknown, isCanceled: boolean): boolean {
+  if (!isCanceled) {
+    return false
+  }
+
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true
+  }
+
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const candidate = error as { message?: string }
+  const message = candidate.message?.toLowerCase() ?? ''
+  return message.includes('abort') || message.includes('aborted')
+}
+
+function isSqliteCancellationError(error: unknown, isCanceled: boolean): boolean {
+  if (!isCanceled) {
+    return false
+  }
+
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  return error.message === SQL_EXECUTION_CANCELED_MESSAGE
 }
 
 function normalizeEnvironmentColor(color?: string): string {

@@ -524,7 +524,8 @@ export function getErrorMessage(error: unknown): string {
       ipcChannel === 'pointer:tables:describe' ||
       ipcChannel === 'pointer:tables:read' ||
       ipcChannel === 'pointer:sql:preview-risk' ||
-      ipcChannel === 'pointer:sql:execute'
+      ipcChannel === 'pointer:sql:execute' ||
+      ipcChannel === 'pointer:sql:execute-with-execution-id'
     ) {
       return 'Não foi possível conectar ao banco desta conexão. Verifique se o banco está online e tente reconectar.'
     }

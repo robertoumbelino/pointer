@@ -37,6 +37,9 @@ const pointerApi: PointerApi = {
 
   previewSqlRisk: (sql) => ipcRenderer.invoke(IPC_CHANNELS.previewSqlRisk, sql),
   executeSql: (connectionId, sql) => ipcRenderer.invoke(IPC_CHANNELS.executeSql, connectionId, sql),
+  executeSqlWithExecutionId: (connectionId, sql, executionId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.executeSqlWithExecutionId, connectionId, sql, executionId),
+  cancelSqlExecution: (executionId) => ipcRenderer.invoke(IPC_CHANNELS.cancelSqlExecution, executionId),
 
   checkForAppUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.checkForAppUpdate),
   installLatestUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.installLatestUpdate),

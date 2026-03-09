@@ -29,6 +29,8 @@ export const IPC_CHANNELS = {
 
   previewSqlRisk: 'pointer:sql:preview-risk',
   executeSql: 'pointer:sql:execute',
+  executeSqlWithExecutionId: 'pointer:sql:execute-with-execution-id',
+  cancelSqlExecution: 'pointer:sql:cancel-execution',
 
   checkForAppUpdate: 'pointer:app:update:check',
   installLatestUpdate: 'pointer:app:update:install',
@@ -126,6 +128,20 @@ export function registerIpc(dbService: DbService, updaterService: UpdaterService
 
   ipcMain.handle(IPC_CHANNELS.executeSql, (_, connectionId: string, sql: string) =>
     wrap(() => dbService.executeSql(connectionId, sql)),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.executeSqlWithExecutionId,
+    (_, connectionId: string, sql: string, executionId: string) =>
+      wrap(() => {
+        console.info('[ipc][sql] execute request', { connectionId, executionId })
+        return dbService.executeSqlWithExecutionId(connectionId, sql, executionId)
+      }),
+  )
+  ipcMain.handle(IPC_CHANNELS.cancelSqlExecution, (_, executionId: string) =>
+    wrap(() => {
+      console.info('[ipc][sql] cancel request', { executionId })
+      return dbService.cancelSqlExecution(executionId)
+    }),
   )
 
   ipcMain.handle(IPC_CHANNELS.checkForAppUpdate, () => wrap(() => updaterService.checkForAppUpdate()))

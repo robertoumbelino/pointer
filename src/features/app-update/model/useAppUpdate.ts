@@ -62,7 +62,14 @@ export function useAppUpdate(): UseAppUpdateResult {
         toast.success(`Você já está na versão ${info.currentVersion}.`)
       }
     } catch (error) {
-      toast.error(getErrorMessage(error))
+      const message = getErrorMessage(error)
+      const isGitHubRateLimited = message.includes('403')
+
+      if (!showToastWhenCurrent && isGitHubRateLimited) {
+        return
+      }
+
+      toast.error(message)
     } finally {
       setIsCheckingAppUpdate(false)
     }

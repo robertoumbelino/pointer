@@ -52,6 +52,7 @@ type UseWorkspaceResult = {
   sqlTabCounterRef: MutableRefObject<number>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
+  sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
   environmentWorkspaceRef: MutableRefObject<Record<string, EnvironmentWorkspaceSnapshot>>
   previousEnvironmentIdRef: MutableRefObject<string>
   preferredEnvironmentIdRef: MutableRefObject<string>
@@ -97,6 +98,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const sqlTabCounterRef = useRef<number>(2)
   const sqlSplitContainerRef = useRef<HTMLDivElement | null>(null)
   const sqlCursorByTabRef = useRef<Record<string, number>>({})
+  const sqlExecutionByTabRef = useRef<Record<string, string>>({})
   const environmentWorkspaceRef = useRef<Record<string, EnvironmentWorkspaceSnapshot>>({})
   const previousEnvironmentIdRef = useRef<string>('')
   const preferredEnvironmentIdRef = useRef<string>('')
@@ -185,6 +187,7 @@ export function useWorkspace(): UseWorkspaceResult {
     sqlTabCounterRef,
     sqlSplitContainerRef,
     sqlCursorByTabRef,
+    sqlExecutionByTabRef,
     environmentWorkspaceRef,
     previousEnvironmentIdRef,
     preferredEnvironmentIdRef,

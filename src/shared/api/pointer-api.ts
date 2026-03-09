@@ -34,6 +34,9 @@ export const pointerApi: PointerApi = {
 
   previewSqlRisk: (sql) => api().previewSqlRisk(sql),
   executeSql: (connectionId, sql) => api().executeSql(connectionId, sql),
+  executeSqlWithExecutionId: (connectionId, sql, executionId) =>
+    api().executeSqlWithExecutionId(connectionId, sql, executionId),
+  cancelSqlExecution: (executionId) => api().cancelSqlExecution(executionId),
 
   checkForAppUpdate: () => api().checkForAppUpdate(),
   installLatestUpdate: () => api().installLatestUpdate(),
