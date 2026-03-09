@@ -7,6 +7,7 @@ import type { SqlTab } from '../../../entities/workspace/types'
 import { Button } from '../../../components/ui/button'
 import { ButtonGroup } from '../../../components/ui/button-group'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
+import { AUTO_SQL_CONNECTION_ID } from '../../../shared/constants/app'
 
 type SqlWorkspacePanelProps = {
   activeSqlTab: SqlTab
@@ -84,6 +85,10 @@ export function SqlWorkspacePanel({
   exportSqlResultSetVisibleCsv,
 }: SqlWorkspacePanelProps): JSX.Element {
   const [resultSetSortByKey, setResultSetSortByKey] = useState<Record<string, ResultSetSortState>>({})
+  const canRunSql =
+    !activeSqlTab.sqlRunning &&
+    Boolean(activeSqlTab.connectionId) &&
+    (activeSqlTab.connectionId !== AUTO_SQL_CONNECTION_ID || connections.length > 0)
 
   return (
     <div className='pointer-card flex h-full flex-col overflow-hidden'>
@@ -106,6 +111,7 @@ export function SqlWorkspacePanel({
             className='h-8 rounded-md border border-slate-700 bg-slate-900 px-2.5 text-[12px] outline-none ring-slate-300/45 focus:ring-2'
           >
             <option value=''>Selecione conexão</option>
+            <option value={AUTO_SQL_CONNECTION_ID}>Auto</option>
             {connections.map((connection) => (
               <option key={connection.id} value={connection.id}>
                 {connection.name}
@@ -117,7 +123,7 @@ export function SqlWorkspacePanel({
               size='sm'
               className='h-8 text-[13px]'
               onClick={() => void runSql()}
-              disabled={activeSqlTab.sqlRunning || !activeSqlTab.connectionId}
+              disabled={!canRunSql}
             >
               <Play className='mr-1.5 h-3.5 w-3.5' />{' '}
               {activeSqlTab.sqlRunning ? (activeSqlTab.sqlCanceling ? 'Cancelando...' : 'Executando...') : 'Executar'}

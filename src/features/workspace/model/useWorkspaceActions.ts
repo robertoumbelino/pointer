@@ -5,12 +5,13 @@ import type {
   ColumnForeignKeyRef,
   ConnectionSummary,
   SqlExecutionResult,
+  TableRef,
   TableFilter,
   TableSearchHit,
 } from '../../../../shared/db-types'
 import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../../../shared/db-types'
 import { pointerApi } from '../../../shared/api/pointer-api'
-import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
+import { AUTO_SQL_CONNECTION_ID, PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
 import { buildCsvContent } from '../../../shared/lib/csv'
 import {
   buildClickHouseUnknownTableFallbackSql,
@@ -18,6 +19,7 @@ import {
   cloneRows,
   coerceValueByOriginal,
   createInitialInsertDraft,
+  extractFirstFromTableReference,
   formatDraftInputValue,
   formatTableLabel,
   getErrorMessage,
@@ -29,7 +31,6 @@ import { createSqlTab, type EditingCell, type RowPendingUpdates, type SqlTab, ty
 type UseWorkspaceActionsParams = {
   activeTabId: string
   setActiveTabId: Dispatch<SetStateAction<string>>
-  selectedConnectionId: string
   connections: ConnectionSummary[]
   activeTableTab: TableTab | null
   editingCell: EditingCell | null
@@ -43,7 +44,11 @@ type UseWorkspaceActionsParams = {
   setSqlTabNameDraft: Dispatch<SetStateAction<string>>
   setSqlConfirmOpen: Dispatch<SetStateAction<boolean>>
   setSqlConfirmText: Dispatch<SetStateAction<string>>
-  setPendingSqlExecution: Dispatch<SetStateAction<{ tabId: string; sql: string } | null>>
+  setPendingSqlExecution: Dispatch<SetStateAction<{ tabId: string; sql: string; connectionId?: string } | null>>
+  setSqlAutoConnectionResolveOpen: Dispatch<SetStateAction<boolean>>
+  setPendingAutoSqlConnectionResolution: Dispatch<
+    SetStateAction<{ tabId: string; sql: string; tableLabel: string; candidateConnectionIds: string[] } | null>
+  >
   sqlTabCounterRef: MutableRefObject<number>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
@@ -81,7 +86,13 @@ type UseWorkspaceActionsResult = {
   }) => void
   exportTableCurrentPageCsv: (tabId: string) => void
   exportTableAllPagesCsv: (tabId: string) => Promise<void>
-  runSql: (force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>
+  runSql: (
+    force?: boolean,
+    cursorOffset?: number,
+    explicitSql?: string,
+    targetTabId?: string,
+    resolvedConnectionId?: string,
+  ) => Promise<void>
   cancelSqlExecution: (targetTabId?: string) => Promise<void>
 }
 
@@ -165,10 +176,13 @@ function resolveForeignKeyFilterValue(value: unknown): string | null {
   return stringified ? stringified : null
 }
 
+function normalizeIdentifier(value: string): string {
+  return value.trim().toLowerCase()
+}
+
 export function useWorkspaceActions({
   activeTabId,
   setActiveTabId,
-  selectedConnectionId,
   connections,
   activeTableTab,
   editingCell,
@@ -183,6 +197,8 @@ export function useWorkspaceActions({
   setSqlConfirmOpen,
   setSqlConfirmText,
   setPendingSqlExecution,
+  setSqlAutoConnectionResolveOpen,
+  setPendingAutoSqlConnectionResolution,
   sqlTabCounterRef,
   sqlSplitContainerRef,
   sqlExecutionByTabRef,
@@ -197,6 +213,11 @@ export function useWorkspaceActions({
   const isSavingTableChangesRef = useRef(false)
   const sqlCancelRequestByTabRef = useRef<Record<string, string>>({})
   const sqlCancelUnlockTimerByTabRef = useRef<Record<string, number>>({})
+  const tablesByConnectionRef = useRef<Record<string, TableRef[]>>({})
+
+  useEffect(() => {
+    tablesByConnectionRef.current = {}
+  }, [connections])
 
   const clearSqlCancelFallback = useCallback((tabId: string): void => {
     const timeoutId = sqlCancelUnlockTimerByTabRef.current[tabId]
@@ -596,7 +617,7 @@ export function useWorkspaceActions({
     const title = `SQL ${sqlTabCounterRef.current}`
     sqlTabCounterRef.current += 1
 
-    setWorkTabs((current) => [...current, createSqlTab(nextId, title, selectedConnectionId)])
+    setWorkTabs((current) => [...current, createSqlTab(nextId, title)])
     setActiveTabId(nextId)
   }
 
@@ -1007,11 +1028,109 @@ export function useWorkspaceActions({
     }
   }
 
+  async function listTablesWithCache(connectionId: string): Promise<TableRef[]> {
+    const cached = tablesByConnectionRef.current[connectionId]
+    if (cached) {
+      return cached
+    }
+
+    const tables = await pointerApi.listTables(connectionId)
+    tablesByConnectionRef.current[connectionId] = tables
+    return tables
+  }
+
+  async function resolveAutoConnectionCandidates(
+    tableReference: ReturnType<typeof extractFirstFromTableReference>,
+  ): Promise<ConnectionSummary[]> {
+    if (!tableReference) {
+      return []
+    }
+
+    const normalizedName = normalizeIdentifier(tableReference.name)
+    const normalizedSchema = tableReference.schema ? normalizeIdentifier(tableReference.schema) : null
+
+    const matches = await Promise.all(
+      connections.map(async (connection) => {
+        const tables = await listTablesWithCache(connection.id)
+        const found = tables.some((table) => {
+          const tableName = normalizeIdentifier(table.name)
+          if (tableName !== normalizedName) {
+            return false
+          }
+
+          if (!normalizedSchema) {
+            return true
+          }
+
+          return normalizeIdentifier(table.schema) === normalizedSchema
+        })
+
+        return found ? connection : null
+      }),
+    )
+
+    return matches.filter((connection): connection is ConnectionSummary => Boolean(connection))
+  }
+
+  async function resolveSqlConnectionId(
+    sqlTab: SqlTab,
+    sqlToExecute: string,
+    resolvedConnectionId?: string,
+  ): Promise<string | null> {
+    if (resolvedConnectionId) {
+      if (!connections.some((connection) => connection.id === resolvedConnectionId)) {
+        toast.error('A conexão escolhida não está mais disponível.')
+        return null
+      }
+      return resolvedConnectionId
+    }
+
+    if (!sqlTab.connectionId) {
+      toast.error('Selecione uma conexão para esta aba SQL.')
+      return null
+    }
+
+    if (sqlTab.connectionId !== AUTO_SQL_CONNECTION_ID) {
+      return sqlTab.connectionId
+    }
+
+    if (connections.length === 0) {
+      toast.error('Nenhuma conexão disponível neste ambiente para executar no modo Auto.')
+      return null
+    }
+
+    const tableReference = extractFirstFromTableReference(sqlToExecute)
+    if (!tableReference) {
+      toast.error('No modo Auto, informe uma query com FROM tabela para inferir a conexão.')
+      return null
+    }
+
+    const candidates = await resolveAutoConnectionCandidates(tableReference)
+    if (candidates.length === 0) {
+      toast.error(`Nenhuma conexão encontrada para a tabela "${tableReference.fqName}".`)
+      return null
+    }
+
+    if (candidates.length > 1) {
+      setPendingAutoSqlConnectionResolution({
+        tabId: sqlTab.id,
+        sql: sqlToExecute,
+        tableLabel: tableReference.fqName,
+        candidateConnectionIds: candidates.map((connection) => connection.id),
+      })
+      setSqlAutoConnectionResolveOpen(true)
+      return null
+    }
+
+    return candidates[0].id
+  }
+
   async function runSql(
     force = false,
     cursorOffset?: number,
     explicitSql?: string,
     targetTabId?: string,
+    resolvedConnectionId?: string,
   ): Promise<void> {
     const tabId = targetTabId ?? activeTabId
     const sqlTab = getSqlTab(tabId)
@@ -1021,11 +1140,6 @@ export function useWorkspaceActions({
     }
 
     if (sqlTab.sqlRunning) {
-      return
-    }
-
-    if (!sqlTab.connectionId) {
-      toast.error('Selecione uma conexão para esta aba SQL.')
       return
     }
 
@@ -1043,6 +1157,11 @@ export function useWorkspaceActions({
         return
       }
 
+      const effectiveConnectionId = await resolveSqlConnectionId(sqlTab, sqlToExecute, resolvedConnectionId)
+      if (!effectiveConnectionId) {
+        return
+      }
+
       if (!force) {
         const risk = await pointerApi.previewSqlRisk(sqlToExecute)
 
@@ -1051,6 +1170,7 @@ export function useWorkspaceActions({
           setPendingSqlExecution({
             tabId: sqlTab.id,
             sql: sqlToExecute,
+            connectionId: effectiveConnectionId,
           })
           setSqlConfirmOpen(true)
           return
@@ -1059,12 +1179,12 @@ export function useWorkspaceActions({
 
       sqlExecutionByTabRef.current[sqlTab.id] = executionId
       clearSqlCancelFallback(sqlTab.id)
-      console.info('[ui][sql] execute start', { tabId: sqlTab.id, executionId, connectionId: sqlTab.connectionId })
+      console.info('[ui][sql] execute start', { tabId: sqlTab.id, executionId, connectionId: effectiveConnectionId })
       updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: true, sqlCanceling: false }))
       let result: SqlExecutionResult
 
       try {
-        result = await pointerApi.executeSqlWithExecutionId(sqlTab.connectionId, sqlToExecute, executionId)
+        result = await pointerApi.executeSqlWithExecutionId(effectiveConnectionId, sqlToExecute, executionId)
       } catch (executionError) {
         if (isSqlExecutionCanceledError(executionError)) {
           throw executionError
@@ -1072,7 +1192,7 @@ export function useWorkspaceActions({
 
         const fallbackSql = await buildClickHouseUnknownTableFallbackSql(
           connections,
-          sqlTab.connectionId,
+          effectiveConnectionId,
           sqlToExecute,
           executionError,
         )
@@ -1081,7 +1201,7 @@ export function useWorkspaceActions({
           throw executionError
         }
 
-        result = await pointerApi.executeSqlWithExecutionId(sqlTab.connectionId, fallbackSql, executionId)
+        result = await pointerApi.executeSqlWithExecutionId(effectiveConnectionId, fallbackSql, executionId)
         toast.info('Tabela qualificada automaticamente com schema para ClickHouse.')
       }
 

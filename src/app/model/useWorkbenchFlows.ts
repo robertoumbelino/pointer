@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import type { ConnectionSummary, EnvironmentSummary, TableSearchHit } from '../../../shared/db-types'
 import { createConnectionDraft, type ConnectionDraft, type WorkTab } from '../../entities/workspace/types'
 import { pointerApi } from '../../shared/api/pointer-api'
+import { AUTO_SQL_CONNECTION_ID } from '../../shared/constants/app'
 import { getErrorMessage } from '../../shared/lib/workspace-utils'
 
 type UseWorkbenchFlowsParams = {
@@ -118,13 +119,17 @@ export function useWorkbenchFlows({
               return tab
             }
 
+            if (tab.connectionId === AUTO_SQL_CONNECTION_ID) {
+              return tab
+            }
+
             if (all.some((connection) => connection.id === tab.connectionId)) {
               return tab
             }
 
             return {
               ...tab,
-              connectionId: all[0].id,
+              connectionId: AUTO_SQL_CONNECTION_ID,
             }
           }),
         )

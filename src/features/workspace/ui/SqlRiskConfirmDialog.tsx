@@ -14,6 +14,7 @@ import { Input } from '../../../components/ui/input'
 type PendingSqlExecution = {
   tabId: string
   sql: string
+  connectionId?: string
 }
 
 type SqlRiskConfirmDialogProps = {
@@ -23,7 +24,7 @@ type SqlRiskConfirmDialogProps = {
   setSqlConfirmText: (value: string) => void
   pendingSqlExecution: PendingSqlExecution | null
   setPendingSqlExecution: (value: PendingSqlExecution | null) => void
-  onForceRunSql: (tabId: string, sql: string) => Promise<void>
+  onForceRunSql: (tabId: string, sql: string, connectionId?: string) => Promise<void>
 }
 
 export function SqlRiskConfirmDialog({
@@ -72,7 +73,11 @@ export function SqlRiskConfirmDialog({
                 return
               }
 
-              void onForceRunSql(pendingSqlExecution.tabId, pendingSqlExecution.sql)
+              void onForceRunSql(
+                pendingSqlExecution.tabId,
+                pendingSqlExecution.sql,
+                pendingSqlExecution.connectionId,
+              )
             }}
             disabled={sqlConfirmText.trim().toUpperCase() !== SAFE_CONFIRM_WORD}
           >

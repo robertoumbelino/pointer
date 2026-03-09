@@ -396,6 +396,277 @@ export function splitSqlSegmentsWithRange(sqlText: string): Array<{ sql: string;
   return segments
 }
 
+export type SqlFromTableReference = {
+  schema?: string
+  name: string
+  fqName: string
+}
+
+function isSqlIdentifierChar(char: string): boolean {
+  return /[A-Za-z0-9_$]/.test(char)
+}
+
+function skipWhitespace(source: string, start: number): number {
+  let index = start
+  while (index < source.length && /\s/.test(source[index])) {
+    index += 1
+  }
+  return index
+}
+
+function readSqlIdentifierPart(source: string, start: number): { value: string; nextIndex: number } | null {
+  const firstChar = source[start]
+  if (!firstChar) {
+    return null
+  }
+
+  if (firstChar === '"') {
+    let index = start + 1
+    let value = ''
+
+    while (index < source.length) {
+      const char = source[index]
+      const nextChar = source[index + 1]
+      if (char === '"' && nextChar === '"') {
+        value += '"'
+        index += 2
+        continue
+      }
+
+      if (char === '"') {
+        return {
+          value,
+          nextIndex: index + 1,
+        }
+      }
+
+      value += char
+      index += 1
+    }
+
+    return null
+  }
+
+  if (firstChar === '`') {
+    let index = start + 1
+    let value = ''
+
+    while (index < source.length) {
+      const char = source[index]
+      const nextChar = source[index + 1]
+      if (char === '`' && nextChar === '`') {
+        value += '`'
+        index += 2
+        continue
+      }
+
+      if (char === '`') {
+        return {
+          value,
+          nextIndex: index + 1,
+        }
+      }
+
+      value += char
+      index += 1
+    }
+
+    return null
+  }
+
+  if (firstChar === '[') {
+    const end = source.indexOf(']', start + 1)
+    if (end < 0) {
+      return null
+    }
+
+    return {
+      value: source.slice(start + 1, end),
+      nextIndex: end + 1,
+    }
+  }
+
+  if (!/[A-Za-z_]/.test(firstChar)) {
+    return null
+  }
+
+  let index = start + 1
+  while (index < source.length && isSqlIdentifierChar(source[index])) {
+    index += 1
+  }
+
+  return {
+    value: source.slice(start, index),
+    nextIndex: index,
+  }
+}
+
+function readFromTableReference(
+  source: string,
+  fromKeywordStart: number,
+): { reference: SqlFromTableReference | null; nextIndex: number } {
+  let cursor = skipWhitespace(source, fromKeywordStart + 4)
+  if (cursor >= source.length) {
+    return {
+      reference: null,
+      nextIndex: source.length,
+    }
+  }
+
+  if (source[cursor] === '(') {
+    return {
+      reference: null,
+      nextIndex: cursor + 1,
+    }
+  }
+
+  const firstPart = readSqlIdentifierPart(source, cursor)
+  if (!firstPart) {
+    return {
+      reference: null,
+      nextIndex: cursor + 1,
+    }
+  }
+
+  cursor = skipWhitespace(source, firstPart.nextIndex)
+  if (source[cursor] === '(') {
+    return {
+      reference: null,
+      nextIndex: cursor + 1,
+    }
+  }
+
+  let schema: string | undefined
+  let name = firstPart.value
+
+  if (source[cursor] === '.') {
+    cursor = skipWhitespace(source, cursor + 1)
+    const secondPart = readSqlIdentifierPart(source, cursor)
+    if (!secondPart) {
+      return {
+        reference: null,
+        nextIndex: cursor + 1,
+      }
+    }
+
+    schema = firstPart.value
+    name = secondPart.value
+    cursor = secondPart.nextIndex
+  }
+
+  const normalizedSchema = schema?.trim()
+  const normalizedName = name.trim()
+  if (!normalizedName) {
+    return {
+      reference: null,
+      nextIndex: cursor,
+    }
+  }
+
+  return {
+    reference: {
+      schema: normalizedSchema || undefined,
+      name: normalizedName,
+      fqName: normalizedSchema ? `${normalizedSchema}.${normalizedName}` : normalizedName,
+    },
+    nextIndex: cursor,
+  }
+}
+
+export function extractFirstFromTableReference(sqlText: string): SqlFromTableReference | null {
+  const source = sqlText
+
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    const nextChar = source[index + 1]
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false
+      }
+      continue
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false
+        index += 1
+      }
+      continue
+    }
+
+    if (inSingleQuote) {
+      if (char === "'" && nextChar === "'") {
+        index += 1
+        continue
+      }
+
+      if (char === "'") {
+        inSingleQuote = false
+      }
+      continue
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"' && nextChar === '"') {
+        index += 1
+        continue
+      }
+
+      if (char === '"') {
+        inDoubleQuote = false
+      }
+      continue
+    }
+
+    if (char === '-' && nextChar === '-') {
+      inLineComment = true
+      index += 1
+      continue
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true
+      index += 1
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      continue
+    }
+
+    if (source.slice(index, index + 4).toLowerCase() !== 'from') {
+      continue
+    }
+
+    const previousChar = source[index - 1] ?? ''
+    const followingChar = source[index + 4] ?? ''
+    if ((previousChar && isSqlIdentifierChar(previousChar)) || (followingChar && isSqlIdentifierChar(followingChar))) {
+      continue
+    }
+
+    const parsed = readFromTableReference(source, index)
+    if (parsed.reference) {
+      return parsed.reference
+    }
+
+    index = Math.max(index, parsed.nextIndex - 1)
+  }
+
+  return null
+}
+
 export async function buildClickHouseUnknownTableFallbackSql(
   connections: ConnectionSummary[],
   connectionId: string,

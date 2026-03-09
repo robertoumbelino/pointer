@@ -10,7 +10,7 @@ import type {
   TableSearchHit,
   TableSort,
 } from '../../../shared/db-types'
-import { DEFAULT_SQL } from '../../shared/constants/app'
+import { AUTO_SQL_CONNECTION_ID, DEFAULT_SQL } from '../../shared/constants/app'
 
 export type ConnectionDraft = ConnectionInput
 
@@ -125,7 +125,7 @@ export type PersistedWorkspaceStorage = {
   environments: Record<string, PersistedEnvironmentWorkspaceSnapshot>
 }
 
-export function createSqlTab(id: string, title: string, connectionId = ''): SqlTab {
+export function createSqlTab(id: string, title: string, connectionId = AUTO_SQL_CONNECTION_ID): SqlTab {
   return {
     id,
     type: 'sql',

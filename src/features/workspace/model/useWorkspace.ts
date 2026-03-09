@@ -11,6 +11,19 @@ import type {
 } from '../../../entities/workspace/types'
 import { createSqlTab } from '../../../entities/workspace/types'
 
+export type PendingSqlExecution = {
+  tabId: string
+  sql: string
+  connectionId?: string
+}
+
+export type PendingAutoSqlConnectionResolution = {
+  tabId: string
+  sql: string
+  tableLabel: string
+  candidateConnectionIds: string[]
+}
+
 type UseWorkspaceResult = {
   selectedSchema: string
   setSelectedSchema: Dispatch<SetStateAction<string>>
@@ -40,8 +53,12 @@ type UseWorkspaceResult = {
   setSqlConfirmOpen: Dispatch<SetStateAction<boolean>>
   sqlConfirmText: string
   setSqlConfirmText: Dispatch<SetStateAction<string>>
-  pendingSqlExecution: { tabId: string; sql: string } | null
-  setPendingSqlExecution: Dispatch<SetStateAction<{ tabId: string; sql: string } | null>>
+  pendingSqlExecution: PendingSqlExecution | null
+  setPendingSqlExecution: Dispatch<SetStateAction<PendingSqlExecution | null>>
+  sqlAutoConnectionResolveOpen: boolean
+  setSqlAutoConnectionResolveOpen: Dispatch<SetStateAction<boolean>>
+  pendingAutoSqlConnectionResolution: PendingAutoSqlConnectionResolution | null
+  setPendingAutoSqlConnectionResolution: Dispatch<SetStateAction<PendingAutoSqlConnectionResolution | null>>
   tableContextMenu: SidebarTableContextMenuState | null
   setTableContextMenu: Dispatch<SetStateAction<SidebarTableContextMenuState | null>>
   resizingSqlTabId: string | null
@@ -56,7 +73,7 @@ type UseWorkspaceResult = {
   environmentWorkspaceRef: MutableRefObject<Record<string, EnvironmentWorkspaceSnapshot>>
   previousEnvironmentIdRef: MutableRefObject<string>
   preferredEnvironmentIdRef: MutableRefObject<string>
-  runSqlRef: MutableRefObject<((force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>) | undefined>
+  runSqlRef: MutableRefObject<((force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string, resolvedConnectionId?: string) => Promise<void>) | undefined>
   saveActiveTableChangesRef: MutableRefObject<(() => Promise<void>) | undefined>
   commitInlineEditRef: MutableRefObject<(() => void) | undefined>
   toggleSelectedRowDeleteRef: MutableRefObject<(() => void) | undefined>
@@ -87,7 +104,10 @@ export function useWorkspace(): UseWorkspaceResult {
 
   const [sqlConfirmOpen, setSqlConfirmOpen] = useState(false)
   const [sqlConfirmText, setSqlConfirmText] = useState('')
-  const [pendingSqlExecution, setPendingSqlExecution] = useState<{ tabId: string; sql: string } | null>(null)
+  const [pendingSqlExecution, setPendingSqlExecution] = useState<PendingSqlExecution | null>(null)
+  const [sqlAutoConnectionResolveOpen, setSqlAutoConnectionResolveOpen] = useState(false)
+  const [pendingAutoSqlConnectionResolution, setPendingAutoSqlConnectionResolution] =
+    useState<PendingAutoSqlConnectionResolution | null>(null)
   const [tableContextMenu, setTableContextMenu] = useState<SidebarTableContextMenuState | null>(null)
 
   const [resizingSqlTabId, setResizingSqlTabId] = useState<string | null>(null)
@@ -104,7 +124,13 @@ export function useWorkspace(): UseWorkspaceResult {
   const preferredEnvironmentIdRef = useRef<string>('')
 
   const runSqlRef = useRef<
-    (force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>
+    (
+      force?: boolean,
+      cursorOffset?: number,
+      explicitSql?: string,
+      targetTabId?: string,
+      resolvedConnectionId?: string,
+    ) => Promise<void>
   >()
   const saveActiveTableChangesRef = useRef<() => Promise<void>>()
   const commitInlineEditRef = useRef<() => void>()
@@ -177,6 +203,10 @@ export function useWorkspace(): UseWorkspaceResult {
     setSqlConfirmText,
     pendingSqlExecution,
     setPendingSqlExecution,
+    sqlAutoConnectionResolveOpen,
+    setSqlAutoConnectionResolveOpen,
+    pendingAutoSqlConnectionResolution,
+    setPendingAutoSqlConnectionResolution,
     tableContextMenu,
     setTableContextMenu,
     resizingSqlTabId,

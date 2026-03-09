@@ -6,7 +6,7 @@ type UseWorkspaceShortcutsParams = {
   activeTabId: string
   setIsCommandOpen: (open: boolean) => void
   setIsEnvironmentCommandOpen: (open: boolean) => void
-  runSqlRef: MutableRefObject<((force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>) | undefined>
+  runSqlRef: MutableRefObject<((force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string, resolvedConnectionId?: string) => Promise<void>) | undefined>
   saveActiveTableChangesRef: MutableRefObject<(() => Promise<void>) | undefined>
   commitInlineEditRef: MutableRefObject<(() => void) | undefined>
   toggleSelectedRowDeleteRef: MutableRefObject<(() => void) | undefined>

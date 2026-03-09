@@ -22,6 +22,7 @@ import { useWorkspace } from '../features/workspace/model/useWorkspace'
 import { useSchemaSelectionGuard } from '../features/workspace/model/useSchemaSelectionGuard'
 import { useWorkspaceActions } from '../features/workspace/model/useWorkspaceActions'
 import { useWorkspaceShortcuts } from '../features/workspace/model/useWorkspaceShortcuts'
+import { SqlAutoConnectionResolveDialog } from '../features/workspace/ui/SqlAutoConnectionResolveDialog'
 import { SqlRiskConfirmDialog } from '../features/workspace/ui/SqlRiskConfirmDialog'
 import { SqlTabRenameDialog } from '../features/workspace/ui/SqlTabRenameDialog'
 import { TableContextMenu } from '../features/workspace/ui/TableContextMenu'
@@ -71,7 +72,6 @@ function App(): JSX.Element {
   const {
     connections,
     setConnections,
-    selectedConnectionId,
     setSelectedConnectionId,
     isCreateConnectionOpen,
     setIsCreateConnectionOpen,
@@ -147,6 +147,10 @@ function App(): JSX.Element {
     setSqlConfirmText,
     pendingSqlExecution,
     setPendingSqlExecution,
+    sqlAutoConnectionResolveOpen,
+    setSqlAutoConnectionResolveOpen,
+    pendingAutoSqlConnectionResolution,
+    setPendingAutoSqlConnectionResolution,
     tableContextMenu,
     setTableContextMenu,
     resizingSqlTabId,
@@ -439,7 +443,6 @@ function App(): JSX.Element {
   } = useWorkspaceActions({
     activeTabId,
     setActiveTabId,
-    selectedConnectionId,
     connections,
     activeTableTab,
     editingCell,
@@ -454,6 +457,8 @@ function App(): JSX.Element {
     setSqlConfirmOpen,
     setSqlConfirmText,
     setPendingSqlExecution,
+    setSqlAutoConnectionResolveOpen,
+    setPendingAutoSqlConnectionResolution,
     sqlTabCounterRef,
     sqlSplitContainerRef,
     sqlExecutionByTabRef,
@@ -690,8 +695,19 @@ function App(): JSX.Element {
         setSqlConfirmText={setSqlConfirmText}
         pendingSqlExecution={pendingSqlExecution}
         setPendingSqlExecution={setPendingSqlExecution}
-        onForceRunSql={async (tabId, sqlText) => {
-          await runSql(true, undefined, sqlText, tabId)
+        onForceRunSql={async (tabId, sqlText, connectionId) => {
+          await runSql(true, undefined, sqlText, tabId, connectionId)
+        }}
+      />
+
+      <SqlAutoConnectionResolveDialog
+        isOpen={sqlAutoConnectionResolveOpen}
+        onOpenChange={setSqlAutoConnectionResolveOpen}
+        pendingResolution={pendingAutoSqlConnectionResolution}
+        setPendingResolution={setPendingAutoSqlConnectionResolution}
+        connections={connections}
+        onRunSqlWithConnection={async (tabId, sqlText, connectionId) => {
+          await runSql(false, undefined, sqlText, tabId, connectionId)
         }}
       />
 
