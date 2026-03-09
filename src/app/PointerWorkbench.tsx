@@ -549,7 +549,7 @@ function App(): JSX.Element {
         onInstallUpdate={installLatestAppUpdate}
       />
 
-      <div className='no-drag flex flex-1 gap-3 p-3'>
+      <div className='no-drag flex min-h-0 flex-1 gap-3 overflow-hidden p-3'>
         <EnvironmentSidebar
           environments={environments}
           connections={connections}
