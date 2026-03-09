@@ -2,6 +2,24 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.6.0 - 2026-03-09
+
+### ✨ Novidades
+- Novo fluxo de resolução automática de conexão SQL no workspace: ao abrir uma aba SQL sem conexão definida, o app tenta selecionar uma conexão válida do ambiente para reduzir passos manuais.
+- Melhorias de usabilidade no teclado para seleção de conexão SQL, deixando a troca de conexão mais rápida em fluxos com múltiplas conexões.
+
+### 🐛 Correções
+- Corrigido o comportamento de cancelamento de execução SQL para reduzir estados inconsistentes durante interrupções.
+- Corrigido fallback da checagem de atualização para evitar falhas silenciosas em cenários de indisponibilidade temporária.
+- Ajustado o auto-open do changelog para abrir somente após update realmente instalado, evitando abertura indevida.
+- Refinado o feedback de save/insert em tabela no workspace para mensagens mais claras durante operações de edição.
+
+### ♻️ Melhorias
+- Otimizada a abertura da visualização de tabela via `Cmd+K`, com redução de latência percebida na navegação inicial.
+
+### 📚 Documentação
+- Adicionado guia formal de convenção de commits (`GIT.md`) e referência no `AGENTS.md` para padronizar releases futuras.
+
 ## v0.5.0 - 2026-03-09
 
 ### ✨ Novidades
