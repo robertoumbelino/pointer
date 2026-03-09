@@ -34,23 +34,30 @@ export function useAppUpdate(): UseAppUpdateResult {
   const changelogEntries = useMemo(() => parseChangelog(changelogMarkdown), [])
 
   useEffect(() => {
-    if (!appUpdateInfo?.hasUpdate) {
-      return
-    }
-
-    const latestVersion = normalizeVersion(appUpdateInfo.latestVersion)
-    if (!latestVersion) {
+    const currentVersion = normalizeVersion(appVersion)
+    if (!isComparableVersion(currentVersion)) {
       return
     }
 
     const lastSeenVersion = readLastSeenVersion()
-    if (latestVersion === lastSeenVersion) {
+    if (!lastSeenVersion) {
+      persistLastSeenVersion(currentVersion)
       return
     }
 
-    setIsChangelogOpen(true)
-    persistLastSeenVersion(latestVersion)
-  }, [appUpdateInfo])
+    if (!isComparableVersion(lastSeenVersion)) {
+      persistLastSeenVersion(currentVersion)
+      return
+    }
+
+    if (compareVersions(currentVersion, lastSeenVersion) > 0) {
+      setIsChangelogOpen(true)
+      persistLastSeenVersion(currentVersion)
+      return
+    }
+
+    persistLastSeenVersion(currentVersion)
+  }, [appVersion])
 
   const checkForAppUpdate = useCallback(async (showToastWhenCurrent = false): Promise<void> => {
     try {
@@ -142,4 +149,29 @@ function persistLastSeenVersion(version: string): void {
   } catch {
     // LocalStorage can be unavailable in edge cases; keep app functional without persistence.
   }
+}
+
+function isComparableVersion(version: string): boolean {
+  return version.length > 0 && version.split('.').every((part) => /^\d+$/.test(part))
+}
+
+function compareVersions(left: string, right: string): number {
+  const leftParts = left.split('.').map((value) => Number.parseInt(value, 10) || 0)
+  const rightParts = right.split('.').map((value) => Number.parseInt(value, 10) || 0)
+  const maxLength = Math.max(leftParts.length, rightParts.length)
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftValue = leftParts[index] ?? 0
+    const rightValue = rightParts[index] ?? 0
+
+    if (leftValue > rightValue) {
+      return 1
+    }
+
+    if (leftValue < rightValue) {
+      return -1
+    }
+  }
+
+  return 0
 }
