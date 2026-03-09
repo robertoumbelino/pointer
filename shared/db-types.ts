@@ -53,6 +53,11 @@ export interface TableSearchHit {
   table: TableRef
 }
 
+export interface ColumnForeignKeyRef {
+  table: TableRef
+  column: string
+}
+
 export interface ColumnDef {
   name: string
   dataType: string
@@ -60,6 +65,7 @@ export interface ColumnDef {
   nullable: boolean
   defaultValue: string | null
   isPrimaryKey: boolean
+  foreignKey?: ColumnForeignKeyRef
 }
 
 export interface TableSchema {

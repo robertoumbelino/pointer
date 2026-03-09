@@ -6,6 +6,7 @@ import keytar from 'keytar'
 import { Pool, type QueryResult } from 'pg'
 import type {
   ColumnDef,
+  ColumnForeignKeyRef,
   ConnectionInput,
   ConnectionSummary,
   DatabaseEngine,
@@ -1066,6 +1067,37 @@ export class DbService {
       [table.schema, table.name],
     )
 
+    const fkResult = await pool.query<{
+      source_column: string
+      foreign_table_schema: string
+      foreign_table_name: string
+      foreign_column_name: string
+    }>(
+      `
+      SELECT
+        kcu.column_name AS source_column,
+        target_kcu.table_schema AS foreign_table_schema,
+        target_kcu.table_name AS foreign_table_name,
+        target_kcu.column_name AS foreign_column_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.referential_constraints AS rc
+        ON rc.constraint_name = tc.constraint_name
+       AND rc.constraint_schema = tc.table_schema
+      JOIN information_schema.key_column_usage AS target_kcu
+        ON target_kcu.constraint_name = rc.unique_constraint_name
+       AND target_kcu.constraint_schema = rc.unique_constraint_schema
+       AND target_kcu.ordinal_position = kcu.position_in_unique_constraint
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = $1
+        AND tc.table_name = $2
+      ORDER BY tc.constraint_name ASC, kcu.ordinal_position ASC
+      `,
+      [table.schema, table.name],
+    )
+
     const enumResult = await pool.query<{
       column_name: string
       enum_label: string
@@ -1095,6 +1127,7 @@ export class DbService {
     const primaryKey = pkResult.rows.map((row) => row.column_name)
     const primaryKeySet = new Set(primaryKey)
     const enumValuesByColumn = new Map<string, string[]>()
+    const foreignKeyByColumn = new Map<string, ColumnForeignKeyRef>()
 
     for (const row of enumResult.rows) {
       const current = enumValuesByColumn.get(row.column_name) ?? []
@@ -1102,8 +1135,28 @@ export class DbService {
       enumValuesByColumn.set(row.column_name, current)
     }
 
+    for (const row of fkResult.rows) {
+      const sourceColumn = row.source_column?.trim()
+      const foreignSchema = row.foreign_table_schema?.trim()
+      const foreignTable = row.foreign_table_name?.trim()
+      const foreignColumn = row.foreign_column_name?.trim()
+      if (!sourceColumn || !foreignSchema || !foreignTable || !foreignColumn) {
+        continue
+      }
+
+      foreignKeyByColumn.set(sourceColumn, {
+        table: {
+          schema: foreignSchema,
+          name: foreignTable,
+          fqName: `${foreignSchema}.${foreignTable}`,
+        },
+        column: foreignColumn,
+      })
+    }
+
     const columns: ColumnDef[] = columnsResult.rows.map((row) => {
       const enumValues = enumValuesByColumn.get(row.column_name)
+      const foreignKey = foreignKeyByColumn.get(row.column_name)
 
       return {
         name: row.column_name,
@@ -1112,6 +1165,7 @@ export class DbService {
         nullable: row.is_nullable === 'YES',
         defaultValue: row.column_default,
         isPrimaryKey: primaryKeySet.has(row.column_name),
+        foreignKey,
       }
     })
 
@@ -1200,11 +1254,47 @@ export class DbService {
       pk: number
     }>
 
+    const fkRows = db
+      .prepare(
+        `
+        SELECT
+          "table" AS foreign_table_name,
+          "from" AS source_column,
+          "to" AS foreign_column_name
+        FROM ${schemaName}.pragma_foreign_key_list(${escapeSqlLiteral(table.name)})
+        ORDER BY id ASC, seq ASC
+        `,
+      )
+      .all() as Array<{
+      foreign_table_name: string
+      source_column: string
+      foreign_column_name: string
+    }>
+
     const primaryKey = rows
       .filter((row) => row.pk > 0)
       .sort((a, b) => a.pk - b.pk)
       .map((row) => row.name)
     const primaryKeySet = new Set(primaryKey)
+    const foreignKeyByColumn = new Map<string, ColumnForeignKeyRef>()
+
+    for (const row of fkRows) {
+      const sourceColumn = row.source_column?.trim()
+      const foreignTable = row.foreign_table_name?.trim()
+      const foreignColumn = row.foreign_column_name?.trim()
+      if (!sourceColumn || !foreignTable || !foreignColumn) {
+        continue
+      }
+
+      foreignKeyByColumn.set(sourceColumn, {
+        table: {
+          schema: table.schema,
+          name: foreignTable,
+          fqName: `${table.schema}.${foreignTable}`,
+        },
+        column: foreignColumn,
+      })
+    }
 
     const columns: ColumnDef[] = rows.map((row) => ({
       name: row.name,
@@ -1212,6 +1302,7 @@ export class DbService {
       nullable: row.not_null === 0,
       defaultValue: row.default_value,
       isPrimaryKey: primaryKeySet.has(row.name),
+      foreignKey: foreignKeyByColumn.get(row.name),
     }))
 
     db.prepare(`SELECT * FROM ${schemaName}.${tableName} LIMIT 0`).all()

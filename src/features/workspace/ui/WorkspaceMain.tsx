@@ -1,5 +1,11 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
-import type { ConnectionSummary, DatabaseEngine, EnvironmentSummary, TableRef } from '../../../../shared/db-types'
+import type {
+  ColumnForeignKeyRef,
+  ConnectionSummary,
+  DatabaseEngine,
+  EnvironmentSummary,
+  TableRef,
+} from '../../../../shared/db-types'
 import type {
   EditingCell,
   SqlTab,
@@ -32,6 +38,7 @@ type WorkspaceMainProps = {
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
   setResizingSqlTabId: Dispatch<SetStateAction<string | null>>
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
+  navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   handleToggleInsertDraftRow: () => void
   selectedRow: Record<string, unknown> | null
   handleDeleteRow: () => void
@@ -77,6 +84,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     sqlCursorByTabRef,
     setResizingSqlTabId,
     reloadTableTab,
+    navigateToForeignKey,
     handleToggleInsertDraftRow,
     selectedRow,
     handleDeleteRow,
@@ -133,6 +141,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
               <TableWorkspacePanel
                 activeTableTab={activeTableTab}
                 reloadTableTab={reloadTableTab}
+                navigateToForeignKey={navigateToForeignKey}
                 closeTableTab={closeTableTab}
                 handleToggleInsertDraftRow={handleToggleInsertDraftRow}
                 selectedRow={selectedRow}

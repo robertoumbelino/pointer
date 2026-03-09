@@ -1,7 +1,13 @@
 import { useCallback, useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
-import type { ConnectionSummary, SqlExecutionResult, TableFilter, TableSearchHit } from '../../../../shared/db-types'
+import type {
+  ColumnForeignKeyRef,
+  ConnectionSummary,
+  SqlExecutionResult,
+  TableFilter,
+  TableSearchHit,
+} from '../../../../shared/db-types'
 import { pointerApi } from '../../../shared/api/pointer-api'
 import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
 import { buildCsvContent } from '../../../shared/lib/csv'
@@ -52,6 +58,7 @@ type UseWorkspaceActionsResult = {
   openRenameSqlTabDialog: (tab: SqlTab) => void
   handleRenameSqlTab: () => void
   openTableTab: (hit: TableSearchHit, initialLoad?: TableReloadOverrides) => Promise<void>
+  navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
   closeTableTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
@@ -129,6 +136,15 @@ function buildTableFilters(tab: TableTab): TableFilter[] {
       value: tab.filterValue,
     },
   ]
+}
+
+function resolveForeignKeyFilterValue(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const stringified = String(value).trim()
+  return stringified ? stringified : null
 }
 
 export function useWorkspaceActions({
@@ -334,6 +350,43 @@ export function useWorkspaceActions({
     ])
 
     await initializeTableTab(tabId, hit, initialLoad)
+  }
+
+  async function navigateToForeignKey(
+    sourceTab: TableTab,
+    foreignKey: ColumnForeignKeyRef | undefined,
+    value: unknown,
+  ): Promise<void> {
+    const filterValue = resolveForeignKeyFilterValue(value)
+    if (!filterValue) {
+      return
+    }
+
+    if (
+      !foreignKey ||
+      !foreignKey.column?.trim() ||
+      !foreignKey.table?.schema?.trim() ||
+      !foreignKey.table?.name?.trim() ||
+      !foreignKey.table?.fqName?.trim()
+    ) {
+      toast.error('Referência de chave estrangeira inválida.')
+      return
+    }
+
+    await openTableTab(
+      {
+        connectionId: sourceTab.connectionId,
+        connectionName: sourceTab.connectionName,
+        engine: sourceTab.engine,
+        table: foreignKey.table,
+      },
+      {
+        page: 0,
+        filterColumn: foreignKey.column.trim(),
+        filterOperator: 'eq',
+        filterValue,
+      },
+    )
   }
 
   async function reloadTableTab(tabId: string, overrides?: TableReloadOverrides): Promise<void> {
@@ -934,6 +987,7 @@ export function useWorkspaceActions({
     openRenameSqlTabDialog,
     handleRenameSqlTab,
     openTableTab,
+    navigateToForeignKey,
     reloadTableTab,
     closeTableTab,
     closeSqlTab,

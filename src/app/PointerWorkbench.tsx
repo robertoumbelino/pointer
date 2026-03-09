@@ -417,6 +417,7 @@ function App(): JSX.Element {
     openRenameSqlTabDialog,
     handleRenameSqlTab,
     openTableTab,
+    navigateToForeignKey,
     reloadTableTab,
     closeTableTab,
     closeSqlTab,
@@ -627,6 +628,7 @@ function App(): JSX.Element {
           sqlCursorByTabRef={sqlCursorByTabRef}
           setResizingSqlTabId={setResizingSqlTabId}
           reloadTableTab={reloadTableTab}
+          navigateToForeignKey={navigateToForeignKey}
           handleToggleInsertDraftRow={handleToggleInsertDraftRow}
           selectedRow={selectedRow}
           handleDeleteRow={handleDeleteRow}

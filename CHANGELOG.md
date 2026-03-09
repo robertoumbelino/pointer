@@ -2,6 +2,16 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.5.0 - 2026-03-09
+
+### ✨ Novidades
+- Navegação por relacionamento na visualização de tabela: colunas com chave estrangeira agora exibem um ícone de atalho em cada célula para abrir a tabela relacionada já filtrada pelo ID de referência.
+- O fluxo de abertura reaproveita abas existentes da tabela de destino quando possível, aplicando filtro `equal` automaticamente para facilitar inspeção de registro relacionado.
+
+### ♻️ Melhorias
+- O schema de tabela agora inclui metadados de chave estrangeira em Postgres e SQLite, ampliando contexto para recursos de navegação sem alterar o contrato público de IPC.
+- Células de FK com valor vazio mantêm o atalho desabilitado para evitar navegação inválida e preservar o comportamento de edição/seleção atual.
+
 ## v0.4.9 - 2026-03-09
 
 ### ✨ Novidades

@@ -1,7 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Link2, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { TableFilterOperator, TableSort } from '../../../../shared/db-types'
+import type { ColumnForeignKeyRef, TableFilterOperator, TableSort } from '../../../../shared/db-types'
 import type { EditingCell, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'
@@ -110,9 +110,18 @@ function formatJsonPreviewValue(value: unknown): string {
   }
 }
 
+function hasForeignKeyCellValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false
+  }
+
+  return String(value).trim().length > 0
+}
+
 type TableWorkspacePanelProps = {
   activeTableTab: TableTab
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
+  navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   closeTableTab: (tabId: string) => void
   handleToggleInsertDraftRow: () => void
   selectedRow: Record<string, unknown> | null
@@ -135,6 +144,7 @@ type TableWorkspacePanelProps = {
 export function TableWorkspacePanel({
   activeTableTab,
   reloadTableTab,
+  navigateToForeignKey,
   closeTableTab,
   handleToggleInsertDraftRow,
   selectedRow,
@@ -476,11 +486,13 @@ export function TableWorkspacePanel({
                             editingCell?.tabId === activeTableTab.id &&
                             editingCell.rowIndex === rowIndex &&
                             editingCell.column === column.name
+                          const cellValue = row[column.name]
                           const isJsonColumn = isJsonLikeDataType(column.dataType)
                           const enumValues = column.enumValues ?? []
                           const hasEnumColumnValues = enumValues.length > 0
                           const canEditCell =
                             !column.isPrimaryKey && activeTableTab.schema?.supportsRowEdit && !isPendingDelete
+                          const canNavigateForeignKey = Boolean(column.foreignKey) && hasForeignKeyCellValue(cellValue)
 
                           return (
                             <td
@@ -585,9 +597,40 @@ export function TableWorkspacePanel({
                                   />
                                 )
                               ) : (
-                                <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
-                                  {isJsonColumn ? formatJsonPreviewValue(row[column.name]) : formatCell(row[column.name])}
-                                </span>
+                                <div className='flex items-center gap-1.5'>
+                                  <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
+                                    {isJsonColumn ? formatJsonPreviewValue(cellValue) : formatCell(cellValue)}
+                                  </span>
+                                  {column.foreignKey && (
+                                    <button
+                                      type='button'
+                                      onClick={(event) => {
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        if (!canNavigateForeignKey) {
+                                          return
+                                        }
+
+                                        void navigateToForeignKey(activeTableTab, column.foreignKey, cellValue)
+                                      }}
+                                      disabled={!canNavigateForeignKey}
+                                      className={cn(
+                                        'rounded p-0.5 text-slate-400 transition-colors',
+                                        canNavigateForeignKey
+                                          ? 'hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/60'
+                                          : 'cursor-not-allowed opacity-45',
+                                      )}
+                                      title={
+                                        canNavigateForeignKey
+                                          ? `Abrir ${column.foreignKey.table.fqName} filtrando ${column.foreignKey.column}`
+                                          : 'Valor vazio para navegação'
+                                      }
+                                      aria-label={`Abrir registro relacionado em ${column.foreignKey.table.fqName}`}
+                                    >
+                                      <Link2 className='h-3.5 w-3.5' />
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           )
