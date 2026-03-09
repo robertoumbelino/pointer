@@ -11,6 +11,7 @@ type UseEnvironmentSwitcherActionsParams = {
   isEnvironmentCommandOpen: boolean
   setIsEnvironmentCommandOpen: Dispatch<SetStateAction<boolean>>
   setSelectedEnvironmentId: Dispatch<SetStateAction<string>>
+  onEnterWorkspace: () => void
 }
 
 type UseEnvironmentSwitcherActionsResult = {
@@ -28,6 +29,7 @@ export function useEnvironmentSwitcherActions({
   isEnvironmentCommandOpen,
   setIsEnvironmentCommandOpen,
   setSelectedEnvironmentId,
+  onEnterWorkspace,
 }: UseEnvironmentSwitcherActionsParams): UseEnvironmentSwitcherActionsResult {
   const environmentCommandResults = useMemo(
     () =>
@@ -62,6 +64,7 @@ export function useEnvironmentSwitcherActions({
 
   function selectEnvironmentFromCommand(environmentId: string): void {
     setSelectedEnvironmentId(environmentId)
+    onEnterWorkspace()
     setIsEnvironmentCommandOpen(false)
     setEnvironmentCommandQuery('')
     setEnvironmentCommandIndex(0)

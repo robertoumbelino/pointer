@@ -1,11 +1,20 @@
-import { Command, Database, Plus, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Command, Database, Plus, ShieldCheck } from 'lucide-react'
+import type { EnvironmentSummary } from '../../../../shared/db-types'
 import { Button } from '../../../components/ui/button'
 
 type WorkspaceEmptyStateProps = {
   onCreateEnvironment: () => void
+  environments?: EnvironmentSummary[]
+  selectedEnvironmentId?: string
+  onEnterEnvironment?: (environmentId: string) => void
 }
 
-export function WorkspaceEmptyState({ onCreateEnvironment }: WorkspaceEmptyStateProps): JSX.Element {
+export function WorkspaceEmptyState({
+  onCreateEnvironment,
+  environments = [],
+  selectedEnvironmentId = '',
+  onEnterEnvironment,
+}: WorkspaceEmptyStateProps): JSX.Element {
   return (
     <div className='onboarding-stage relative flex h-full flex-1 items-center justify-center overflow-auto px-4 py-6 sm:px-6 lg:p-8'>
       <section className='onboarding-hero relative w-full max-w-[1320px] overflow-hidden p-4 sm:p-6 lg:p-8'>
@@ -55,37 +64,77 @@ export function WorkspaceEmptyState({ onCreateEnvironment }: WorkspaceEmptyState
               </p>
             </div>
 
-            <div className='onboarding-quickstart mt-5'>
-              <p className='onboarding-quickstart-title'>Primeiro minuto no Pointer</p>
-              <div className='onboarding-quickstart-steps'>
-                <div className='onboarding-quickstart-step'>
-                  <span className='onboarding-quickstart-index'>1</span>
-                  <div>
-                    <p className='onboarding-quickstart-label'>Crie seu ambiente</p>
-                    <p className='onboarding-quickstart-text'>Local, staging ou produção.</p>
+            {environments.length === 0 ? (
+              <div className='onboarding-quickstart mt-5'>
+                <p className='onboarding-quickstart-title'>Primeiro minuto no Pointer</p>
+                <div className='onboarding-quickstart-steps'>
+                  <div className='onboarding-quickstart-step'>
+                    <span className='onboarding-quickstart-index'>1</span>
+                    <div>
+                      <p className='onboarding-quickstart-label'>Crie seu ambiente</p>
+                      <p className='onboarding-quickstart-text'>Local, staging ou produção.</p>
+                    </div>
+                  </div>
+                  <div className='onboarding-quickstart-step'>
+                    <span className='onboarding-quickstart-index'>2</span>
+                    <div>
+                      <p className='onboarding-quickstart-label'>Adicione conexões</p>
+                      <p className='onboarding-quickstart-text'>PostgreSQL, ClickHouse e SQLite.</p>
+                    </div>
+                  </div>
+                  <div className='onboarding-quickstart-step'>
+                    <span className='onboarding-quickstart-index'>3</span>
+                    <div>
+                      <p className='onboarding-quickstart-label'>Explore tabelas rápido</p>
+                      <p className='onboarding-quickstart-text'>Use Cmd+K e abra suas tabs.</p>
+                    </div>
                   </div>
                 </div>
-                <div className='onboarding-quickstart-step'>
-                  <span className='onboarding-quickstart-index'>2</span>
-                  <div>
-                    <p className='onboarding-quickstart-label'>Adicione conexões</p>
-                    <p className='onboarding-quickstart-text'>PostgreSQL, ClickHouse e SQLite.</p>
-                  </div>
-                </div>
-                <div className='onboarding-quickstart-step'>
-                  <span className='onboarding-quickstart-index'>3</span>
-                  <div>
-                    <p className='onboarding-quickstart-label'>Explore tabelas rápido</p>
-                    <p className='onboarding-quickstart-text'>Use Cmd+K e abra suas tabs.</p>
-                  </div>
+                <div className='onboarding-shortcuts'>
+                  <span className='onboarding-shortcut-pill'>Cmd+K Buscar tabelas</span>
+                  <span className='onboarding-shortcut-pill'>Cmd+R Trocar ambiente</span>
+                  <span className='onboarding-shortcut-pill'>Cmd+T Nova aba SQL</span>
                 </div>
               </div>
-              <div className='onboarding-shortcuts'>
-                <span className='onboarding-shortcut-pill'>Cmd+K Buscar tabelas</span>
-                <span className='onboarding-shortcut-pill'>Cmd+R Trocar ambiente</span>
-                <span className='onboarding-shortcut-pill'>Cmd+T Nova aba SQL</span>
+            ) : null}
+
+            {environments.length > 0 && onEnterEnvironment ? (
+              <div className='onboarding-quickstart mt-3'>
+                <p className='onboarding-quickstart-title'>Ambientes configurados</p>
+                <div className='mt-2 space-y-2'>
+                  {environments.map((environment) => (
+                    <div
+                      key={environment.id}
+                      className='pointer-card-soft flex items-center justify-between gap-3 rounded-lg px-3 py-2'
+                    >
+                      <div className='min-w-0'>
+                        <div className='flex items-center gap-2'>
+                          <span
+                            className='h-2.5 w-2.5 shrink-0 rounded-full'
+                            style={{ backgroundColor: environment.color }}
+                          />
+                          <p className='truncate text-[12px] font-medium text-slate-100'>{environment.name}</p>
+                        </div>
+                        <p className='mt-0.5 text-[10px] text-slate-500'>
+                          {environment.id === selectedEnvironmentId
+                            ? 'Último ambiente utilizado'
+                            : 'Ambiente disponível'}
+                        </p>
+                      </div>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='h-7 gap-1 text-[11px]'
+                        onClick={() => onEnterEnvironment(environment.id)}
+                      >
+                        Entrar
+                        <ArrowRight className='h-3.5 w-3.5' />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           <div className='pointer-card-soft relative min-h-[260px] overflow-hidden p-4 sm:min-h-[320px] lg:min-h-0 lg:p-6'>

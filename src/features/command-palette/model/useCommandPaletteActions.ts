@@ -17,7 +17,7 @@ type CommandGroup = {
   items: Array<{ hit: TableSearchHit; displayIndex: number }>
 }
 
-export type CommandActionId = 'open-changelog' | 'check-app-update'
+export type CommandActionId = 'open-changelog' | 'check-app-update' | 'exit-workspace'
 
 export type CommandActionItem = {
   id: CommandActionId
@@ -61,6 +61,7 @@ type UseCommandPaletteActionsParams = {
   openTableTab: (hit: TableSearchHit, initialLoad?: TableReloadOverrides) => Promise<void>
   openChangelog: () => void
   checkForAppUpdate: (showToastWhenCurrent?: boolean) => Promise<void>
+  onExitWorkspace: () => void
 }
 
 type UseCommandPaletteActionsResult = {
@@ -97,6 +98,7 @@ export function useCommandPaletteActions({
   openTableTab,
   openChangelog,
   checkForAppUpdate,
+  onExitWorkspace,
 }: UseCommandPaletteActionsParams): UseCommandPaletteActionsResult {
   const commandActions = useMemo<CommandActionItem[]>(() => {
     const query = commandQuery.trim().toLowerCase()
@@ -112,6 +114,12 @@ export function useCommandPaletteActions({
         label: 'Checar atualizações',
         description: 'Buscar nova versão disponível do app',
         keywords: ['atualizar', 'atualizacao', 'atualização', 'update', 'upgrade', 'nova versao', 'nova versão'],
+      },
+      {
+        id: 'exit-workspace',
+        label: 'Sair para Home',
+        description: 'Voltar para a home de ambientes',
+        keywords: ['sair', 'home', 'voltar', 'ambientes'],
       },
     ]
 
@@ -255,6 +263,11 @@ export function useCommandPaletteActions({
     try {
       if (actionId === 'open-changelog') {
         openChangelog()
+        return
+      }
+
+      if (actionId === 'exit-workspace') {
+        onExitWorkspace()
         return
       }
 

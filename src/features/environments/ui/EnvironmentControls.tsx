@@ -1,10 +1,17 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Ellipsis, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { EnvironmentSummary } from '../../../../shared/db-types'
 import { DEFAULT_ENVIRONMENT_COLOR, ENVIRONMENT_COLOR_PRESETS, SIDEBAR_SECTION_LABEL_CLASS } from '../../../shared/constants/app'
 import { normalizeHexColor } from '../../../shared/lib/workspace-utils'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../../components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -12,10 +19,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
 import { cn } from '../../../lib/utils'
+import { EnvironmentCreateDialog } from './EnvironmentCreateDialog'
 
 type EnvironmentControlsProps = {
   environments: EnvironmentSummary[]
@@ -40,6 +47,7 @@ type EnvironmentControlsProps = {
   openEditEnvironmentDialog: () => void
   handleUpdateEnvironment: () => Promise<void>
   handleDeleteEnvironment: () => Promise<void>
+  onExitWorkspace: () => void
 }
 
 export function EnvironmentControls({
@@ -65,6 +73,7 @@ export function EnvironmentControls({
   openEditEnvironmentDialog,
   handleUpdateEnvironment,
   handleDeleteEnvironment,
+  onExitWorkspace,
 }: EnvironmentControlsProps): JSX.Element {
   return (
     <>
@@ -96,70 +105,50 @@ export function EnvironmentControls({
           ))}
         </select>
 
-        <Dialog
-          open={isCreateEnvironmentOpen}
-          onOpenChange={(open) => {
-            setIsCreateEnvironmentOpen(open)
-            if (!open) {
-              setEnvironmentNameDraft('')
-              setEnvironmentColorDraft(DEFAULT_ENVIRONMENT_COLOR)
-            }
-          }}
-        >
-          <DialogTrigger asChild>
+        <EnvironmentCreateDialog
+          isCreateEnvironmentOpen={isCreateEnvironmentOpen}
+          setIsCreateEnvironmentOpen={setIsCreateEnvironmentOpen}
+          environmentNameDraft={environmentNameDraft}
+          setEnvironmentNameDraft={setEnvironmentNameDraft}
+          environmentColorDraft={environmentColorDraft}
+          setEnvironmentColorDraft={setEnvironmentColorDraft}
+          isEnvironmentSaving={isEnvironmentSaving}
+          handleCreateEnvironment={handleCreateEnvironment}
+          trigger={
             <Button size='icon' className='h-8 w-8' variant='ghost'>
               <Plus className='h-3.5 w-3.5' />
             </Button>
-          </DialogTrigger>
-          <DialogContent className='max-w-[510px]'>
-            <DialogHeader className='space-y-2'>
-              <DialogTitle>Novo ambiente</DialogTitle>
-              <DialogDescription>Exemplo: Local, Staging, Produção.</DialogDescription>
-            </DialogHeader>
-            <div className='mt-4 space-y-4'>
-              <Input
-                placeholder='Nome do ambiente'
-                value={environmentNameDraft}
-                onChange={(event) => setEnvironmentNameDraft(event.target.value)}
-              />
-              <div className='space-y-2'>
-                <label className='block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500'>
-                  Cor do ambiente
-                </label>
-                <div className='flex items-center gap-2'>
-                  {ENVIRONMENT_COLOR_PRESETS.map((color) => (
-                    <button
-                      key={color}
-                      type='button'
-                      className={cn(
-                        'h-6 w-6 rounded-full border transition',
-                        normalizeHexColor(environmentColorDraft) === color
-                          ? 'scale-105 border-slate-100 shadow-[0_0_0_2px_rgba(15,23,42,0.9)]'
-                          : 'border-slate-700 hover:border-slate-500',
-                      )}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setEnvironmentColorDraft(color)}
-                    />
-                  ))}
-                  <Input
-                    type='color'
-                    className='h-8 w-10 cursor-pointer border-slate-700 bg-slate-900 p-1'
-                    value={normalizeHexColor(environmentColorDraft)}
-                    onChange={(event) => setEnvironmentColorDraft(event.target.value)}
-                  />
-                </div>
-              </div>
-              <DialogFooter className='pt-1'>
-                <Button variant='secondary' onClick={() => setIsCreateEnvironmentOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={() => void handleCreateEnvironment()} disabled={isEnvironmentSaving}>
-                  {isEnvironmentSaving ? 'Criando...' : 'Criar'}
-                </Button>
-              </DialogFooter>
-            </div>
-          </DialogContent>
-        </Dialog>
+          }
+        />
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size='icon'
+              className='h-8 w-8'
+              variant='ghost'
+              disabled={!selectedEnvironmentId}
+              title='Mais ações do ambiente'
+            >
+              <Ellipsis className='h-3.5 w-3.5' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' className='w-44'>
+            <DropdownMenuItem onSelect={openEditEnvironmentDialog}>
+              <Pencil className='h-3.5 w-3.5' />
+              Editar ambiente
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void handleDeleteEnvironment()}>
+              <Trash2 className='h-3.5 w-3.5' />
+              Excluir ambiente
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onExitWorkspace}>
+              <LogOut className='h-3.5 w-3.5' />
+              Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Dialog
           open={isEditEnvironmentOpen}
@@ -171,17 +160,6 @@ export function EnvironmentControls({
             }
           }}
         >
-          <DialogTrigger asChild>
-            <Button
-              size='icon'
-              className='h-8 w-8'
-              variant='ghost'
-              onClick={openEditEnvironmentDialog}
-              disabled={!selectedEnvironmentId}
-            >
-              <Pencil className='h-3.5 w-3.5' />
-            </Button>
-          </DialogTrigger>
           <DialogContent className='max-w-[510px]'>
             <DialogHeader className='space-y-2'>
               <DialogTitle>Editar ambiente</DialogTitle>
@@ -231,16 +209,6 @@ export function EnvironmentControls({
             </div>
           </DialogContent>
         </Dialog>
-
-        <Button
-          size='icon'
-          className='h-8 w-8'
-          variant='ghost'
-          onClick={() => void handleDeleteEnvironment()}
-          disabled={!selectedEnvironmentId}
-        >
-          <Trash2 className='h-3.5 w-3.5' />
-        </Button>
       </div>
     </>
   )

@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react'
 import type { TableTab, WorkTab } from '../../../entities/workspace/types'
 
 type UseWorkspaceShortcutsParams = {
+  isWorkspaceActive: boolean
   activeTabId: string
   setIsCommandOpen: (open: boolean) => void
   setIsEnvironmentCommandOpen: (open: boolean) => void
@@ -19,6 +20,7 @@ type UseWorkspaceShortcutsParams = {
 }
 
 export function useWorkspaceShortcuts({
+  isWorkspaceActive,
   activeTabId,
   setIsCommandOpen,
   setIsEnvironmentCommandOpen,
@@ -35,6 +37,16 @@ export function useWorkspaceShortcuts({
 }: UseWorkspaceShortcutsParams): void {
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
+        event.preventDefault()
+        setIsEnvironmentCommandOpen(true)
+        return
+      }
+
+      if (!isWorkspaceActive) {
+        return
+      }
+
       const isF5 = (event.key === 'F5' || event.code === 'F5') && !event.metaKey && !event.ctrlKey && !event.altKey
       if (isF5) {
         event.preventDefault()
@@ -105,12 +117,6 @@ export function useWorkspaceShortcuts({
         return
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
-        event.preventDefault()
-        setIsEnvironmentCommandOpen(true)
-        return
-      }
-
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 't') {
         event.preventDefault()
         openNewSqlTabRef.current?.()
@@ -144,6 +150,7 @@ export function useWorkspaceShortcuts({
     closeActiveTabRef,
     commitInlineEditRef,
     getTableTab,
+    isWorkspaceActive,
     openNewSqlTabRef,
     runSqlRef,
     saveActiveTableChangesRef,

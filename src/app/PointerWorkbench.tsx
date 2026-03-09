@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { sql } from '@codemirror/lang-sql'
 import {
   autocompletion,
@@ -16,6 +16,7 @@ import { TableCommandDialog } from '../features/command-palette/ui/TableCommandD
 import { useConnections } from '../features/connections/model/useConnections'
 import { useEnvironments } from '../features/environments/model/useEnvironments'
 import { useEnvironmentSwitcherActions } from '../features/environments/model/useEnvironmentSwitcherActions'
+import { EnvironmentCreateDialog } from '../features/environments/ui/EnvironmentCreateDialog'
 import { EnvironmentSidebar } from '../features/environments/ui/EnvironmentSidebar'
 import { EnvironmentSwitcherDialog } from '../features/environments/ui/EnvironmentSwitcherDialog'
 import { useWorkspace } from '../features/workspace/model/useWorkspace'
@@ -26,6 +27,7 @@ import { SqlAutoConnectionResolveDialog } from '../features/workspace/ui/SqlAuto
 import { SqlRiskConfirmDialog } from '../features/workspace/ui/SqlRiskConfirmDialog'
 import { SqlTabRenameDialog } from '../features/workspace/ui/SqlTabRenameDialog'
 import { TableContextMenu } from '../features/workspace/ui/TableContextMenu'
+import { WorkspaceEmptyState } from '../features/workspace/ui/WorkspaceEmptyState'
 import { WorkspaceMain } from '../features/workspace/ui/WorkspaceMain'
 import { pointerApi } from '../shared/api/pointer-api'
 import { DEFAULT_ENVIRONMENT_COLOR } from '../shared/constants/app'
@@ -189,6 +191,9 @@ function App(): JSX.Element {
     checkForAppUpdate,
     installLatestAppUpdate,
   } = useAppUpdate()
+
+  const [currentView, setCurrentView] = useState<'home' | 'workspace'>('home')
+  const [hasInitialEnvironmentLoad, setHasInitialEnvironmentLoad] = useState(false)
 
   const commandColumnInputRef = useRef<HTMLSelectElement | null>(null)
   const commandValueInputRef = useRef<HTMLInputElement | null>(null)
@@ -399,8 +404,33 @@ function App(): JSX.Element {
   })
 
   useEffect(() => {
-    void loadEnvironmentsWithSelection()
+    let isMounted = true
+
+    void (async () => {
+      await loadEnvironmentsWithSelection()
+      if (isMounted) {
+        setHasInitialEnvironmentLoad(true)
+      }
+    })()
+
+    return () => {
+      isMounted = false
+    }
   }, [loadEnvironmentsWithSelection])
+
+  useEffect(() => {
+    if (!hasInitialEnvironmentLoad) {
+      return
+    }
+
+    setCurrentView(selectedEnvironmentId ? 'workspace' : 'home')
+  }, [hasInitialEnvironmentLoad, selectedEnvironmentId])
+
+  useEffect(() => {
+    if (!selectedEnvironmentId) {
+      setCurrentView('home')
+    }
+  }, [selectedEnvironmentId])
 
   useEffect(() => {
     void checkForAppUpdate()
@@ -505,6 +535,7 @@ function App(): JSX.Element {
     openTableTab,
     openChangelog,
     checkForAppUpdate,
+    onExitWorkspace: handleExitWorkspace,
   })
 
   const {
@@ -520,7 +551,19 @@ function App(): JSX.Element {
     isEnvironmentCommandOpen,
     setIsEnvironmentCommandOpen,
     setSelectedEnvironmentId,
+    onEnterWorkspace: () => setCurrentView('workspace'),
   })
+
+  function handleEnterEnvironment(environmentId: string): void {
+    setSelectedEnvironmentId(environmentId)
+    setCurrentView('workspace')
+  }
+
+  function handleExitWorkspace(): void {
+    setIsCommandOpen(false)
+    setTableContextMenu(null)
+    setCurrentView('home')
+  }
 
   runSqlRef.current = runSql
   saveActiveTableChangesRef.current = saveActiveTableChanges
@@ -530,6 +573,7 @@ function App(): JSX.Element {
   closeActiveTabRef.current = closeActiveTab
 
   useWorkspaceShortcuts({
+    isWorkspaceActive: currentView === 'workspace',
     activeTabId,
     setIsCommandOpen,
     setIsEnvironmentCommandOpen,
@@ -559,106 +603,130 @@ function App(): JSX.Element {
         onInstallUpdate={installLatestAppUpdate}
       />
 
-      <div className='no-drag flex min-h-0 flex-1 gap-3 overflow-hidden p-3'>
-        <EnvironmentSidebar
-          environments={environments}
-          connections={connections}
-          sidebarBackgroundStyle={sidebarBackgroundStyle}
-          selectedEnvironmentId={selectedEnvironmentId}
-          setSelectedEnvironmentId={setSelectedEnvironmentId}
-          isCreateEnvironmentOpen={isCreateEnvironmentOpen}
-          setIsCreateEnvironmentOpen={setIsCreateEnvironmentOpen}
-          environmentNameDraft={environmentNameDraft}
-          setEnvironmentNameDraft={setEnvironmentNameDraft}
-          environmentColorDraft={environmentColorDraft}
-          setEnvironmentColorDraft={setEnvironmentColorDraft}
-          isEnvironmentSaving={isEnvironmentSaving}
-          isEditEnvironmentOpen={isEditEnvironmentOpen}
-          setIsEditEnvironmentOpen={setIsEditEnvironmentOpen}
-          environmentEditNameDraft={environmentEditNameDraft}
-          setEnvironmentEditNameDraft={setEnvironmentEditNameDraft}
-          environmentEditColorDraft={environmentEditColorDraft}
-          setEnvironmentEditColorDraft={setEnvironmentEditColorDraft}
-          isEnvironmentUpdating={isEnvironmentUpdating}
-          handleCreateEnvironment={handleCreateEnvironmentFlow}
-          openEditEnvironmentDialog={openEditEnvironmentDialog}
-          handleUpdateEnvironment={handleUpdateEnvironmentFlow}
-          handleDeleteEnvironment={handleDeleteEnvironmentFlow}
-          openEditConnectionDialog={openEditConnectionDialog}
-          handleDeleteConnection={handleDeleteConnectionFlow}
-          isCreateConnectionOpen={isCreateConnectionOpen}
-          setIsCreateConnectionOpen={setIsCreateConnectionOpen}
-          connectionDraft={connectionDraft}
-          setConnectionDraft={setConnectionDraft}
-          isConnectionSaving={isConnectionSaving}
-          isCreateConnectionTesting={isCreateConnectionTesting}
-          setIsCreateConnectionTesting={setIsCreateConnectionTesting}
-          isEditConnectionOpen={isEditConnectionOpen}
-          setIsEditConnectionOpen={setIsEditConnectionOpen}
-          setEditingConnectionId={setEditingConnectionId}
-          connectionEditDraft={connectionEditDraft}
-          setConnectionEditDraft={setConnectionEditDraft}
-          isConnectionUpdating={isConnectionUpdating}
-          isEditConnectionTesting={isEditConnectionTesting}
-          setIsEditConnectionTesting={setIsEditConnectionTesting}
-          handleTestCreateConnection={handleTestCreateConnectionFlow}
-          handleCreateConnection={handleCreateConnectionFlow}
-          handlePickSqliteFile={handlePickSqliteFile}
-          handleTestEditConnection={handleTestEditConnectionFlow}
-          handleUpdateConnection={handleUpdateConnectionFlow}
-          selectedSchema={selectedSchema}
-          setSelectedSchema={setSelectedSchema}
-          schemaOptions={schemaOptions}
-          shortcutLabel={shortcutLabel}
-          setIsCommandOpen={setIsCommandOpen}
-          filteredSidebarTables={filteredSidebarTables}
-          activeTabId={activeTabId}
-          setTableContextMenu={setTableContextMenu}
-          openTableTab={openTableTab}
-        />
+      {currentView === 'home' ? (
+        <>
+          <WorkspaceEmptyState
+            onCreateEnvironment={() => {
+              setIsCreateEnvironmentOpen(true)
+            }}
+            environments={environments}
+            selectedEnvironmentId={selectedEnvironmentId}
+            onEnterEnvironment={handleEnterEnvironment}
+          />
+          <EnvironmentCreateDialog
+            isCreateEnvironmentOpen={isCreateEnvironmentOpen}
+            setIsCreateEnvironmentOpen={setIsCreateEnvironmentOpen}
+            environmentNameDraft={environmentNameDraft}
+            setEnvironmentNameDraft={setEnvironmentNameDraft}
+            environmentColorDraft={environmentColorDraft}
+            setEnvironmentColorDraft={setEnvironmentColorDraft}
+            isEnvironmentSaving={isEnvironmentSaving}
+            handleCreateEnvironment={handleCreateEnvironmentFlow}
+          />
+        </>
+      ) : (
+        <div className='no-drag flex min-h-0 flex-1 gap-3 overflow-hidden p-3'>
+          <EnvironmentSidebar
+            environments={environments}
+            connections={connections}
+            sidebarBackgroundStyle={sidebarBackgroundStyle}
+            selectedEnvironmentId={selectedEnvironmentId}
+            setSelectedEnvironmentId={setSelectedEnvironmentId}
+            isCreateEnvironmentOpen={isCreateEnvironmentOpen}
+            setIsCreateEnvironmentOpen={setIsCreateEnvironmentOpen}
+            environmentNameDraft={environmentNameDraft}
+            setEnvironmentNameDraft={setEnvironmentNameDraft}
+            environmentColorDraft={environmentColorDraft}
+            setEnvironmentColorDraft={setEnvironmentColorDraft}
+            isEnvironmentSaving={isEnvironmentSaving}
+            isEditEnvironmentOpen={isEditEnvironmentOpen}
+            setIsEditEnvironmentOpen={setIsEditEnvironmentOpen}
+            environmentEditNameDraft={environmentEditNameDraft}
+            setEnvironmentEditNameDraft={setEnvironmentEditNameDraft}
+            environmentEditColorDraft={environmentEditColorDraft}
+            setEnvironmentEditColorDraft={setEnvironmentEditColorDraft}
+            isEnvironmentUpdating={isEnvironmentUpdating}
+            handleCreateEnvironment={handleCreateEnvironmentFlow}
+            openEditEnvironmentDialog={openEditEnvironmentDialog}
+            handleUpdateEnvironment={handleUpdateEnvironmentFlow}
+            handleDeleteEnvironment={handleDeleteEnvironmentFlow}
+            onExitWorkspace={handleExitWorkspace}
+            openEditConnectionDialog={openEditConnectionDialog}
+            handleDeleteConnection={handleDeleteConnectionFlow}
+            isCreateConnectionOpen={isCreateConnectionOpen}
+            setIsCreateConnectionOpen={setIsCreateConnectionOpen}
+            connectionDraft={connectionDraft}
+            setConnectionDraft={setConnectionDraft}
+            isConnectionSaving={isConnectionSaving}
+            isCreateConnectionTesting={isCreateConnectionTesting}
+            setIsCreateConnectionTesting={setIsCreateConnectionTesting}
+            isEditConnectionOpen={isEditConnectionOpen}
+            setIsEditConnectionOpen={setIsEditConnectionOpen}
+            setEditingConnectionId={setEditingConnectionId}
+            connectionEditDraft={connectionEditDraft}
+            setConnectionEditDraft={setConnectionEditDraft}
+            isConnectionUpdating={isConnectionUpdating}
+            isEditConnectionTesting={isEditConnectionTesting}
+            setIsEditConnectionTesting={setIsEditConnectionTesting}
+            handleTestCreateConnection={handleTestCreateConnectionFlow}
+            handleCreateConnection={handleCreateConnectionFlow}
+            handlePickSqliteFile={handlePickSqliteFile}
+            handleTestEditConnection={handleTestEditConnectionFlow}
+            handleUpdateConnection={handleUpdateConnectionFlow}
+            selectedSchema={selectedSchema}
+            setSelectedSchema={setSelectedSchema}
+            schemaOptions={schemaOptions}
+            shortcutLabel={shortcutLabel}
+            setIsCommandOpen={setIsCommandOpen}
+            filteredSidebarTables={filteredSidebarTables}
+            activeTabId={activeTabId}
+            setTableContextMenu={setTableContextMenu}
+            openTableTab={openTableTab}
+          />
 
-        <WorkspaceMain
-          environments={environments}
-          setIsCreateEnvironmentOpen={setIsCreateEnvironmentOpen}
-          workTabs={workTabs}
-          activeTabId={activeTabId}
-          setActiveTabId={setActiveTabId}
-          openRenameSqlTabDialog={openRenameSqlTabDialog}
-          closeTableTab={closeTableTab}
-          closeSqlTab={closeSqlTab}
-          activeTableTab={activeTableTab}
-          saveActiveTableChanges={saveActiveTableChanges}
-          isSavingTableChanges={isSavingTableChanges}
-          activeSqlTab={activeSqlTab}
-          updateSqlTab={updateSqlTab}
-          connections={connections}
-          runSql={() => runSql()}
-          cancelSqlExecution={() => cancelSqlExecution()}
-          sqlSplitContainerRef={sqlSplitContainerRef}
-          sqlEditorExtensions={sqlEditorExtensions}
-          sqlCursorByTabRef={sqlCursorByTabRef}
-          setResizingSqlTabId={setResizingSqlTabId}
-          reloadTableTab={reloadTableTab}
-          navigateToForeignKey={navigateToForeignKey}
-          handleToggleInsertDraftRow={handleToggleInsertDraftRow}
-          selectedRow={selectedRow}
-          handleDeleteRow={handleDeleteRow}
-          updateTableTab={updateTableTab}
-          beginInlineEdit={beginInlineEdit}
-          editingCell={editingCell}
-          setEditingCell={setEditingCell}
-          commitInlineEdit={commitInlineEdit}
-          cancelInlineEdit={cancelInlineEdit}
-          updateInsertDraftValue={updateInsertDraftValue}
-          formatDraftInputValue={formatDraftInputValue}
-          formatCell={formatCell}
-          formatTableLabel={formatTableLabel}
-          engineLabel={engineLabel}
-          exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
-          exportTableCurrentPageCsv={exportTableCurrentPageCsv}
-          exportTableAllPagesCsv={exportTableAllPagesCsv}
-        />
-      </div>
+          <WorkspaceMain
+            environments={environments}
+            setIsCreateEnvironmentOpen={setIsCreateEnvironmentOpen}
+            workTabs={workTabs}
+            activeTabId={activeTabId}
+            setActiveTabId={setActiveTabId}
+            openRenameSqlTabDialog={openRenameSqlTabDialog}
+            closeTableTab={closeTableTab}
+            closeSqlTab={closeSqlTab}
+            activeTableTab={activeTableTab}
+            saveActiveTableChanges={saveActiveTableChanges}
+            isSavingTableChanges={isSavingTableChanges}
+            activeSqlTab={activeSqlTab}
+            updateSqlTab={updateSqlTab}
+            connections={connections}
+            runSql={() => runSql()}
+            cancelSqlExecution={() => cancelSqlExecution()}
+            sqlSplitContainerRef={sqlSplitContainerRef}
+            sqlEditorExtensions={sqlEditorExtensions}
+            sqlCursorByTabRef={sqlCursorByTabRef}
+            setResizingSqlTabId={setResizingSqlTabId}
+            reloadTableTab={reloadTableTab}
+            navigateToForeignKey={navigateToForeignKey}
+            handleToggleInsertDraftRow={handleToggleInsertDraftRow}
+            selectedRow={selectedRow}
+            handleDeleteRow={handleDeleteRow}
+            updateTableTab={updateTableTab}
+            beginInlineEdit={beginInlineEdit}
+            editingCell={editingCell}
+            setEditingCell={setEditingCell}
+            commitInlineEdit={commitInlineEdit}
+            cancelInlineEdit={cancelInlineEdit}
+            updateInsertDraftValue={updateInsertDraftValue}
+            formatDraftInputValue={formatDraftInputValue}
+            formatCell={formatCell}
+            formatTableLabel={formatTableLabel}
+            engineLabel={engineLabel}
+            exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
+            exportTableCurrentPageCsv={exportTableCurrentPageCsv}
+            exportTableAllPagesCsv={exportTableAllPagesCsv}
+          />
+        </div>
+      )}
 
       <TableContextMenu
         tableContextMenu={tableContextMenu}
