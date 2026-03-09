@@ -174,6 +174,7 @@ export function TableWorkspacePanel({
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
   const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
   const hasLoadError = Boolean(activeTableTab.loadError)
+  const isInitialTableLoading = activeTableTab.loading && !activeTableTab.data
   const isTableActionDisabled = activeTableTab.loading || isSavingTableChanges
 
   useEffect(() => {
@@ -428,6 +429,11 @@ export function TableWorkspacePanel({
                 Fechar aba
               </Button>
             </div>
+          </div>
+        ) : isInitialTableLoading ? (
+          <div className='pointer-card-soft flex h-full items-center justify-center gap-2 text-sm text-slate-400'>
+            <RefreshCw className='h-4 w-4 animate-spin text-slate-300' />
+            <span>Carregando estrutura e dados da tabela...</span>
           </div>
         ) : (
           <>

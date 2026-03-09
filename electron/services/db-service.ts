@@ -1857,15 +1857,33 @@ export class DbService {
 
   private async readPostgresTable(connection: ConnectionSummary, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
     const pool = await this.getPostgresPool(connection)
-    const schema = await this.describePostgresTable(connection, table)
-
-    const filters = input.filters ?? []
-    const where = buildPostgresWhereClause(filters, schema.columns.map((column) => column.name))
-    const quotedTarget = `${quotePostgresIdentifier(table.schema)}.${quotePostgresIdentifier(table.name)}`
-    const sort = this.buildPostgresSort(schema.columns.map((column) => column.name), input.sort)
-
     const offset = Math.max(input.page, 0) * Math.max(input.pageSize, 1)
     const limit = Math.min(Math.max(input.pageSize, 1), 500)
+    const quotedTarget = `${quotePostgresIdentifier(table.schema)}.${quotePostgresIdentifier(table.name)}`
+
+    if (!hasTableReadModifiers(input)) {
+      const dataResult = await pool.query(
+        `
+        SELECT *
+        FROM ${quotedTarget}
+        LIMIT $1
+        OFFSET $2
+        `,
+        [limit, offset],
+      )
+
+      return {
+        rows: dataResult.rows,
+        total: -1,
+        page: input.page,
+        pageSize: limit,
+      }
+    }
+
+    const schema = await this.describePostgresTable(connection, table)
+    const filters = input.filters ?? []
+    const where = buildPostgresWhereClause(filters, schema.columns.map((column) => column.name))
+    const sort = this.buildPostgresSort(schema.columns.map((column) => column.name), input.sort)
 
     const dataResult = await pool.query(
       `
@@ -1889,16 +1907,40 @@ export class DbService {
 
   private async readClickHouseTable(connection: ConnectionSummary, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
     const client = await this.getClickHouseClient(connection)
-    const schema = await this.describeClickHouseTable(connection, table)
-
-    const filters = input.filters ?? []
-    const where = buildClickHouseWhereClause(filters, schema.columns.map((column) => column.name))
-    const sort = this.buildClickHouseSort(schema.columns.map((column) => column.name), input.sort)
-
     const offset = Math.max(input.page, 0) * Math.max(input.pageSize, 1)
     const limit = Math.min(Math.max(input.pageSize, 1), 500)
 
     const target = `${quoteClickHouseIdentifier(table.schema)}.${quoteClickHouseIdentifier(table.name)}`
+
+    if (!hasTableReadModifiers(input)) {
+      const dataResult = await client.query({
+        query: `
+          SELECT *
+          FROM ${target}
+          LIMIT {limit:UInt32}
+          OFFSET {offset:UInt32}
+        `,
+        query_params: {
+          limit,
+          offset,
+        },
+        format: 'JSONEachRow',
+      })
+
+      const rows = await dataResult.json<Record<string, unknown>>()
+
+      return {
+        rows,
+        total: -1,
+        page: input.page,
+        pageSize: limit,
+      }
+    }
+
+    const schema = await this.describeClickHouseTable(connection, table)
+    const filters = input.filters ?? []
+    const where = buildClickHouseWhereClause(filters, schema.columns.map((column) => column.name))
+    const sort = this.buildClickHouseSort(schema.columns.map((column) => column.name), input.sort)
 
     const dataResult = await client.query({
       query: `
@@ -1929,16 +1971,34 @@ export class DbService {
 
   private async readSqliteTable(connection: ConnectionSummary, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
     const db = await this.getSqliteDb(connection)
-    const schema = await this.describeSqliteTable(connection, table)
-
-    const filters = input.filters ?? []
-    const where = buildSqliteWhereClause(filters, schema.columns.map((column) => column.name))
-    const sort = this.buildSqliteSort(schema.columns.map((column) => column.name), input.sort)
-
     const offset = Math.max(input.page, 0) * Math.max(input.pageSize, 1)
     const limit = Math.min(Math.max(input.pageSize, 1), 500)
 
     const target = `${quoteSqliteIdentifier(table.schema)}.${quoteSqliteIdentifier(table.name)}`
+
+    if (!hasTableReadModifiers(input)) {
+      const dataStmt = db.prepare(
+        `
+        SELECT *
+        FROM ${target}
+        LIMIT ?
+        OFFSET ?
+        `,
+      )
+      const rows = dataStmt.all(limit, offset) as Record<string, unknown>[]
+
+      return {
+        rows,
+        total: -1,
+        page: input.page,
+        pageSize: limit,
+      }
+    }
+
+    const schema = await this.describeSqliteTable(connection, table)
+    const filters = input.filters ?? []
+    const where = buildSqliteWhereClause(filters, schema.columns.map((column) => column.name))
+    const sort = this.buildSqliteSort(schema.columns.map((column) => column.name), input.sort)
 
     const dataStmt = db.prepare(
       `
@@ -2244,6 +2304,12 @@ function normalizeValue(value: unknown): unknown {
   }
 
   return value
+}
+
+function hasTableReadModifiers(input: TableReadInput): boolean {
+  const hasSort = Boolean(input.sort)
+  const hasFilters = Boolean(input.filters?.length)
+  return hasSort || hasFilters
 }
 
 function normalizePostgresColumnValue(value: unknown, column?: ColumnDef): unknown {

@@ -244,20 +244,47 @@ export function useWorkspaceActions({
         const nextFilterColumn = initialLoad?.filterColumn ?? ''
         const nextFilterOperator = initialLoad?.filterOperator ?? 'ilike'
         const nextFilterValue = initialLoad?.filterValue ?? ''
+        const needsSchemaBeforeRead = Boolean(nextFilterValue && !nextFilterColumn)
+        const schemaPromise = pointerApi.describeTable(hit.connectionId, hit.table)
 
-        const schema = await pointerApi.describeTable(hit.connectionId, hit.table)
-        const resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
-        const filters =
-          resolvedFilterColumn && nextFilterValue
-            ? [{ column: resolvedFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
-            : []
+        let schema: Awaited<ReturnType<typeof pointerApi.describeTable>>
+        let resolvedFilterColumn = nextFilterColumn
+        let data: Awaited<ReturnType<typeof pointerApi.readTable>>
 
-        const data = await pointerApi.readTable(hit.connectionId, hit.table, {
-          page: nextPage,
-          pageSize: nextPageSize,
-          sort: nextSort,
-          filters,
-        })
+        if (needsSchemaBeforeRead) {
+          schema = await schemaPromise
+          resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
+          const filters =
+            resolvedFilterColumn && nextFilterValue
+              ? [{ column: resolvedFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
+              : []
+
+          data = await pointerApi.readTable(hit.connectionId, hit.table, {
+            page: nextPage,
+            pageSize: nextPageSize,
+            sort: nextSort,
+            filters,
+          })
+        } else {
+          const filters =
+            nextFilterColumn && nextFilterValue
+              ? [{ column: nextFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
+              : []
+
+          const [resolvedSchema, resolvedData] = await Promise.all([
+            schemaPromise,
+            pointerApi.readTable(hit.connectionId, hit.table, {
+              page: nextPage,
+              pageSize: nextPageSize,
+              sort: nextSort,
+              filters,
+            }),
+          ])
+
+          schema = resolvedSchema
+          data = resolvedData
+          resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
+        }
 
         setWorkTabs((current) =>
           current.map((tab) => {
