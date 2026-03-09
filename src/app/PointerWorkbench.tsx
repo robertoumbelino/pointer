@@ -428,6 +428,9 @@ function App(): JSX.Element {
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
+    exportSqlResultSetVisibleCsv,
+    exportTableCurrentPageCsv,
+    exportTableAllPagesCsv,
     runSql,
   } = useWorkspaceActions({
     activeTabId,
@@ -639,6 +642,9 @@ function App(): JSX.Element {
             formatCell={formatCell}
             formatTableLabel={formatTableLabel}
             engineLabel={engineLabel}
+            exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
+            exportTableCurrentPageCsv={exportTableCurrentPageCsv}
+            exportTableAllPagesCsv={exportTableAllPagesCsv}
           />
         </div>
       </div>

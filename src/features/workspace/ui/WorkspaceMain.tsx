@@ -46,6 +46,14 @@ type WorkspaceMainProps = {
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableRef) => string
   engineLabel: (engine: DatabaseEngine) => string
+  exportSqlResultSetVisibleCsv: (params: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+  }) => void
+  exportTableCurrentPageCsv: (tabId: string) => void
+  exportTableAllPagesCsv: (tabId: string) => Promise<void>
 }
 
 export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
@@ -83,6 +91,9 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     formatCell,
     formatTableLabel,
     engineLabel,
+    exportSqlResultSetVisibleCsv,
+    exportTableCurrentPageCsv,
+    exportTableAllPagesCsv,
   } = props
 
   return (
@@ -116,6 +127,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 sqlCursorByTabRef={sqlCursorByTabRef}
                 setResizingSqlTabId={setResizingSqlTabId}
                 formatCell={formatCell}
+                exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
               />
             ) : activeTableTab ? (
               <TableWorkspacePanel
@@ -136,6 +148,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 formatCell={formatCell}
                 formatTableLabel={formatTableLabel}
                 engineLabel={engineLabel}
+                exportTableCurrentPageCsv={exportTableCurrentPageCsv}
+                exportTableAllPagesCsv={exportTableAllPagesCsv}
               />
             ) : (
               <div className='pointer-card-soft flex h-full items-center justify-center border-dashed text-slate-500'>

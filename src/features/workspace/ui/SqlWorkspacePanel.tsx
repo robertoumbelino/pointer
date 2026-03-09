@@ -1,10 +1,11 @@
 import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { Play } from 'lucide-react'
+import { ChevronDown, Download, Play } from 'lucide-react'
 import type { ConnectionSummary } from '../../../../shared/db-types'
 import type { SqlTab } from '../../../entities/workspace/types'
 import { Button } from '../../../components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 
 type SqlWorkspacePanelProps = {
   activeSqlTab: SqlTab
@@ -16,6 +17,12 @@ type SqlWorkspacePanelProps = {
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
   setResizingSqlTabId: Dispatch<SetStateAction<string | null>>
   formatCell: (value: unknown) => string
+  exportSqlResultSetVisibleCsv: (params: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+  }) => void
 }
 
 type ResultSetSortState = {
@@ -71,6 +78,7 @@ export function SqlWorkspacePanel({
   sqlCursorByTabRef,
   setResizingSqlTabId,
   formatCell,
+  exportSqlResultSetVisibleCsv,
 }: SqlWorkspacePanelProps): JSX.Element {
   const [resultSetSortByKey, setResultSetSortByKey] = useState<Record<string, ResultSetSortState>>({})
 
@@ -192,12 +200,44 @@ export function SqlWorkspacePanel({
                       return left.originalIndex - right.originalIndex
                     })
                     .map(({ row }) => row)
+                  const visibleRows = sortedRows.slice(0, 300)
 
                   return (
                 <div key={`${resultSet.command}-${index}`} className='rounded-md border border-slate-800/65 bg-slate-950/35'>
                   <div className='flex items-center justify-between border-b border-slate-800/80 px-3 py-1.5 text-xs text-slate-400'>
                     <span>{resultSet.command}</span>
-                    <span>{resultSet.rowCount} linhas</span>
+                    <div className='flex items-center gap-2'>
+                      <span>{resultSet.rowCount} linhas</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant='outline' size='sm' className='h-7 px-2 text-[12px]'>
+                            <Download className='mr-1 h-3.5 w-3.5' />
+                            Exportar
+                            <ChevronDown className='ml-1 h-3.5 w-3.5' />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align='end' className='w-[200px]'>
+                          <DropdownMenuItem
+                            onSelect={(event) => {
+                              event.preventDefault()
+                              exportSqlResultSetVisibleCsv({
+                                tabId: activeSqlTab.id,
+                                resultSetIndex: index,
+                                fields: resultSet.fields,
+                                rows: visibleRows,
+                              })
+                            }}
+                          >
+                            <Download className='h-3.5 w-3.5 text-slate-400' />
+                            Exportar CSV (visível)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem disabled>
+                            <span className='h-3.5 w-3.5 text-center text-slate-500'>•</span>
+                            Exportar JSON (em breve)
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                   <div className='overflow-auto'>
                     <table className='w-full min-w-max text-xs'>
@@ -235,7 +275,7 @@ export function SqlWorkspacePanel({
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedRows.slice(0, 300).map((row, rowIndex) => (
+                        {visibleRows.map((row, rowIndex) => (
                           <tr key={`${rowIndex}-${JSON.stringify(row)}`} className='border-t border-slate-800/70'>
                             {resultSet.fields.map((field) => (
                               <td key={`${field}-${rowIndex}`} className='px-2 py-1 text-slate-200 whitespace-nowrap'>

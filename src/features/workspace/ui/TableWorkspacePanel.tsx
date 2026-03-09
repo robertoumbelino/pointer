@@ -1,10 +1,11 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { TableFilterOperator, TableSort } from '../../../../shared/db-types'
 import type { EditingCell, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -127,6 +128,8 @@ type TableWorkspacePanelProps = {
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableTab['table']) => string
   engineLabel: (engine: TableTab['engine']) => string
+  exportTableCurrentPageCsv: (tabId: string) => void
+  exportTableAllPagesCsv: (tabId: string) => Promise<void>
 }
 
 export function TableWorkspacePanel({
@@ -147,10 +150,14 @@ export function TableWorkspacePanel({
   formatCell,
   formatTableLabel,
   engineLabel,
+  exportTableCurrentPageCsv,
+  exportTableAllPagesCsv,
 }: TableWorkspacePanelProps): JSX.Element {
   const [jsonEditorCell, setJsonEditorCell] = useState<JsonEditorCellState | null>(null)
   const [jsonEditorValue, setJsonEditorValue] = useState('')
   const [pageSizeInput, setPageSizeInput] = useState(() => String(activeTableTab.pageSize))
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [isExportingAllPages, setIsExportingAllPages] = useState(false)
   const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
   const hasLoadError = Boolean(activeTableTab.loadError)
 
@@ -224,6 +231,22 @@ export function TableWorkspacePanel({
       page: 0,
       pageSize: normalized,
     })
+  }
+
+  const handleExportCurrentPage = (): void => {
+    exportTableCurrentPageCsv(activeTableTab.id)
+    setIsExportDialogOpen(false)
+  }
+
+  const handleExportAllPages = async (): Promise<void> => {
+    setIsExportingAllPages(true)
+
+    try {
+      await exportTableAllPagesCsv(activeTableTab.id)
+      setIsExportDialogOpen(false)
+    } finally {
+      setIsExportingAllPages(false)
+    }
   }
 
   return (
@@ -658,6 +681,34 @@ export function TableWorkspacePanel({
           )}
         </p>
         <div className='flex items-center gap-1'>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='outline'
+                size='sm'
+                className='h-8 text-[13px]'
+                disabled={activeTableTab.loading || isExportingAllPages}
+              >
+                <Download className='mr-1.5 h-3.5 w-3.5' /> Exportar
+                <ChevronDown className='ml-1 h-3.5 w-3.5' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-[220px]'>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setIsExportDialogOpen(true)
+                }}
+              >
+                <Download className='h-3.5 w-3.5 text-slate-400' />
+                Exportar CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <span className='h-3.5 w-3.5 text-center text-slate-500'>•</span>
+                Exportar JSON (em breve)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             size='icon'
             variant='ghost'
@@ -697,6 +748,47 @@ export function TableWorkspacePanel({
         </div>
         </div>
       )}
+
+      <Dialog
+        open={isExportDialogOpen}
+        onOpenChange={(open) => {
+          if (!isExportingAllPages) {
+            setIsExportDialogOpen(open)
+          }
+        }}
+      >
+        <DialogContent className='max-w-md space-y-3'>
+          <DialogHeader>
+            <DialogTitle>Exportar tabela em CSV</DialogTitle>
+            <DialogDescription>
+              Escolha se deseja exportar apenas a página atual ou percorrer todas as páginas com os filtros e ordenação
+              atuais.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className='flex-col gap-2'>
+            <Button
+              variant='ghost'
+              onClick={() => setIsExportDialogOpen(false)}
+              disabled={isExportingAllPages}
+              className='w-full'
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant='outline'
+              onClick={handleExportCurrentPage}
+              disabled={isExportingAllPages}
+              className='w-full'
+            >
+              Exportar página atual
+            </Button>
+            <Button onClick={() => void handleExportAllPages()} disabled={isExportingAllPages} className='w-full'>
+              {isExportingAllPages ? 'Exportando...' : 'Exportar todas as páginas'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(jsonEditorCell)}

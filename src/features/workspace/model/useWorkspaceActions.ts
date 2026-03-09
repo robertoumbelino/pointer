@@ -1,9 +1,10 @@
 import { useCallback, useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
-import type { ConnectionSummary, SqlExecutionResult, TableSearchHit } from '../../../../shared/db-types'
+import type { ConnectionSummary, SqlExecutionResult, TableFilter, TableSearchHit } from '../../../../shared/db-types'
 import { pointerApi } from '../../../shared/api/pointer-api'
 import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
+import { buildCsvContent } from '../../../shared/lib/csv'
 import {
   buildClickHouseUnknownTableFallbackSql,
   buildInsertPayload,
@@ -62,6 +63,14 @@ type UseWorkspaceActionsResult = {
   handleToggleInsertDraftRow: () => void
   updateInsertDraftValue: (columnName: string, value: string | null) => void
   handleDeleteRow: () => void
+  exportSqlResultSetVisibleCsv: (params: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+  }) => void
+  exportTableCurrentPageCsv: (tabId: string) => void
+  exportTableAllPagesCsv: (tabId: string) => Promise<void>
   runSql: (force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string) => Promise<void>
 }
 
@@ -71,6 +80,55 @@ function normalizeRequestedPageSize(value: number | undefined): number {
   }
 
   return Math.min(TABLE_PAGE_SIZE_MAX, Math.max(1, Math.trunc(value)))
+}
+
+function sanitizeFilenamePart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function buildTimestamp(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  const seconds = String(now.getSeconds()).padStart(2, '0')
+
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`
+}
+
+function triggerCsvDownload(filename: string, csvContent: string): void {
+  const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8' })
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+}
+
+function buildTableFilters(tab: TableTab): TableFilter[] {
+  if (!tab.filterColumn || !tab.filterValue) {
+    return []
+  }
+
+  return [
+    {
+      column: tab.filterColumn,
+      operator: tab.filterOperator,
+      value: tab.filterValue,
+    },
+  ]
 }
 
 export function useWorkspaceActions({
@@ -693,6 +751,102 @@ export function useWorkspaceActions({
     }
   }
 
+  function exportSqlResultSetVisibleCsv({
+    tabId,
+    resultSetIndex,
+    fields,
+    rows,
+  }: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+  }): void {
+    const sqlTab = getSqlTab(tabId)
+    if (!sqlTab) {
+      return
+    }
+
+    try {
+      const csvContent = buildCsvContent(fields, rows)
+      const tabPart = sanitizeFilenamePart(sqlTab.title) || 'sql'
+      const filename = `pointer-sql-${tabPart}-resultset-${resultSetIndex + 1}-${buildTimestamp()}.csv`
+      triggerCsvDownload(filename, csvContent)
+      toast.success(`CSV exportado (${rows.length} linha(s)).`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  function exportTableCurrentPageCsv(tabId: string): void {
+    const tab = getTableTab(tabId)
+    if (!tab?.schema || !tab.data) {
+      toast.info('Carregue a tabela antes de exportar.')
+      return
+    }
+
+    try {
+      const columns = tab.schema.columns.map((column) => column.name)
+      const rows = tab.baseRows ?? tab.data.rows
+      const csvContent = buildCsvContent(columns, rows)
+      const tablePart = sanitizeFilenamePart(formatTableLabel(tab.table)) || 'table'
+      const filename = `pointer-table-${tablePart}-page-${tab.page + 1}-${buildTimestamp()}.csv`
+      triggerCsvDownload(filename, csvContent)
+      toast.success(`Página atual exportada (${rows.length} linha(s)).`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function exportTableAllPagesCsv(tabId: string): Promise<void> {
+    const tab = getTableTab(tabId)
+    if (!tab?.schema) {
+      toast.info('Carregue a tabela antes de exportar.')
+      return
+    }
+
+    const columns = tab.schema.columns.map((column) => column.name)
+    const filters = buildTableFilters(tab)
+    const pageSize = normalizeRequestedPageSize(tab.pageSize)
+
+    let page = 0
+    let pageCount = 0
+    let rowCount = 0
+    const rows: Record<string, unknown>[] = []
+    let hasMorePages = true
+
+    toast.info('Exportando todas as páginas em CSV...')
+
+    try {
+      while (hasMorePages) {
+        const result = await pointerApi.readTable(tab.connectionId, tab.table, {
+          page,
+          pageSize,
+          sort: tab.sort,
+          filters,
+        })
+
+        rows.push(...result.rows)
+        rowCount += result.rows.length
+        pageCount += 1
+
+        hasMorePages = result.rows.length === result.pageSize
+        if (hasMorePages) {
+          page += 1
+        }
+      }
+
+      const csvContent = buildCsvContent(columns, rows)
+      const tablePart = sanitizeFilenamePart(formatTableLabel(tab.table)) || 'table'
+      const filename = `pointer-table-${tablePart}-all-pages-${buildTimestamp()}.csv`
+      triggerCsvDownload(filename, csvContent)
+      toast.success(`CSV exportado com ${rowCount} linha(s) em ${pageCount} página(s).`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      throw error
+    }
+  }
+
   async function runSql(
     force = false,
     cursorOffset?: number,
@@ -791,6 +945,9 @@ export function useWorkspaceActions({
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
+    exportSqlResultSetVisibleCsv,
+    exportTableCurrentPageCsv,
+    exportTableAllPagesCsv,
     runSql,
   }
 }
