@@ -27,6 +27,11 @@ O frontend do Pointer segue arquitetura orientada a features, com composição n
 - Fluxos SQL/table edit devem manter mensagens e confirmação de risco.
 - Não alterar intencionalmente layout/visual sem pedido explícito.
 
+## Padrão de commits
+
+- Seguir obrigatoriamente o guia em `GIT.md`.
+- Commits devem ter uma única linha no formato `<emoji> <tipo>(<contexto>): <verbo-passado> <descricao>`.
+
 ## Política de release e changelog
 
 - Toda nova release deve atualizar obrigatoriamente o `CHANGELOG.md` na raiz.
