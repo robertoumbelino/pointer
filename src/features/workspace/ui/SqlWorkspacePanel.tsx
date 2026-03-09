@@ -120,32 +120,35 @@ export function SqlWorkspacePanel({
         </div>
       </div>
 
-      <div ref={sqlSplitContainerRef} className='flex h-full flex-1 flex-col overflow-hidden p-3'>
+      <div ref={sqlSplitContainerRef} className='flex min-h-0 h-full flex-1 flex-col overflow-hidden p-3'>
         <div
           className='pointer-card-soft min-h-[180px] overflow-hidden'
           style={{ height: `${activeSqlTab.splitRatio}%` }}
         >
-          <CodeMirror
-            value={activeSqlTab.sqlText}
-            height='100%'
-            theme={oneDark}
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              highlightActiveLine: true,
-              autocompletion: true,
-            }}
-            extensions={sqlEditorExtensions as never}
-            onChange={(value) =>
-              updateSqlTab(activeSqlTab.id, (tab) => ({
-                ...tab,
-                sqlText: value,
-              }))
-            }
-            onUpdate={(update) => {
-              sqlCursorByTabRef.current[activeSqlTab.id] = update.state.selection.main.head
-            }}
-          />
+          <div className='no-drag h-full min-h-0'>
+            <CodeMirror
+              className='h-full'
+              value={activeSqlTab.sqlText}
+              height='100%'
+              theme={oneDark}
+              basicSetup={{
+                lineNumbers: true,
+                foldGutter: true,
+                highlightActiveLine: true,
+                autocompletion: true,
+              }}
+              extensions={sqlEditorExtensions as never}
+              onChange={(value) =>
+                updateSqlTab(activeSqlTab.id, (tab) => ({
+                  ...tab,
+                  sqlText: value,
+                }))
+              }
+              onUpdate={(update) => {
+                sqlCursorByTabRef.current[activeSqlTab.id] = update.state.selection.main.head
+              }}
+            />
+          </div>
         </div>
 
         <div

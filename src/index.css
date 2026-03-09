@@ -468,12 +468,22 @@ textarea {
 
 .cm-editor {
   height: 100%;
+  min-height: 0;
   background: transparent !important;
 }
 
-.cm-scroller {
+.cm-editor .cm-scroller {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   line-height: 1.45;
+  overflow-y: auto !important;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.cm-editor,
+.cm-editor * {
+  -webkit-app-region: no-drag;
 }
 
 .cm-lineWrapping {

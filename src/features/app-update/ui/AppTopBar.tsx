@@ -25,7 +25,7 @@ export function AppTopBar({
   const versionLabel = appVersion.trim() || '0.0.0'
 
   return (
-    <div className='drag-region flex h-11 items-center justify-end border-b border-slate-800/70 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950/90 pl-24 pr-4'>
+    <div className='drag-region flex h-9 items-center justify-end border-b border-slate-800/70 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950/90 pl-24 pr-4'>
       <div className='no-drag ml-auto flex h-full items-center gap-1'>
         <Button
           variant='ghost'
