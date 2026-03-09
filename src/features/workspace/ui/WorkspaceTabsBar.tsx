@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { Database, Save, Table2, X } from 'lucide-react'
-import type { SqlTab, TableTab, WorkTab } from '../../../entities/workspace/types'
-import { Button } from '../../../components/ui/button'
+import { Database, Table2, X } from 'lucide-react'
+import type { SqlTab, WorkTab } from '../../../entities/workspace/types'
 import { cn } from '../../../lib/utils'
 
 type WorkspaceTabsBarProps = {
@@ -11,8 +10,6 @@ type WorkspaceTabsBarProps = {
   openRenameSqlTabDialog: (tab: SqlTab) => void
   closeTableTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
-  activeTableTab: TableTab | null
-  saveActiveTableChanges: () => Promise<void>
 }
 
 export function WorkspaceTabsBar({
@@ -22,8 +19,6 @@ export function WorkspaceTabsBar({
   openRenameSqlTabDialog,
   closeTableTab,
   closeSqlTab,
-  activeTableTab,
-  saveActiveTableChanges,
 }: WorkspaceTabsBarProps): JSX.Element {
   return (
     <div className='px-3 py-2'>
@@ -84,16 +79,6 @@ export function WorkspaceTabsBar({
             })}
           </div>
         </div>
-        {activeTableTab && (
-          <Button
-            variant='outline'
-            size='sm'
-            className='h-8 shrink-0 text-[13px]'
-            onClick={() => void saveActiveTableChanges()}
-          >
-            <Save className='mr-1.5 h-3.5 w-3.5' /> Salvar (Cmd+S)
-          </Button>
-        )}
       </div>
     </div>
   )

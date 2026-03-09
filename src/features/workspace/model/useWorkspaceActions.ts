@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type {
@@ -67,6 +67,7 @@ type UseWorkspaceActionsResult = {
   commitInlineEdit: (override?: EditingCell) => void
   cancelInlineEdit: () => void
   saveActiveTableChanges: () => Promise<void>
+  isSavingTableChanges: boolean
   handleToggleInsertDraftRow: () => void
   updateInsertDraftValue: (columnName: string, value: string | null) => void
   handleDeleteRow: () => void
@@ -174,6 +175,9 @@ export function useWorkspaceActions({
   updateTableTab,
   updateSqlTab,
 }: UseWorkspaceActionsParams): UseWorkspaceActionsResult {
+  const [isSavingTableChanges, setIsSavingTableChanges] = useState(false)
+  const isSavingTableChangesRef = useRef(false)
+
   const initializeTableTab = useCallback(
     async (tabId: string, hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> => {
       setWorkTabs((current) =>
@@ -626,6 +630,10 @@ export function useWorkspaceActions({
   }
 
   async function saveActiveTableChanges(): Promise<void> {
+    if (isSavingTableChangesRef.current) {
+      return
+    }
+
     const tab = getTableTab(activeTabId)
     if (!tab || !tab.data) {
       return
@@ -642,6 +650,9 @@ export function useWorkspaceActions({
       toast.info('Nenhuma alteração pendente para salvar.')
       return
     }
+
+    isSavingTableChangesRef.current = true
+    setIsSavingTableChanges(true)
 
     try {
       let affected = 0
@@ -703,6 +714,9 @@ export function useWorkspaceActions({
       await reloadTableTab(tab.id)
     } catch (error) {
       toast.error(getErrorMessage(error))
+    } finally {
+      isSavingTableChangesRef.current = false
+      setIsSavingTableChanges(false)
     }
   }
 
@@ -996,6 +1010,7 @@ export function useWorkspaceActions({
     commitInlineEdit,
     cancelInlineEdit,
     saveActiveTableChanges,
+    isSavingTableChanges,
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,

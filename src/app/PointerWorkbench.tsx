@@ -426,6 +426,7 @@ function App(): JSX.Element {
     commitInlineEdit,
     cancelInlineEdit,
     saveActiveTableChanges,
+    isSavingTableChanges,
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
@@ -619,6 +620,7 @@ function App(): JSX.Element {
           closeSqlTab={closeSqlTab}
           activeTableTab={activeTableTab}
           saveActiveTableChanges={saveActiveTableChanges}
+          isSavingTableChanges={isSavingTableChanges}
           activeSqlTab={activeSqlTab}
           updateSqlTab={updateSqlTab}
           connections={connections}

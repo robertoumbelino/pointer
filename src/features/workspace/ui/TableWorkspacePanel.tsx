@@ -1,5 +1,5 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Link2, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Link2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ColumnForeignKeyRef, TableFilterOperator, TableSort } from '../../../../shared/db-types'
 import type { EditingCell, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
@@ -120,6 +120,8 @@ function hasForeignKeyCellValue(value: unknown): boolean {
 
 type TableWorkspacePanelProps = {
   activeTableTab: TableTab
+  saveActiveTableChanges: () => Promise<void>
+  isSavingTableChanges: boolean
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
   navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   closeTableTab: (tabId: string) => void
@@ -143,6 +145,8 @@ type TableWorkspacePanelProps = {
 
 export function TableWorkspacePanel({
   activeTableTab,
+  saveActiveTableChanges,
+  isSavingTableChanges,
   reloadTableTab,
   navigateToForeignKey,
   closeTableTab,
@@ -170,6 +174,7 @@ export function TableWorkspacePanel({
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
   const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
   const hasLoadError = Boolean(activeTableTab.loadError)
+  const isTableActionDisabled = activeTableTab.loading || isSavingTableChanges
 
   useEffect(() => {
     setPageSizeInput(String(activeTableTab.pageSize))
@@ -279,6 +284,7 @@ export function TableWorkspacePanel({
               <select
                 className='h-8 rounded-md border border-slate-700 bg-slate-900 px-2.5 text-[13px] outline-none ring-slate-300/45 focus:ring-2'
                 value={activeTableTab.filterColumn}
+                disabled={isTableActionDisabled}
                 onChange={(event) =>
                   updateTableTab(activeTableTab.id, (tab) => ({
                     ...tab,
@@ -296,6 +302,7 @@ export function TableWorkspacePanel({
               <select
                 className='h-8 w-[112px] rounded-md border border-slate-700 bg-slate-900 px-2.5 pr-8 text-[13px] outline-none ring-slate-300/45 focus:ring-2'
                 value={activeTableTab.filterOperator}
+                disabled={isTableActionDisabled}
                 onChange={(event) =>
                   updateTableTab(activeTableTab.id, (tab) => ({
                     ...tab,
@@ -311,6 +318,7 @@ export function TableWorkspacePanel({
                 className='h-8 w-44 text-[13px]'
                 placeholder='Filtrar por valor'
                 value={activeTableTab.filterValue}
+                disabled={isTableActionDisabled}
                 onChange={(event) =>
                   updateTableTab(activeTableTab.id, (tab) => ({
                     ...tab,
@@ -319,7 +327,7 @@ export function TableWorkspacePanel({
                   }))
                 }
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
+                  if (event.key === 'Enter' && !isTableActionDisabled) {
                     void reloadTableTab(activeTableTab.id, {
                       page: 0,
                       filterColumn: activeTableTab.filterColumn,
@@ -333,6 +341,7 @@ export function TableWorkspacePanel({
                 variant='outline'
                 size='sm'
                 className='h-8 text-[13px]'
+                disabled={isTableActionDisabled}
                 onClick={() =>
                   void reloadTableTab(activeTableTab.id, {
                     page: 0,
@@ -342,7 +351,7 @@ export function TableWorkspacePanel({
                   })
                 }
               >
-                Aplicar
+                Filtrar
               </Button>
             </div>
           )}
@@ -350,6 +359,7 @@ export function TableWorkspacePanel({
             variant='outline'
             size='sm'
             className='h-8 text-[13px]'
+            disabled={isTableActionDisabled}
             onClick={() => void reloadTableTab(activeTableTab.id)}
           >
             <RefreshCw className='mr-1.5 h-3.5 w-3.5' /> Atualizar
@@ -359,6 +369,7 @@ export function TableWorkspacePanel({
               variant='secondary'
               size='sm'
               className='h-8 text-[13px]'
+              disabled={isTableActionDisabled}
               onClick={handleToggleInsertDraftRow}
             >
               <Plus className='mr-1.5 h-3.5 w-3.5' /> {activeTableTab.insertDraft ? 'Cancelar insert' : 'Inserir'}
@@ -366,10 +377,26 @@ export function TableWorkspacePanel({
           )}
           {!hasLoadError && (
             <Button
+              variant='outline'
+              size='sm'
+              className='h-8 text-[13px]'
+              disabled={isTableActionDisabled}
+              onClick={() => void saveActiveTableChanges()}
+            >
+              {isSavingTableChanges ? (
+                <RefreshCw className='mr-1.5 h-3.5 w-3.5 animate-spin' />
+              ) : (
+                <Save className='mr-1.5 h-3.5 w-3.5' />
+              )}
+              {isSavingTableChanges ? 'Salvando...' : 'Salvar (Cmd+S)'}
+            </Button>
+          )}
+          {!hasLoadError && (
+            <Button
               variant='destructive'
               size='sm'
               className='h-8 text-[13px]'
-              disabled={!selectedRow || !activeTableTab.schema?.supportsRowEdit}
+              disabled={isTableActionDisabled || !selectedRow || !activeTableTab.schema?.supportsRowEdit}
               onClick={() => void handleDeleteRow()}
             >
               <Trash2 className='mr-1.5 h-3.5 w-3.5' /> Excluir

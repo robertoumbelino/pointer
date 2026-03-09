@@ -29,6 +29,7 @@ type WorkspaceMainProps = {
   closeSqlTab: (tabId: string) => void
   activeTableTab: TableTab | null
   saveActiveTableChanges: () => Promise<void>
+  isSavingTableChanges: boolean
   activeSqlTab: SqlTab | null
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
   connections: ConnectionSummary[]
@@ -75,6 +76,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     closeSqlTab,
     activeTableTab,
     saveActiveTableChanges,
+    isSavingTableChanges,
     activeSqlTab,
     updateSqlTab,
     connections,
@@ -118,8 +120,6 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
               openRenameSqlTabDialog={openRenameSqlTabDialog}
               closeTableTab={closeTableTab}
               closeSqlTab={closeSqlTab}
-              activeTableTab={activeTableTab}
-              saveActiveTableChanges={saveActiveTableChanges}
             />
           </div>
 
@@ -140,6 +140,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
             ) : activeTableTab ? (
               <TableWorkspacePanel
                 activeTableTab={activeTableTab}
+                saveActiveTableChanges={saveActiveTableChanges}
+                isSavingTableChanges={isSavingTableChanges}
                 reloadTableTab={reloadTableTab}
                 navigateToForeignKey={navigateToForeignKey}
                 closeTableTab={closeTableTab}
