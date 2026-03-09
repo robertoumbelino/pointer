@@ -60,7 +60,7 @@ function createMainWindow(): void {
     minHeight: 760,
     backgroundColor: '#020617',
     titleBarStyle: isMac ? 'hidden' : 'default',
-    trafficLightPosition: isMac ? { x: 14, y: 11 } : undefined,
+    trafficLightPosition: isMac ? { x: 14, y: 5 } : undefined,
     icon: path.join(process.env.VITE_PUBLIC, 'app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
