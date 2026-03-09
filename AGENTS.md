@@ -67,3 +67,8 @@ O frontend do Pointer segue arquitetura orientada a features, com composição n
   - edição inline + save/delete
   - execução SQL (safe/risk)
   - persistência de workspace por ambiente
+
+## Skills locais do Codex
+
+- `pointer-commit-convention`: gera e valida commits no padrão do projeto. (file: `/Users/roberto/.codex/skills/pointer-commit-convention/SKILL.md`)
+- `pointer-release-manager`: executa release completa (bump, changelog, build e publish no GitHub). (file: `/Users/roberto/.codex/skills/pointer-release-manager/SKILL.md`)
