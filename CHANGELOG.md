@@ -2,6 +2,18 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.7.2 - 2026-03-10
+
+### ✨ Novidades
+- Busca de tabelas no Command Palette (`Cmd+K`) evoluiu para um modelo fuzzy no estilo VS Code, facilitando encontrar tabelas mesmo com termos parciais.
+- Filtro de tabela ganhou suporte ao operador `IN` com múltiplos IDs separados por vírgula, acelerando análises em lote.
+
+### 🐛 Correções
+- A ação de saída no Command Palette foi simplificada de **Sair para Home** para **Sair**, com nomenclatura mais direta.
+
+### 📚 Documentação
+- Adicionada referência ao guia de testes E2E com Playwright + Electron para smoke do fluxo de changelog e execução de `SELECT` com SQLite.
+
 ## v0.7.0 - 2026-03-09
 
 ### ✨ Novidades
