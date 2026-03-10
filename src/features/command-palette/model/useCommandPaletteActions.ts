@@ -117,7 +117,7 @@ export function useCommandPaletteActions({
       },
       {
         id: 'exit-workspace',
-        label: 'Sair para Home',
+        label: 'Sair',
         description: 'Voltar para a home de ambientes',
         keywords: ['sair', 'home', 'voltar', 'ambientes'],
       },
