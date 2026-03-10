@@ -1,5 +1,4 @@
 import { AlertTriangle } from 'lucide-react'
-import { SAFE_CONFIRM_WORD } from '../../../shared/constants/app'
 import { Button } from '../../../components/ui/button'
 import {
   Dialog,
@@ -9,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../../components/ui/dialog'
-import { Input } from '../../../components/ui/input'
 
 type PendingSqlExecution = {
   tabId: string
@@ -20,8 +18,6 @@ type PendingSqlExecution = {
 type SqlRiskConfirmDialogProps = {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
-  sqlConfirmText: string
-  setSqlConfirmText: (value: string) => void
   pendingSqlExecution: PendingSqlExecution | null
   setPendingSqlExecution: (value: PendingSqlExecution | null) => void
   onForceRunSql: (tabId: string, sql: string, connectionId?: string) => Promise<void>
@@ -30,8 +26,6 @@ type SqlRiskConfirmDialogProps = {
 export function SqlRiskConfirmDialog({
   isOpen,
   onOpenChange,
-  sqlConfirmText,
-  setSqlConfirmText,
   pendingSqlExecution,
   setPendingSqlExecution,
   onForceRunSql,
@@ -42,7 +36,6 @@ export function SqlRiskConfirmDialog({
       onOpenChange={(open) => {
         onOpenChange(open)
         if (!open) {
-          setSqlConfirmText('')
           setPendingSqlExecution(null)
         }
       }}
@@ -53,16 +46,9 @@ export function SqlRiskConfirmDialog({
             <AlertTriangle className='h-5 w-5 text-slate-300' />
             Confirmar execução de escrita
           </DialogTitle>
-          <DialogDescription>
-            Essa query pode alterar dados. Digite <strong>{SAFE_CONFIRM_WORD}</strong> para confirmar.
-          </DialogDescription>
+          <DialogDescription>Essa query pode alterar dados. Confirme para executar.</DialogDescription>
         </DialogHeader>
-        <Input
-          value={sqlConfirmText}
-          onChange={(event) => setSqlConfirmText(event.target.value)}
-          placeholder={SAFE_CONFIRM_WORD}
-        />
-        <DialogFooter>
+        <DialogFooter className='pt-2'>
           <Button variant='secondary' onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
@@ -79,7 +65,6 @@ export function SqlRiskConfirmDialog({
                 pendingSqlExecution.connectionId,
               )
             }}
-            disabled={sqlConfirmText.trim().toUpperCase() !== SAFE_CONFIRM_WORD}
           >
             Executar mesmo assim
           </Button>

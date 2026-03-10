@@ -152,8 +152,6 @@ function App(): JSX.Element {
     setEditingCell,
     sqlConfirmOpen,
     setSqlConfirmOpen,
-    sqlConfirmText,
-    setSqlConfirmText,
     pendingSqlExecution,
     setPendingSqlExecution,
     sqlAutoConnectionResolveOpen,
@@ -523,7 +521,6 @@ function App(): JSX.Element {
     sqlTabNameDraft,
     setSqlTabNameDraft,
     setSqlConfirmOpen,
-    setSqlConfirmText,
     setPendingSqlExecution,
     setSqlAutoConnectionResolveOpen,
     setPendingAutoSqlConnectionResolution,
@@ -871,8 +868,6 @@ function App(): JSX.Element {
       <SqlRiskConfirmDialog
         isOpen={sqlConfirmOpen}
         onOpenChange={setSqlConfirmOpen}
-        sqlConfirmText={sqlConfirmText}
-        setSqlConfirmText={setSqlConfirmText}
         pendingSqlExecution={pendingSqlExecution}
         setPendingSqlExecution={setPendingSqlExecution}
         onForceRunSql={async (tabId, sqlText, connectionId) => {

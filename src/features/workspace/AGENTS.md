@@ -20,7 +20,7 @@ A feature `workspace` controla tabs SQL/tabela, edição inline, execução SQL,
   - `Cmd/Ctrl+S`
   - `Cmd/Ctrl+Enter`
   - `Cmd/Ctrl+/`
-- Fluxo de SQL de risco exige confirmação (`EXECUTAR`).
+- Fluxo de SQL de risco exige confirmação por modal antes da execução.
 
 ## Regras de implementação
 

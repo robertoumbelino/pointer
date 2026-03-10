@@ -51,8 +51,6 @@ type UseWorkspaceResult = {
   setEditingCell: Dispatch<SetStateAction<EditingCell | null>>
   sqlConfirmOpen: boolean
   setSqlConfirmOpen: Dispatch<SetStateAction<boolean>>
-  sqlConfirmText: string
-  setSqlConfirmText: Dispatch<SetStateAction<string>>
   pendingSqlExecution: PendingSqlExecution | null
   setPendingSqlExecution: Dispatch<SetStateAction<PendingSqlExecution | null>>
   sqlAutoConnectionResolveOpen: boolean
@@ -103,7 +101,6 @@ export function useWorkspace(): UseWorkspaceResult {
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
 
   const [sqlConfirmOpen, setSqlConfirmOpen] = useState(false)
-  const [sqlConfirmText, setSqlConfirmText] = useState('')
   const [pendingSqlExecution, setPendingSqlExecution] = useState<PendingSqlExecution | null>(null)
   const [sqlAutoConnectionResolveOpen, setSqlAutoConnectionResolveOpen] = useState(false)
   const [pendingAutoSqlConnectionResolution, setPendingAutoSqlConnectionResolution] =
@@ -199,8 +196,6 @@ export function useWorkspace(): UseWorkspaceResult {
     setEditingCell,
     sqlConfirmOpen,
     setSqlConfirmOpen,
-    sqlConfirmText,
-    setSqlConfirmText,
     pendingSqlExecution,
     setPendingSqlExecution,
     sqlAutoConnectionResolveOpen,

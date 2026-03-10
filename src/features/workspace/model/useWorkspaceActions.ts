@@ -53,7 +53,6 @@ type UseWorkspaceActionsParams = {
   sqlTabNameDraft: string
   setSqlTabNameDraft: Dispatch<SetStateAction<string>>
   setSqlConfirmOpen: Dispatch<SetStateAction<boolean>>
-  setSqlConfirmText: Dispatch<SetStateAction<string>>
   setPendingSqlExecution: Dispatch<SetStateAction<{ tabId: string; sql: string; connectionId?: string } | null>>
   setSqlAutoConnectionResolveOpen: Dispatch<SetStateAction<boolean>>
   setPendingAutoSqlConnectionResolution: Dispatch<
@@ -218,7 +217,6 @@ export function useWorkspaceActions({
   sqlTabNameDraft,
   setSqlTabNameDraft,
   setSqlConfirmOpen,
-  setSqlConfirmText,
   setPendingSqlExecution,
   setSqlAutoConnectionResolveOpen,
   setPendingAutoSqlConnectionResolution,
@@ -1331,7 +1329,6 @@ export function useWorkspaceActions({
         const risk = await pointerApi.previewSqlRisk(sqlToExecute)
 
         if (risk.level !== 'safe') {
-          setSqlConfirmText('')
           setPendingSqlExecution({
             tabId: sqlTab.id,
             sql: sqlToExecute,
@@ -1373,7 +1370,6 @@ export function useWorkspaceActions({
       if (sqlExecutionByTabRef.current[sqlTab.id] === executionId) {
         updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlResult: result }))
         setSqlConfirmOpen(false)
-        setSqlConfirmText('')
         setPendingSqlExecution(null)
         toast.success(`Query executada em ${result.durationMs}ms`)
 

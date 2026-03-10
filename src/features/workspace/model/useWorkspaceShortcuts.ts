@@ -160,11 +160,11 @@ export function useWorkspaceShortcuts({
         event.preventDefault()
 
         if (activeTabId.startsWith('sql:')) {
-          void runSqlRef.current?.()
-        } else {
-          commitInlineEditRef.current?.()
-          void saveActiveTableChangesRef.current?.()
+          return
         }
+
+        commitInlineEditRef.current?.()
+        void saveActiveTableChangesRef.current?.()
       }
     }
 
