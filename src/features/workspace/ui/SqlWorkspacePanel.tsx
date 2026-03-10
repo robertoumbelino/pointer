@@ -233,9 +233,13 @@ export function SqlWorkspacePanel({
                     })
                     .map(({ row }) => row)
                   const visibleRows = sortedRows.slice(0, 300)
+                  const resultSetSchemaSignature = resultSet.fields.join('|')
 
                   return (
-                <div key={`${resultSet.command}-${index}`} className='rounded-md border border-slate-800/65 bg-slate-950/35'>
+                <div
+                  key={`${resultSet.command}-${index}-${resultSetSchemaSignature}`}
+                  className='rounded-md border border-slate-800/65 bg-slate-950/35'
+                >
                   <div className='flex items-center justify-between border-b border-slate-800/80 px-3 py-1.5 text-xs text-slate-400'>
                     <span>{resultSet.command}</span>
                     <div className='flex items-center gap-2'>
@@ -275,9 +279,9 @@ export function SqlWorkspacePanel({
                     <table className='w-full min-w-max text-xs'>
                       <thead className='bg-slate-900'>
                         <tr>
-                          {resultSet.fields.map((field) => (
+                          {resultSet.fields.map((field, fieldIndex) => (
                             <th
-                              key={field}
+                              key={`field-${fieldIndex}`}
                               className='cursor-pointer select-none px-2 py-1 text-left font-semibold text-slate-300'
                               onMouseDown={(event) => {
                                 event.preventDefault()
@@ -309,8 +313,8 @@ export function SqlWorkspacePanel({
                       <tbody>
                         {visibleRows.map((row, rowIndex) => (
                           <tr key={`${rowIndex}-${JSON.stringify(row)}`} className='border-t border-slate-800/70'>
-                            {resultSet.fields.map((field) => (
-                              <td key={`${field}-${rowIndex}`} className='px-2 py-1 text-slate-200 whitespace-nowrap'>
+                            {resultSet.fields.map((field, fieldIndex) => (
+                              <td key={`cell-${rowIndex}-${fieldIndex}`} className='px-2 py-1 text-slate-200 whitespace-nowrap'>
                                 {formatCell(row[field])}
                               </td>
                             ))}
