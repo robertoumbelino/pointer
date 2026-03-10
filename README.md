@@ -15,6 +15,7 @@ Aplicação desktop para explorar e operar bancos de dados com foco em produtivi
 - `🗂️` Ambientes isolados (`Local`, `Produção`, etc.) com cor personalizada.
 - `🔌` Conexões por ambiente para PostgreSQL, ClickHouse e SQLite.
 - `⌘` Command Palette com busca global de tabelas (`Cmd+K` / `Cmd+P`).
+- `🤖` Geração de SQL com IA no `Cmd+K`, com chat lateral em abas IA.
 - `🧠` Filtro rápido no `Cmd+K` com `Tab` para abrir tabela já filtrada.
 - `🧾` Editor SQL com highlight, autocomplete e execução por escopo.
 - `🧪` Teste de conexão antes de salvar.
@@ -129,4 +130,5 @@ Saída esperada em `release/<version>/`:
 
 - Credenciais são salvas no Keychain do macOS.
 - Metadados de ambiente/conexões/tabs são persistidos localmente.
+- Quando IA está habilitada, o app envia metadados de schema (tabelas/colunas) do ambiente selecionado para o provider configurado no AI Gateway.
 - Nenhum dado de conexão é enviado para serviços externos pelo app.

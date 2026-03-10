@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import type { Dispatch, KeyboardEvent, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
-import type { TableSchema, TableSearchHit } from '../../../../shared/db-types'
+import type { AiConfig, TableSchema, TableSearchHit } from '../../../../shared/db-types'
 import type { SidebarTableContextMenuState, TableReloadOverrides } from '../../../entities/workspace/types'
 import { pointerApi } from '../../../shared/api/pointer-api'
 import {
@@ -17,7 +17,13 @@ type CommandGroup = {
   items: Array<{ hit: TableSearchHit; displayIndex: number }>
 }
 
-export type CommandActionId = 'open-changelog' | 'check-app-update' | 'exit-workspace'
+export type CommandActionId =
+  | 'use-ai'
+  | 'configure-ai'
+  | 'remove-ai'
+  | 'open-changelog'
+  | 'check-app-update'
+  | 'exit-workspace'
 
 export type CommandActionItem = {
   id: CommandActionId
@@ -62,6 +68,10 @@ type UseCommandPaletteActionsParams = {
   openChangelog: () => void
   checkForAppUpdate: (showToastWhenCurrent?: boolean) => Promise<void>
   onExitWorkspace: () => void
+  onOpenAiConfig: (mode: 'full' | 'model') => void
+  onRemoveAiConfig: () => Promise<void>
+  onUseAiPrompt: (prompt: string) => Promise<void>
+  aiConfig: AiConfig | null
 }
 
 type UseCommandPaletteActionsResult = {
@@ -99,9 +109,25 @@ export function useCommandPaletteActions({
   openChangelog,
   checkForAppUpdate,
   onExitWorkspace,
+  onOpenAiConfig,
+  onRemoveAiConfig,
+  onUseAiPrompt,
+  aiConfig,
 }: UseCommandPaletteActionsParams): UseCommandPaletteActionsResult {
   const commandActions = useMemo<CommandActionItem[]>(() => {
-    const query = commandQuery.trim().toLowerCase()
+    const query = commandQuery.trim()
+    const normalizedQuery = query.toLowerCase()
+    const hasTableMatches = commandHits.length > 0
+    const shouldShowConfigureAiAction = !commandScopedTarget && (!hasTableMatches || query.length === 0)
+    const canShowUseAiAction = !commandScopedTarget && query.length > 0 && !hasTableMatches
+    const configureAction: Omit<CommandActionItem, 'displayIndex'> = {
+      id: 'configure-ai',
+      label: aiConfig?.hasApiKey ? 'Alterar modelo IA' : 'Configurar IA',
+      description: aiConfig?.hasApiKey
+        ? 'Trocar provider/modelo sem alterar a chave salva'
+        : 'Adicionar chave do AI Gateway',
+    }
+
     const actions: Array<Omit<CommandActionItem, 'displayIndex'> & { keywords: string[] }> = [
       {
         id: 'open-changelog',
@@ -123,20 +149,42 @@ export function useCommandPaletteActions({
       },
     ]
 
-    const filtered = query
+    const filtered = normalizedQuery
       ? actions.filter((action) => {
           const searchable = [action.label, action.description, ...action.keywords].join(' ').toLowerCase()
-          return searchable.includes(query)
+          return searchable.includes(normalizedQuery)
         })
       : actions
 
-    return filtered.map((action, displayIndex) => ({
+    const aiActions: Array<Omit<CommandActionItem, 'displayIndex'>> = []
+    if (canShowUseAiAction) {
+      aiActions.push({
+        id: 'use-ai',
+        label: `Usar IA: ${query}`,
+        description: aiConfig?.hasApiKey
+          ? 'Gerar SQL em nova aba com chat lateral'
+          : 'Configurar IA e gerar SQL em nova aba',
+      })
+    }
+
+    if (shouldShowConfigureAiAction) {
+      aiActions.push(configureAction)
+      if (aiConfig?.hasApiKey) {
+        aiActions.push({
+          id: 'remove-ai',
+          label: 'Remover IA',
+          description: 'Apagar chave salva do AI Gateway neste app',
+        })
+      }
+    }
+
+    return [...aiActions, ...filtered].map((action, displayIndex) => ({
       id: action.id,
       label: action.label,
       description: action.description,
       displayIndex,
     }))
-  }, [commandQuery])
+  }, [aiConfig?.hasApiKey, commandHits.length, commandQuery, commandScopedTarget])
 
   const groupedCommandHits = useMemo(() => {
     const groups = new Map<string, { connectionId: string; heading: string; items: TableSearchHit[] }>()
@@ -261,6 +309,21 @@ export function useCommandPaletteActions({
 
   async function selectCommandAction(actionId: CommandActionId): Promise<void> {
     try {
+      if (actionId === 'use-ai') {
+        await onUseAiPrompt(commandQuery.trim())
+        return
+      }
+
+      if (actionId === 'configure-ai') {
+        onOpenAiConfig(aiConfig?.hasApiKey ? 'model' : 'full')
+        return
+      }
+
+      if (actionId === 'remove-ai') {
+        await onRemoveAiConfig()
+        return
+      }
+
       if (actionId === 'open-changelog') {
         openChangelog()
         return

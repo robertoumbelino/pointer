@@ -136,10 +136,47 @@ export interface AppUpdateInstallResult {
   message: string
 }
 
+export type AiProvider = 'vercel-gateway'
+export type AiSqlChatRole = 'user' | 'assistant'
+
+export interface AiSqlChatMessage {
+  role: AiSqlChatRole
+  content: string
+}
+
+export interface AiConfig {
+  provider: AiProvider
+  model: string
+  hasApiKey: boolean
+}
+
+export interface AiConfigInput {
+  provider: AiProvider
+  model: string
+  apiKey?: string
+}
+
+export interface AiGenerateSqlTurnInput {
+  environmentId: string
+  prompt: string
+  messages: AiSqlChatMessage[]
+  currentSql?: string
+}
+
+export interface AiGenerateSqlTurnResult {
+  assistantMessage: string
+  sql?: string
+  connectionId?: string
+}
+
 export interface PointerApi {
   getAppVersion: () => Promise<string>
   copyToClipboard: (text: string) => Promise<void>
   pickSqliteFile: () => Promise<string | null>
+  getAiConfig: () => Promise<AiConfig>
+  saveAiConfig: (input: AiConfigInput) => Promise<AiConfig>
+  removeAiConfig: () => Promise<AiConfig>
+  generateAiSqlTurn: (input: AiGenerateSqlTurnInput) => Promise<AiGenerateSqlTurnResult>
 
   listEnvironments: () => Promise<EnvironmentSummary[]>
   createEnvironment: (name: string, color?: string) => Promise<EnvironmentSummary>

@@ -63,6 +63,8 @@ type WorkspaceMainProps = {
   }) => void
   exportTableCurrentPageCsv: (tabId: string) => void
   exportTableAllPagesCsv: (tabId: string) => Promise<void>
+  sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
+  setAiDraftOnSqlTab: (tabId: string, value: string) => void
 }
 
 export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
@@ -106,6 +108,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    sendAiPromptToSqlTab,
+    setAiDraftOnSqlTab,
   } = props
 
   return (
@@ -139,6 +143,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 setResizingSqlTabId={setResizingSqlTabId}
                 formatCell={formatCell}
                 exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
+                sendAiPromptToSqlTab={sendAiPromptToSqlTab}
+                setAiDraftOnSqlTab={setAiDraftOnSqlTab}
               />
             ) : activeTableTab ? (
               <TableWorkspacePanel

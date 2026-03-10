@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { sql } from '@codemirror/lang-sql'
 import {
   autocompletion,
@@ -7,11 +7,14 @@ import {
   startCompletion,
 } from '@codemirror/autocomplete'
 import { EditorView, keymap } from '@codemirror/view'
+import { toast } from 'sonner'
+import type { AiConfig, AiProvider } from '../../shared/db-types'
 import { useAppUpdate } from '../features/app-update/model/useAppUpdate'
 import { AppTopBar } from '../features/app-update/ui/AppTopBar'
 import { ChangelogDialog } from '../features/app-update/ui/ChangelogDialog'
 import { useCommandPalette } from '../features/command-palette/model/useCommandPalette'
 import { useCommandPaletteActions } from '../features/command-palette/model/useCommandPaletteActions'
+import { AiConfigDialog, type AiConfigDialogMode } from '../features/command-palette/ui/AiConfigDialog'
 import { TableCommandDialog } from '../features/command-palette/ui/TableCommandDialog'
 import { useConnections } from '../features/connections/model/useConnections'
 import { useEnvironments } from '../features/environments/model/useEnvironments'
@@ -37,11 +40,15 @@ import {
   formatCell,
   formatDraftInputValue,
   formatTableLabel,
+  getErrorMessage,
   hexToRgb,
   normalizeHexColor,
 } from '../shared/lib/workspace-utils'
 import { useWorkbenchFlows } from './model/useWorkbenchFlows'
 import { useWorkbenchPersistence } from './model/useWorkbenchPersistence'
+
+const AI_PROVIDER = 'vercel-gateway' as const
+const AI_MODEL = 'minimax/minimax-m2.1'
 
 function App(): JSX.Element {
   const {
@@ -194,9 +201,32 @@ function App(): JSX.Element {
 
   const [currentView, setCurrentView] = useState<'home' | 'workspace'>('home')
   const [hasInitialEnvironmentLoad, setHasInitialEnvironmentLoad] = useState(false)
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null)
+  const [isAiConfigOpen, setIsAiConfigOpen] = useState(false)
+  const [aiConfigDialogMode, setAiConfigDialogMode] = useState<AiConfigDialogMode>('full')
+  const [aiProviderDraft, setAiProviderDraft] = useState<AiProvider>(AI_PROVIDER)
+  const [aiModelDraft, setAiModelDraft] = useState(AI_MODEL)
+  const [aiApiKeyDraft, setAiApiKeyDraft] = useState('')
+  const [isAiConfigSaving, setIsAiConfigSaving] = useState(false)
+  const [pendingAiPrompt, setPendingAiPrompt] = useState('')
 
   const commandColumnInputRef = useRef<HTMLSelectElement | null>(null)
   const commandValueInputRef = useRef<HTMLInputElement | null>(null)
+
+  const loadAiConfig = useCallback(async (): Promise<AiConfig | null> => {
+    try {
+      const config = await pointerApi.getAiConfig()
+      setAiConfig(config)
+      setAiProviderDraft(config.provider)
+      setAiModelDraft(config.model)
+      return config
+    } catch {
+      setAiConfig(null)
+      setAiProviderDraft(AI_PROVIDER)
+      setAiModelDraft(AI_MODEL)
+      return null
+    }
+  }, [])
 
   useEffect(() => {
     workTabsRef.current = workTabs
@@ -447,8 +477,13 @@ function App(): JSX.Element {
     })()
   }, [setAppVersion])
 
+  useEffect(() => {
+    void loadAiConfig()
+  }, [loadAiConfig])
+
   const {
     openNewSqlTab,
+    openAiSqlTabWithPrompt,
     openRenameSqlTabDialog,
     handleRenameSqlTab,
     openTableTab,
@@ -468,11 +503,14 @@ function App(): JSX.Element {
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    sendAiPromptToSqlTab,
+    setAiDraftOnSqlTab,
     runSql,
     cancelSqlExecution,
   } = useWorkspaceActions({
     activeTabId,
     setActiveTabId,
+    selectedEnvironmentId,
     connections,
     activeTableTab,
     editingCell,
@@ -502,6 +540,73 @@ function App(): JSX.Element {
     updateTableTab,
     updateSqlTab,
   })
+
+  function handleOpenAiConfig(mode: AiConfigDialogMode = 'full'): void {
+    setAiProviderDraft(aiConfig?.provider ?? AI_PROVIDER)
+    setAiModelDraft(aiConfig?.model ?? AI_MODEL)
+    setAiApiKeyDraft('')
+    setAiConfigDialogMode(mode)
+    setIsAiConfigOpen(true)
+  }
+
+  async function handleUseAiPrompt(prompt: string): Promise<void> {
+    const normalizedPrompt = prompt.trim()
+    if (!normalizedPrompt) {
+      return
+    }
+
+    if (!aiConfig?.hasApiKey) {
+      setPendingAiPrompt(normalizedPrompt)
+      handleOpenAiConfig('full')
+      return
+    }
+
+    await openAiSqlTabWithPrompt(normalizedPrompt)
+  }
+
+  async function handleSaveAiConfig(): Promise<void> {
+    const apiKey = aiApiKeyDraft.trim()
+    if (!aiConfig?.hasApiKey && !apiKey) {
+      toast.error('Informe a chave do AI Gateway para continuar.')
+      return
+    }
+
+    setIsAiConfigSaving(true)
+    try {
+      const configInput = {
+        provider: aiProviderDraft,
+        model: aiModelDraft.trim() || AI_MODEL,
+        ...(apiKey ? { apiKey } : {}),
+      }
+
+      const config = await pointerApi.saveAiConfig(configInput)
+      setAiConfig(config)
+      setAiApiKeyDraft('')
+      setIsAiConfigOpen(false)
+
+      if (pendingAiPrompt) {
+        const queuedPrompt = pendingAiPrompt
+        setPendingAiPrompt('')
+        await openAiSqlTabWithPrompt(queuedPrompt)
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsAiConfigSaving(false)
+    }
+  }
+
+  async function handleRemoveAiConfig(): Promise<void> {
+    try {
+      const config = await pointerApi.removeAiConfig()
+      setAiConfig(config)
+      setAiApiKeyDraft('')
+      setPendingAiPrompt('')
+      toast.success('Chave da IA removida deste app.')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
 
   const {
     commandActions,
@@ -536,6 +641,10 @@ function App(): JSX.Element {
     openChangelog,
     checkForAppUpdate,
     onExitWorkspace: handleExitWorkspace,
+    onOpenAiConfig: handleOpenAiConfig,
+    onRemoveAiConfig: handleRemoveAiConfig,
+    onUseAiPrompt: handleUseAiPrompt,
+    aiConfig,
   })
 
   const {
@@ -725,6 +834,8 @@ function App(): JSX.Element {
             exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
             exportTableCurrentPageCsv={exportTableCurrentPageCsv}
             exportTableAllPagesCsv={exportTableAllPagesCsv}
+            sendAiPromptToSqlTab={sendAiPromptToSqlTab}
+            setAiDraftOnSqlTab={setAiDraftOnSqlTab}
           />
         </div>
       )}
@@ -805,6 +916,28 @@ function App(): JSX.Element {
         setCommandIndex={setCommandIndex}
         openTableTab={openTableTab}
         engineShortLabel={engineShortLabel}
+      />
+
+      <AiConfigDialog
+        isOpen={isAiConfigOpen}
+        onOpenChange={(open) => {
+          setIsAiConfigOpen(open)
+          if (!open) {
+            setAiApiKeyDraft('')
+            setPendingAiPrompt('')
+          }
+        }}
+        mode={aiConfigDialogMode}
+        onRequestFullConfig={() => setAiConfigDialogMode('full')}
+        aiConfig={aiConfig}
+        aiProviderDraft={aiProviderDraft}
+        setAiProviderDraft={setAiProviderDraft}
+        aiModelDraft={aiModelDraft}
+        setAiModelDraft={setAiModelDraft}
+        aiApiKeyDraft={aiApiKeyDraft}
+        setAiApiKeyDraft={setAiApiKeyDraft}
+        isSaving={isAiConfigSaving}
+        onSave={handleSaveAiConfig}
       />
 
       <EnvironmentSwitcherDialog

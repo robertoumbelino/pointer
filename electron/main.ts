@@ -1,6 +1,7 @@
 import { app, BrowserWindow, globalShortcut } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { AiService } from './services/ai-service'
 import { DbService } from './services/db-service'
 import { registerIpc } from './services/ipc'
 import { UpdaterService } from './services/updater-service'
@@ -19,6 +20,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 const dbService = new DbService()
 const updaterService = new UpdaterService()
+const aiService = new AiService(dbService)
 let mainWindow: BrowserWindow | null = null
 const RENDERER_RUN_SQL_SHORTCUT_CHANNEL = 'pointer:shortcut:run-sql'
 let isF5ShortcutRegistered = false
@@ -48,7 +50,7 @@ function unregisterFocusedWindowShortcuts(): void {
   isF5ShortcutRegistered = false
 }
 
-registerIpc(dbService, updaterService)
+registerIpc(dbService, updaterService, aiService)
 
 function createMainWindow(): void {
   const isMac = process.platform === 'darwin'

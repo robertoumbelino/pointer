@@ -8,6 +8,10 @@ export const pointerApi: PointerApi = {
   getAppVersion: () => api().getAppVersion(),
   copyToClipboard: (text) => api().copyToClipboard(text),
   pickSqliteFile: () => api().pickSqliteFile(),
+  getAiConfig: () => api().getAiConfig(),
+  saveAiConfig: (input) => api().saveAiConfig(input),
+  removeAiConfig: () => api().removeAiConfig(),
+  generateAiSqlTurn: (input) => api().generateAiSqlTurn(input),
 
   listEnvironments: () => api().listEnvironments(),
   createEnvironment: (name, color) => api().createEnvironment(name, color),

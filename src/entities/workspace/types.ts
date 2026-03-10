@@ -14,6 +14,13 @@ import { AUTO_SQL_CONNECTION_ID, DEFAULT_SQL } from '../../shared/constants/app'
 
 export type ConnectionDraft = ConnectionInput
 
+export type AiChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
 export type SqlTab = {
   id: string
   type: 'sql'
@@ -24,6 +31,10 @@ export type SqlTab = {
   sqlRunning: boolean
   sqlCanceling: boolean
   splitRatio: number
+  isAiTab: boolean
+  aiMessages: AiChatMessage[]
+  aiDraft: string
+  aiLoading: boolean
 }
 
 export type RowPendingUpdates = Record<number, Record<string, unknown>>
@@ -92,6 +103,7 @@ export type PersistedSqlTab = {
   connectionId: string
   sqlText: string
   splitRatio: number
+  isAiTab?: boolean
 }
 
 export type PersistedTableTab = {
@@ -125,17 +137,29 @@ export type PersistedWorkspaceStorage = {
   environments: Record<string, PersistedEnvironmentWorkspaceSnapshot>
 }
 
-export function createSqlTab(id: string, title: string, connectionId = AUTO_SQL_CONNECTION_ID): SqlTab {
+export function createSqlTab(
+  id: string,
+  title: string,
+  connectionId = AUTO_SQL_CONNECTION_ID,
+  options?: {
+    isAiTab?: boolean
+    sqlText?: string
+  },
+): SqlTab {
   return {
     id,
     type: 'sql',
     title,
     connectionId,
-    sqlText: DEFAULT_SQL,
+    sqlText: options?.sqlText ?? DEFAULT_SQL,
     sqlResult: null,
     sqlRunning: false,
     sqlCanceling: false,
     splitRatio: 56,
+    isAiTab: Boolean(options?.isAiTab),
+    aiMessages: [],
+    aiDraft: '',
+    aiLoading: false,
   }
 }
 

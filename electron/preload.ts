@@ -8,6 +8,10 @@ const pointerApi: PointerApi = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   copyToClipboard: (text) => ipcRenderer.invoke(IPC_CHANNELS.copyToClipboard, text),
   pickSqliteFile: () => ipcRenderer.invoke(IPC_CHANNELS.pickSqliteFile),
+  getAiConfig: () => ipcRenderer.invoke(IPC_CHANNELS.getAiConfig),
+  saveAiConfig: (input) => ipcRenderer.invoke(IPC_CHANNELS.saveAiConfig, input),
+  removeAiConfig: () => ipcRenderer.invoke(IPC_CHANNELS.removeAiConfig),
+  generateAiSqlTurn: (input) => ipcRenderer.invoke(IPC_CHANNELS.generateAiSqlTurn, input),
 
   listEnvironments: () => ipcRenderer.invoke(IPC_CHANNELS.listEnvironments),
   createEnvironment: (name, color) => ipcRenderer.invoke(IPC_CHANNELS.createEnvironment, name, color),

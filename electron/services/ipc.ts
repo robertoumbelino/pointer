@@ -1,5 +1,6 @@
 import { app, clipboard, dialog, BrowserWindow, ipcMain, type OpenDialogOptions } from 'electron'
-import type { ConnectionInput, TableReadInput, TableRef } from '../../shared/db-types'
+import type { AiConfigInput, AiGenerateSqlTurnInput, ConnectionInput, TableReadInput, TableRef } from '../../shared/db-types'
+import { AiService } from './ai-service'
 import { DbService } from './db-service'
 import { UpdaterService } from './updater-service'
 
@@ -37,9 +38,13 @@ export const IPC_CHANNELS = {
   getAppVersion: 'pointer:app:version',
   copyToClipboard: 'pointer:clipboard:write',
   pickSqliteFile: 'pointer:sqlite:pick-file',
+  getAiConfig: 'pointer:ai:config:get',
+  saveAiConfig: 'pointer:ai:config:save',
+  removeAiConfig: 'pointer:ai:config:remove',
+  generateAiSqlTurn: 'pointer:ai:sql:turn',
 } as const
 
-export function registerIpc(dbService: DbService, updaterService: UpdaterService): void {
+export function registerIpc(dbService: DbService, updaterService: UpdaterService, aiService: AiService): void {
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
   ipcMain.handle(IPC_CHANNELS.copyToClipboard, (_, text: string) => {
     clipboard.writeText(text)
@@ -146,6 +151,12 @@ export function registerIpc(dbService: DbService, updaterService: UpdaterService
 
   ipcMain.handle(IPC_CHANNELS.checkForAppUpdate, () => wrap(() => updaterService.checkForAppUpdate()))
   ipcMain.handle(IPC_CHANNELS.installLatestUpdate, () => wrap(() => updaterService.installLatestUpdate()))
+  ipcMain.handle(IPC_CHANNELS.getAiConfig, () => wrap(() => aiService.getAiConfig()))
+  ipcMain.handle(IPC_CHANNELS.saveAiConfig, (_, input: AiConfigInput) => wrap(() => aiService.saveAiConfig(input)))
+  ipcMain.handle(IPC_CHANNELS.removeAiConfig, () => wrap(() => aiService.removeAiConfig()))
+  ipcMain.handle(IPC_CHANNELS.generateAiSqlTurn, (_, input: AiGenerateSqlTurnInput) =>
+    wrap(() => aiService.generateAiSqlTurn(input)),
+  )
 }
 
 async function wrap<T>(callback: () => Promise<T> | T): Promise<T> {

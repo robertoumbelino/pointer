@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type {
+  AiSqlChatMessage,
   ColumnForeignKeyRef,
   ConnectionSummary,
   SqlExecutionResult,
@@ -26,11 +27,20 @@ import {
   getSqlStatementAtCursor,
   valuesEqual,
 } from '../../../shared/lib/workspace-utils'
-import { createSqlTab, type EditingCell, type RowPendingUpdates, type SqlTab, type TableReloadOverrides, type TableTab, type WorkTab } from '../../../entities/workspace/types'
+import {
+  createSqlTab,
+  type EditingCell,
+  type RowPendingUpdates,
+  type SqlTab,
+  type TableReloadOverrides,
+  type TableTab,
+  type WorkTab,
+} from '../../../entities/workspace/types'
 
 type UseWorkspaceActionsParams = {
   activeTabId: string
   setActiveTabId: Dispatch<SetStateAction<string>>
+  selectedEnvironmentId: string
   connections: ConnectionSummary[]
   activeTableTab: TableTab | null
   editingCell: EditingCell | null
@@ -86,6 +96,9 @@ type UseWorkspaceActionsResult = {
   }) => void
   exportTableCurrentPageCsv: (tabId: string) => void
   exportTableAllPagesCsv: (tabId: string) => Promise<void>
+  openAiSqlTabWithPrompt: (prompt: string) => Promise<void>
+  sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
+  setAiDraftOnSqlTab: (tabId: string, value: string) => void
   runSql: (
     force?: boolean,
     cursorOffset?: number,
@@ -132,6 +145,15 @@ function buildSqlExecutionId(): string {
   }
 
   return `sql-exec-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function buildAiMessage(role: 'user' | 'assistant', content: string): { id: string; role: 'user' | 'assistant'; content: string; createdAt: string } {
+  return {
+    id: buildSqlExecutionId(),
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  }
 }
 
 function isSqlExecutionCanceledError(error: unknown): boolean {
@@ -183,6 +205,7 @@ function normalizeIdentifier(value: string): string {
 export function useWorkspaceActions({
   activeTabId,
   setActiveTabId,
+  selectedEnvironmentId,
   connections,
   activeTableTab,
   editingCell,
@@ -646,6 +669,121 @@ export function useWorkspaceActions({
 
     setWorkTabs((current) => [...current, createSqlTab(nextId, title)])
     setActiveTabId(nextId)
+  }
+
+  async function completeAiSqlTurn(params: {
+    tabId: string
+    prompt: string
+    messages: AiSqlChatMessage[]
+    currentSql?: string
+  }): Promise<void> {
+    const { tabId, prompt, messages, currentSql } = params
+
+    if (!selectedEnvironmentId) {
+      updateSqlTab(tabId, (tab) => ({ ...tab, aiLoading: false }))
+      toast.error('Selecione um ambiente para usar a IA.')
+      return
+    }
+
+    try {
+      const result = await pointerApi.generateAiSqlTurn({
+        environmentId: selectedEnvironmentId,
+        prompt,
+        messages,
+        currentSql,
+      })
+
+      const assistantMessage = buildAiMessage('assistant', result.assistantMessage.trim() || 'Posso te ajudar a refinar essa consulta.')
+      updateSqlTab(tabId, (tab) => {
+        return {
+          ...tab,
+          sqlText: result.sql?.trim() ? result.sql.trim() : tab.sqlText,
+          aiLoading: false,
+          aiMessages: [...tab.aiMessages, assistantMessage],
+        }
+      })
+    } catch (error) {
+      const message = getErrorMessage(error)
+      const assistantMessage = buildAiMessage('assistant', message)
+      updateSqlTab(tabId, (tab) => ({
+        ...tab,
+        aiLoading: false,
+        aiMessages: [...tab.aiMessages, assistantMessage],
+      }))
+      toast.error(message)
+    }
+  }
+
+  async function sendAiPromptToSqlTab(tabId: string, prompt: string): Promise<void> {
+    const sqlTab = getSqlTab(tabId)
+    if (!sqlTab || !sqlTab.isAiTab) {
+      return
+    }
+
+    if (sqlTab.aiLoading) {
+      return
+    }
+
+    const normalizedPrompt = prompt.trim()
+    if (!normalizedPrompt) {
+      toast.info('Descreva o que você quer que a IA ajuste na consulta.')
+      return
+    }
+
+    const userMessage = buildAiMessage('user', normalizedPrompt)
+    const messages = [...sqlTab.aiMessages, userMessage].map((message) => ({
+      role: message.role,
+      content: message.content,
+    }))
+
+    updateSqlTab(tabId, (tab) => ({
+      ...tab,
+      aiLoading: true,
+      aiDraft: '',
+      aiMessages: [...tab.aiMessages, userMessage],
+    }))
+
+    await completeAiSqlTurn({
+      tabId,
+      prompt: normalizedPrompt,
+      messages,
+      currentSql: sqlTab.sqlText,
+    })
+  }
+
+  function setAiDraftOnSqlTab(tabId: string, value: string): void {
+    updateSqlTab(tabId, (tab) => ({
+      ...tab,
+      aiDraft: value,
+    }))
+  }
+
+  async function openAiSqlTabWithPrompt(prompt: string): Promise<void> {
+    const normalizedPrompt = prompt.trim()
+    if (!normalizedPrompt) {
+      toast.info('Descreva o que você quer consultar com a IA.')
+      return
+    }
+
+    const nextId = `sql:${sqlTabCounterRef.current}`
+    const title = `IA ${sqlTabCounterRef.current}`
+    const userMessage = buildAiMessage('user', normalizedPrompt)
+    const initialTab: SqlTab = {
+      ...createSqlTab(nextId, title, AUTO_SQL_CONNECTION_ID, { isAiTab: true, sqlText: '' }),
+      aiLoading: true,
+      aiMessages: [userMessage],
+    }
+
+    sqlTabCounterRef.current += 1
+    setWorkTabs((current) => [...current, initialTab])
+    setActiveTabId(nextId)
+
+    await completeAiSqlTurn({
+      tabId: nextId,
+      prompt: normalizedPrompt,
+      messages: [{ role: 'user', content: normalizedPrompt }],
+      currentSql: '',
+    })
   }
 
   function openRenameSqlTabDialog(tab: SqlTab): void {
@@ -1284,6 +1422,9 @@ export function useWorkspaceActions({
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    openAiSqlTabWithPrompt,
+    sendAiPromptToSqlTab,
+    setAiDraftOnSqlTab,
     runSql,
     cancelSqlExecution,
   }

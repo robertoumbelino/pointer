@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { Database, Table2, X } from 'lucide-react'
+import { Bot, Database, Table2, X } from 'lucide-react'
 import type { SqlTab, WorkTab } from '../../../entities/workspace/types'
 import { cn } from '../../../lib/utils'
 
@@ -45,7 +45,11 @@ export function WorkspaceTabsBar({
                     }
                   }}
                 >
-                  {tab.type === 'sql' ? <Database className='h-3.5 w-3.5' /> : <Table2 className='h-3.5 w-3.5' />}
+                  {tab.type === 'sql' ? (
+                    tab.isAiTab ? <Bot className='h-3.5 w-3.5' /> : <Database className='h-3.5 w-3.5' />
+                  ) : (
+                    <Table2 className='h-3.5 w-3.5' />
+                  )}
                   <span>{tab.title}</span>
                   {(tab.type === 'table' || (tab.type === 'sql' && sqlTabsCount > 1)) && (
                     <span

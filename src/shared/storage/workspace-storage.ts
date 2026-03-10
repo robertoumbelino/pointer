@@ -63,6 +63,7 @@ function serializeWorkTab(tab: WorkTab): PersistedWorkTab {
       connectionId: tab.connectionId,
       sqlText: tab.sqlText,
       splitRatio: tab.splitRatio,
+      isAiTab: tab.isAiTab,
     }
   }
 
@@ -107,6 +108,10 @@ function deserializeEnvironmentWorkspaceSnapshot(
             sqlRunning: false,
             sqlCanceling: false,
             splitRatio: typeof tab.splitRatio === 'number' ? tab.splitRatio : 56,
+            isAiTab: Boolean(tab.isAiTab),
+            aiMessages: [],
+            aiDraft: '',
+            aiLoading: false,
           } as SqlTab
         }
 
