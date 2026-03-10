@@ -2462,6 +2462,13 @@ function sanitizePort(port: number): number {
   return Number.isFinite(normalized) ? normalized : 0
 }
 
+function parseInFilterValues(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
 function buildPostgresWhereClause(filters: TableFilter[], availableColumns: string[]): { sql: string; values: string[] } {
   if (filters.length === 0) {
     return { sql: '', values: [] }
@@ -2478,6 +2485,20 @@ function buildPostgresWhereClause(filters: TableFilter[], availableColumns: stri
     if (filter.operator === 'eq') {
       values.push(filter.value)
       parts.push(`CAST(${quotePostgresIdentifier(filter.column)} AS TEXT) = $${values.length}`)
+      continue
+    }
+
+    if (filter.operator === 'in') {
+      const inValues = parseInFilterValues(filter.value)
+      if (inValues.length === 0) {
+        continue
+      }
+
+      const placeholders = inValues.map((item) => {
+        values.push(item)
+        return `$${values.length}`
+      })
+      parts.push(`CAST(${quotePostgresIdentifier(filter.column)} AS TEXT) IN (${placeholders.join(', ')})`)
       continue
     }
 
@@ -2505,20 +2526,40 @@ function buildClickHouseWhereClause(
 
   const params: Record<string, string> = {}
   const parts: string[] = []
+  let paramIndex = 0
 
   for (const filter of filters) {
     if (!availableColumns.includes(filter.column)) {
       continue
     }
 
-    const key = `f_${parts.length}`
-    params[key] = filter.value
-
     if (filter.operator === 'eq') {
+      const key = `f_${paramIndex}`
+      paramIndex += 1
+      params[key] = filter.value
       parts.push(`toString(${quoteClickHouseIdentifier(filter.column)}) = {${key}:String}`)
       continue
     }
 
+    if (filter.operator === 'in') {
+      const inValues = parseInFilterValues(filter.value)
+      if (inValues.length === 0) {
+        continue
+      }
+
+      const placeholders = inValues.map((item) => {
+        const key = `f_${paramIndex}`
+        paramIndex += 1
+        params[key] = item
+        return `{${key}:String}`
+      })
+      parts.push(`toString(${quoteClickHouseIdentifier(filter.column)}) IN (${placeholders.join(', ')})`)
+      continue
+    }
+
+    const key = `f_${paramIndex}`
+    paramIndex += 1
+    params[key] = filter.value
     parts.push(`positionCaseInsensitiveUTF8(toString(${quoteClickHouseIdentifier(filter.column)}), {${key}:String}) > 0`)
   }
 
@@ -2548,6 +2589,17 @@ function buildSqliteWhereClause(filters: TableFilter[], availableColumns: string
     if (filter.operator === 'eq') {
       values.push(filter.value)
       parts.push(`CAST(${quoteSqliteIdentifier(filter.column)} AS TEXT) = ?`)
+      continue
+    }
+
+    if (filter.operator === 'in') {
+      const inValues = parseInFilterValues(filter.value)
+      if (inValues.length === 0) {
+        continue
+      }
+
+      values.push(...inValues)
+      parts.push(`CAST(${quoteSqliteIdentifier(filter.column)} AS TEXT) IN (${inValues.map(() => '?').join(', ')})`)
       continue
     }
 

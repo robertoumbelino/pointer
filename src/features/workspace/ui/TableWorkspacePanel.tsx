@@ -314,10 +314,11 @@ export function TableWorkspacePanel({
               >
                 <option value='ilike'>ilike</option>
                 <option value='eq'>equal</option>
+                <option value='in'>in</option>
               </select>
               <Input
                 className='h-8 w-44 text-[13px]'
-                placeholder='Filtrar por valor'
+                placeholder={activeTableTab.filterOperator === 'in' ? 'Ex: 1,2,3' : 'Filtrar por valor'}
                 value={activeTableTab.filterValue}
                 disabled={isTableActionDisabled}
                 onChange={(event) =>
