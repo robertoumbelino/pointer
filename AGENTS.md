@@ -72,3 +72,8 @@ O frontend do Pointer segue arquitetura orientada a features, com composição n
 
 - `pointer-commit-convention`: gera e valida commits no padrão do projeto. (file: `/Users/roberto/.codex/skills/pointer-commit-convention/SKILL.md`)
 - `pointer-release-manager`: executa release completa (bump, changelog, build e publish no GitHub). (file: `/Users/roberto/.codex/skills/pointer-release-manager/SKILL.md`)
+
+## Referência de testes E2E (Playwright + Electron)
+
+- Para smoke tests no app Electron real, consultar `PLAYWRIGHT_ELECTRON.md` na raiz do projeto.
+- O guia inclui fluxo validado para `Cmd+K` -> `Abrir changelog` e execução de `SELECT` com SQLite.
