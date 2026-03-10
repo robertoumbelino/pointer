@@ -474,26 +474,40 @@ export class DbService {
       }),
     )
 
-    return results
-      .flat()
+    const scoredResults = results.flat().map((hit) => ({
+      hit,
+      match: scoreTableMatch(hit.table, normalizedQuery),
+    }))
+
+    const filteredResults = normalizedQuery
+      ? scoredResults.filter((candidate) => candidate.match.matched)
+      : scoredResults
+
+    return filteredResults
       .sort((a, b) => {
-        const rankDiff = rankTableMatch(a.table, normalizedQuery) - rankTableMatch(b.table, normalizedQuery)
-        if (rankDiff !== 0) {
-          return rankDiff
+        const scoreDiff = b.match.score - a.match.score
+        if (scoreDiff !== 0) {
+          return scoreDiff
         }
 
-        const lengthDiff = a.table.name.length - b.table.name.length
+        const compactnessDiff = a.match.compactness - b.match.compactness
+        if (compactnessDiff !== 0) {
+          return compactnessDiff
+        }
+
+        const lengthDiff = a.hit.table.name.length - b.hit.table.name.length
         if (lengthDiff !== 0) {
           return lengthDiff
         }
 
-        const byConnection = a.connectionName.localeCompare(b.connectionName)
+        const byConnection = a.hit.connectionName.localeCompare(b.hit.connectionName)
         if (byConnection !== 0) {
           return byConnection
         }
 
-        return a.table.fqName.localeCompare(b.table.fqName)
+        return a.hit.table.fqName.localeCompare(b.hit.table.fqName)
       })
+      .map((candidate) => candidate.hit)
       .slice(0, 300)
   }
 
@@ -1457,7 +1471,45 @@ export class DbService {
 
   private async searchPostgresTables(connection: ConnectionSummary, query: string): Promise<TableRef[]> {
     const pool = await this.getPostgresPool(connection)
-    const term = `%${query.trim()}%`
+    const trimmedQuery = query.trim()
+
+    if (!trimmedQuery) {
+      const result = await pool.query<{ table_schema: string; table_name: string }>(
+        `
+        SELECT table_schema, table_name
+        FROM information_schema.tables
+        WHERE table_type = 'BASE TABLE'
+          AND table_schema NOT IN ('pg_catalog', 'information_schema')
+        ORDER BY table_schema ASC, table_name ASC
+        LIMIT 180
+        `,
+      )
+
+      return result.rows.map((row) => ({
+        schema: row.table_schema,
+        name: row.table_name,
+        fqName: `${row.table_schema}.${row.table_name}`,
+      }))
+    }
+
+    const term = `%${trimmedQuery}%`
+    const compactQuery = compactFuzzyValue(trimmedQuery)
+    const values: string[] = [term]
+    let compactClause = ''
+
+    if (compactQuery) {
+      const compactContainsIndex = values.push(`%${compactQuery}%`)
+      const compactSubsequenceIndex = values.push(buildLikeSubsequencePattern(compactQuery))
+      const compactTableNameExpr = `regexp_replace(lower(table_name), '[_. -]+', '', 'g')`
+      const compactFqNameExpr = `regexp_replace(lower(CONCAT(table_schema, '.', table_name)), '[_. -]+', '', 'g')`
+
+      compactClause = `
+          OR ${compactTableNameExpr} LIKE $${compactContainsIndex}
+          OR ${compactFqNameExpr} LIKE $${compactContainsIndex}
+          OR ${compactTableNameExpr} LIKE $${compactSubsequenceIndex}
+          OR ${compactFqNameExpr} LIKE $${compactSubsequenceIndex}
+      `
+    }
 
     const result = await pool.query<{ table_schema: string; table_name: string }>(
       `
@@ -1465,11 +1517,15 @@ export class DbService {
       FROM information_schema.tables
       WHERE table_type = 'BASE TABLE'
         AND table_schema NOT IN ('pg_catalog', 'information_schema')
-        AND (table_name ILIKE $1 OR CONCAT(table_schema, '.', table_name) ILIKE $1)
+        AND (
+          table_name ILIKE $1
+          OR CONCAT(table_schema, '.', table_name) ILIKE $1
+          ${compactClause}
+        )
       ORDER BY table_schema ASC, table_name ASC
       LIMIT 180
       `,
-      [term],
+      values,
     )
 
     return result.rows.map((row) => ({
@@ -1481,6 +1537,46 @@ export class DbService {
 
   private async searchClickHouseTables(connection: ConnectionSummary, query: string): Promise<TableRef[]> {
     const client = await this.getClickHouseClient(connection)
+    const trimmedQuery = query.trim()
+
+    if (!trimmedQuery) {
+      const result = await client.query({
+        query: `
+          SELECT database AS table_schema, name AS table_name
+          FROM system.tables
+          WHERE lower(database) NOT IN ('information_schema', 'system')
+          ORDER BY table_schema ASC, table_name ASC
+          LIMIT 180
+        `,
+        format: 'JSONEachRow',
+      })
+
+      const rows = await result.json<{ table_schema: string; table_name: string }>()
+
+      return rows.map((row) => ({
+        schema: row.table_schema,
+        name: row.table_name,
+        fqName: `${row.table_schema}.${row.table_name}`,
+      }))
+    }
+
+    const compactQuery = compactFuzzyValue(trimmedQuery)
+    const queryParams: Record<string, string> = { term: trimmedQuery }
+    let compactClause = ''
+
+    if (compactQuery) {
+      const compactNameExpr = `replaceRegexpAll(lowerUTF8(name), '[_. -]+', '')`
+      const compactFqNameExpr = `replaceRegexpAll(lowerUTF8(concat(database, '.', name)), '[_. -]+', '')`
+      queryParams.compactTerm = compactQuery
+      queryParams.compactSubsequencePattern = buildRegexSubsequencePattern(compactQuery)
+
+      compactClause = `
+            OR position(${compactNameExpr}, {compactTerm:String}) > 0
+            OR position(${compactFqNameExpr}, {compactTerm:String}) > 0
+            OR match(${compactNameExpr}, {compactSubsequencePattern:String})
+            OR match(${compactFqNameExpr}, {compactSubsequencePattern:String})
+      `
+    }
 
     const result = await client.query({
       query: `
@@ -1490,11 +1586,12 @@ export class DbService {
           AND (
             positionCaseInsensitiveUTF8(name, {term:String}) > 0
             OR positionCaseInsensitiveUTF8(concat(database, '.', name), {term:String}) > 0
+            ${compactClause}
           )
         ORDER BY table_schema ASC, table_name ASC
         LIMIT 180
       `,
-      query_params: { term: query.trim() },
+      query_params: queryParams,
       format: 'JSONEachRow',
     })
 
@@ -1555,17 +1652,35 @@ export class DbService {
   }
 
   private async searchSqliteTables(connection: ConnectionSummary, query: string): Promise<TableRef[]> {
-    const term = query.trim().toLowerCase()
+    const trimmedQuery = query.trim()
+    const term = trimmedQuery.toLowerCase()
     const tables = await this.listSqliteTables(connection)
     if (!term) {
       return tables.slice(0, 180)
     }
 
+    const compactTerm = compactFuzzyValue(trimmedQuery)
+
     return tables
       .filter((table) => {
         const tableName = table.name.toLowerCase()
         const fqName = table.fqName.toLowerCase()
-        return tableName.includes(term) || fqName.includes(term)
+        if (tableName.includes(term) || fqName.includes(term)) {
+          return true
+        }
+
+        if (!compactTerm) {
+          return false
+        }
+
+        const compactTableName = compactFuzzyValue(table.name)
+        const compactFqName = compactFuzzyValue(table.fqName)
+        return (
+          compactTableName.includes(compactTerm) ||
+          compactFqName.includes(compactTerm) ||
+          isSubsequence(compactTerm, compactTableName) ||
+          isSubsequence(compactTerm, compactFqName)
+        )
       })
       .slice(0, 180)
   }
@@ -2710,44 +2825,300 @@ function normalizeSqliteClientError(error: unknown): Error {
   return error
 }
 
-function rankTableMatch(table: TableRef, queryLower: string): number {
+type TableMatchScore = {
+  matched: boolean
+  score: number
+  compactness: number
+}
+
+type FuzzyTargetScore = {
+  matched: boolean
+  score: number
+  positions: number[]
+}
+
+function scoreTableMatch(table: TableRef, queryLower: string): TableMatchScore {
   if (!queryLower) {
-    return 100
+    return {
+      matched: true,
+      score: 0,
+      compactness: Number.MAX_SAFE_INTEGER,
+    }
   }
 
-  const tableName = table.name.toLowerCase()
-  const fqName = table.fqName.toLowerCase()
+  const compactQuery = compactFuzzyValue(queryLower)
+  const candidates: FuzzyTargetScore[] = [
+    boostFuzzyTarget(scoreFuzzyTarget(table.name, queryLower), 40),
+    boostFuzzyTarget(scoreFuzzyTarget(table.fqName, queryLower), 20),
+  ]
 
-  if (tableName === queryLower) {
+  if (compactQuery) {
+    candidates.push(boostFuzzyTarget(scoreFuzzyTarget(compactFuzzyValue(table.name), compactQuery), 60))
+    candidates.push(boostFuzzyTarget(scoreFuzzyTarget(compactFuzzyValue(table.fqName), compactQuery), 30))
+  }
+
+  const matchedCandidates = candidates.filter((candidate) => candidate.matched)
+  if (matchedCandidates.length === 0) {
+    return {
+      matched: false,
+      score: 0,
+      compactness: Number.MAX_SAFE_INTEGER,
+    }
+  }
+
+  const bestCandidate = matchedCandidates.reduce((best, current) => {
+    if (current.score > best.score) {
+      return current
+    }
+
+    if (current.score < best.score) {
+      return best
+    }
+
+    const currentCompactness = computePositionsCompactness(current.positions)
+    const bestCompactness = computePositionsCompactness(best.positions)
+    return currentCompactness < bestCompactness ? current : best
+  })
+
+  return {
+    matched: true,
+    score: bestCandidate.score,
+    compactness: computePositionsCompactness(bestCandidate.positions),
+  }
+}
+
+function boostFuzzyTarget(candidate: FuzzyTargetScore, boost: number): FuzzyTargetScore {
+  if (!candidate.matched) {
+    return candidate
+  }
+
+  return {
+    ...candidate,
+    score: candidate.score + boost,
+  }
+}
+
+function scoreFuzzyTarget(target: string, queryLower: string): FuzzyTargetScore {
+  if (!target || !queryLower) {
+    return { matched: false, score: 0, positions: [] }
+  }
+
+  const targetLower = target.toLowerCase()
+
+  if (targetLower === queryLower) {
+    return {
+      matched: true,
+      score: 20_000 + queryLower.length * 100,
+      positions: Array.from({ length: queryLower.length }, (_, index) => index),
+    }
+  }
+
+  if (targetLower.startsWith(queryLower)) {
+    return {
+      matched: true,
+      score: 12_000 + queryLower.length * 80,
+      positions: Array.from({ length: queryLower.length }, (_, index) => index),
+    }
+  }
+
+  const queryLength = queryLower.length
+  const targetLength = target.length
+  if (queryLength > targetLength) {
+    return { matched: false, score: 0, positions: [] }
+  }
+
+  const scores = new Array<number>(queryLength * targetLength).fill(0)
+  const matches = new Array<number>(queryLength * targetLength).fill(0)
+
+  for (let queryIndex = 0; queryIndex < queryLength; queryIndex += 1) {
+    const queryOffset = queryIndex * targetLength
+    const previousOffset = queryOffset - targetLength
+    const queryChar = queryLower[queryIndex]
+
+    for (let targetIndex = 0; targetIndex < targetLength; targetIndex += 1) {
+      const currentIndex = queryOffset + targetIndex
+      const leftIndex = currentIndex - 1
+      const diagIndex = previousOffset + targetIndex - 1
+      const leftScore = targetIndex > 0 ? scores[leftIndex] : 0
+      const diagScore = queryIndex > 0 && targetIndex > 0 ? scores[diagIndex] : 0
+      const matchSequenceLength = queryIndex > 0 && targetIndex > 0 ? matches[diagIndex] : 0
+
+      let charScore = 0
+      if (queryIndex === 0 || diagScore > 0) {
+        charScore = computeFuzzyCharScore(queryChar, target, targetLower, targetIndex, matchSequenceLength)
+      }
+
+      const nextScore = diagScore + charScore
+      if (charScore > 0 && nextScore >= leftScore) {
+        scores[currentIndex] = nextScore
+        matches[currentIndex] = matchSequenceLength + 1
+      } else {
+        scores[currentIndex] = leftScore
+        matches[currentIndex] = 0
+      }
+    }
+  }
+
+  const finalScore = scores[queryLength * targetLength - 1]
+  if (finalScore <= 0) {
+    return { matched: false, score: 0, positions: [] }
+  }
+
+  const positions: number[] = []
+  let queryIndex = queryLength - 1
+  let targetIndex = targetLength - 1
+  while (queryIndex >= 0 && targetIndex >= 0) {
+    const currentIndex = queryIndex * targetLength + targetIndex
+    if (matches[currentIndex] === 0) {
+      targetIndex -= 1
+      continue
+    }
+
+    positions.push(targetIndex)
+    queryIndex -= 1
+    targetIndex -= 1
+  }
+
+  if (positions.length !== queryLength) {
+    return { matched: false, score: 0, positions: [] }
+  }
+
+  positions.reverse()
+
+  const span = computePositionsSpan(positions)
+  const compactnessBonus = Math.max(0, queryLength * 3 - (span - queryLength))
+
+  return {
+    matched: true,
+    score: finalScore + compactnessBonus * 4,
+    positions,
+  }
+}
+
+function computeFuzzyCharScore(
+  queryChar: string,
+  target: string,
+  targetLower: string,
+  targetIndex: number,
+  sequenceLength: number,
+): number {
+  if (queryChar !== targetLower[targetIndex]) {
     return 0
   }
 
-  if (fqName === queryLower) {
-    return 1
+  let score = 1
+
+  if (sequenceLength > 0) {
+    score += Math.min(sequenceLength, 3) * 6
+    score += Math.max(0, sequenceLength - 3) * 3
   }
 
-  if (tableName.startsWith(queryLower)) {
-    return 2
+  if (targetIndex === 0) {
+    score += 8
+    return score
   }
 
-  if (fqName.startsWith(queryLower)) {
-    return 3
+  const separatorBonus = separatorBonusForChar(target[targetIndex - 1] ?? '')
+  if (separatorBonus > 0) {
+    score += separatorBonus
+    return score
   }
 
-  const wordBoundary = tableName.match(new RegExp(`(^|[_\\-.])${escapeRegExp(queryLower)}`))
-  if (wordBoundary) {
-    return 4
+  if (isUppercaseAscii(target[targetIndex] ?? '') && sequenceLength === 0) {
+    score += 2
   }
 
-  if (tableName.includes(queryLower)) {
+  return score
+}
+
+function separatorBonusForChar(char: string): number {
+  if (char === '/' || char === '\\') {
     return 5
   }
 
-  if (fqName.includes(queryLower)) {
-    return 6
+  if (char === '_' || char === '-' || char === '.' || char === ' ' || char === '\'' || char === '"' || char === ':') {
+    return 4
   }
 
-  return 50
+  return 0
+}
+
+function isUppercaseAscii(char: string): boolean {
+  if (!char) {
+    return false
+  }
+
+  const code = char.charCodeAt(0)
+  return code >= 65 && code <= 90
+}
+
+function computePositionsSpan(positions: number[]): number {
+  if (positions.length === 0) {
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  return positions[positions.length - 1] - positions[0] + 1
+}
+
+function computePositionsCompactness(positions: number[]): number {
+  const span = computePositionsSpan(positions)
+  if (span === Number.MAX_SAFE_INTEGER) {
+    return span
+  }
+
+  return span - positions.length
+}
+
+function compactFuzzyValue(value: string): string {
+  return value.toLowerCase().replace(/[_. -]+/g, '')
+}
+
+function buildLikeSubsequencePattern(value: string): string {
+  if (!value) {
+    return '%'
+  }
+
+  return `%${value
+    .split('')
+    .map((char) => escapeLikeChar(char))
+    .join('%')}%`
+}
+
+function buildRegexSubsequencePattern(value: string): string {
+  if (!value) {
+    return '.*'
+  }
+
+  return value
+    .split('')
+    .map((char) => escapeRegExp(char))
+    .join('.*')
+}
+
+function isSubsequence(query: string, target: string): boolean {
+  if (!query) {
+    return true
+  }
+
+  let queryIndex = 0
+  for (let targetIndex = 0; targetIndex < target.length; targetIndex += 1) {
+    if (target[targetIndex] === query[queryIndex]) {
+      queryIndex += 1
+      if (queryIndex >= query.length) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function escapeLikeChar(value: string): string {
+  if (value === '%' || value === '_' || value === '\\') {
+    return `\\${value}`
+  }
+
+  return value
 }
 
 function escapeRegExp(value: string): string {
