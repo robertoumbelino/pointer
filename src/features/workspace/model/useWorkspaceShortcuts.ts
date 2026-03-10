@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import type { MutableRefObject } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { TableTab, WorkTab } from '../../../entities/workspace/types'
 
 type UseWorkspaceShortcutsParams = {
   isWorkspaceActive: boolean
   activeTabId: string
+  setActiveTabId: Dispatch<SetStateAction<string>>
   setIsCommandOpen: (open: boolean) => void
   setIsEnvironmentCommandOpen: (open: boolean) => void
   runSqlRef: MutableRefObject<((force?: boolean, cursorOffset?: number, explicitSql?: string, targetTabId?: string, resolvedConnectionId?: string) => Promise<void>) | undefined>
@@ -22,6 +23,7 @@ type UseWorkspaceShortcutsParams = {
 export function useWorkspaceShortcuts({
   isWorkspaceActive,
   activeTabId,
+  setActiveTabId,
   setIsCommandOpen,
   setIsEnvironmentCommandOpen,
   runSqlRef,
@@ -44,6 +46,30 @@ export function useWorkspaceShortcuts({
       }
 
       if (!isWorkspaceActive) {
+        return
+      }
+
+      const isCtrlTabNavigation =
+        event.ctrlKey && !event.metaKey && !event.altKey && (event.key === 'Tab' || event.code === 'Tab')
+      if (isCtrlTabNavigation) {
+        event.preventDefault()
+        event.stopPropagation()
+
+        const currentTabs = workTabsRef.current
+        if (currentTabs.length === 0) {
+          return
+        }
+
+        const activeIndex = currentTabs.findIndex((tab) => tab.id === activeTabIdRef.current)
+        const startIndex = activeIndex >= 0 ? activeIndex : 0
+        const direction = event.shiftKey ? -1 : 1
+        const nextIndex = (startIndex + direction + currentTabs.length) % currentTabs.length
+        const nextTab = currentTabs[nextIndex]
+        if (!nextTab) {
+          return
+        }
+
+        setActiveTabId(nextTab.id)
         return
       }
 
@@ -154,6 +180,7 @@ export function useWorkspaceShortcuts({
     openNewSqlTabRef,
     runSqlRef,
     saveActiveTableChangesRef,
+    setActiveTabId,
     setIsCommandOpen,
     setIsEnvironmentCommandOpen,
     sqlCursorByTabRef,

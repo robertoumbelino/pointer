@@ -575,6 +575,7 @@ function App(): JSX.Element {
   useWorkspaceShortcuts({
     isWorkspaceActive: currentView === 'workspace',
     activeTabId,
+    setActiveTabId,
     setIsCommandOpen,
     setIsEnvironmentCommandOpen,
     runSqlRef,
