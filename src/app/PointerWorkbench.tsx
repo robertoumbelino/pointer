@@ -177,6 +177,7 @@ function App(): JSX.Element {
     commitInlineEditRef,
     toggleSelectedRowDeleteRef,
     copyTableSelectionRef,
+    pasteIntoTableSelectionRef,
     openNewSqlTabRef,
     closeActiveTabRef,
     getTableTab,
@@ -492,6 +493,7 @@ function App(): JSX.Element {
     updateInsertDraftValue,
     handleDeleteRow,
     copyTableSelection,
+    pasteIntoTableSelection,
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
@@ -670,6 +672,7 @@ function App(): JSX.Element {
   commitInlineEditRef.current = commitInlineEdit
   toggleSelectedRowDeleteRef.current = handleDeleteRow
   copyTableSelectionRef.current = copyTableSelection
+  pasteIntoTableSelectionRef.current = pasteIntoTableSelection
   openNewSqlTabRef.current = openNewSqlTab
   closeActiveTabRef.current = closeActiveTab
 
@@ -684,6 +687,7 @@ function App(): JSX.Element {
     commitInlineEditRef,
     toggleSelectedRowDeleteRef,
     copyTableSelectionRef,
+    pasteIntoTableSelectionRef,
     openNewSqlTabRef,
     closeActiveTabRef,
     activeTabIdRef,

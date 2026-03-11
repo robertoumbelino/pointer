@@ -13,6 +13,7 @@ type UseWorkspaceShortcutsParams = {
   commitInlineEditRef: MutableRefObject<(() => void) | undefined>
   toggleSelectedRowDeleteRef: MutableRefObject<(() => void) | undefined>
   copyTableSelectionRef: MutableRefObject<(() => Promise<void>) | undefined>
+  pasteIntoTableSelectionRef: MutableRefObject<((rawClipboardText: string) => void) | undefined>
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
   activeTabIdRef: MutableRefObject<string>
@@ -32,6 +33,7 @@ export function useWorkspaceShortcuts({
   commitInlineEditRef,
   toggleSelectedRowDeleteRef,
   copyTableSelectionRef,
+  pasteIntoTableSelectionRef,
   openNewSqlTabRef,
   closeActiveTabRef,
   activeTabIdRef,
@@ -185,8 +187,38 @@ export function useWorkspaceShortcuts({
       }
     }
 
+    const handlePaste = (event: ClipboardEvent): void => {
+      if (!isWorkspaceActive) {
+        return
+      }
+
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const isTypingTarget = Boolean(target?.closest('input, textarea, select, [contenteditable="true"], .cm-editor'))
+      if (isTypingTarget) {
+        return
+      }
+
+      const activeTable = getTableTab(activeTabIdRef.current)
+      if (!activeTable) {
+        return
+      }
+
+      const raw = event.clipboardData?.getData('text/plain')
+      if (!raw) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      pasteIntoTableSelectionRef.current?.(raw)
+    }
+
     window.addEventListener('keydown', handleShortcut, true)
-    return () => window.removeEventListener('keydown', handleShortcut, true)
+    window.addEventListener('paste', handlePaste, true)
+    return () => {
+      window.removeEventListener('keydown', handleShortcut, true)
+      window.removeEventListener('paste', handlePaste, true)
+    }
   }, [
     activeTabId,
     activeTabIdRef,
@@ -195,6 +227,7 @@ export function useWorkspaceShortcuts({
     getTableTab,
     isWorkspaceActive,
     copyTableSelectionRef,
+    pasteIntoTableSelectionRef,
     openNewSqlTabRef,
     runSqlRef,
     saveActiveTableChangesRef,

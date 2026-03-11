@@ -88,6 +88,7 @@ type UseWorkspaceActionsResult = {
   updateInsertDraftValue: (columnName: string, value: string | null) => void
   handleDeleteRow: () => void
   copyTableSelection: () => Promise<void>
+  pasteIntoTableSelection: (rawClipboardText: string) => void
   exportSqlResultSetVisibleCsv: (params: {
     tabId: string
     resultSetIndex: number
@@ -232,6 +233,106 @@ function escapeTsvCell(value: string): string {
 
 function buildTsv(rows: string[][]): string {
   return rows.map((row) => row.map((value) => escapeTsvCell(value)).join('\t')).join('\n')
+}
+
+function parseDelimited(raw: string, delimiter: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let inQuotes = false
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index]
+
+    if (char === '"') {
+      if (inQuotes && raw[index + 1] === '"') {
+        cell += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (!inQuotes && char === delimiter) {
+      row.push(cell)
+      cell = ''
+      continue
+    }
+
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      row.push(cell)
+      rows.push(row)
+      row = []
+      cell = ''
+      if (char === '\r' && raw[index + 1] === '\n') {
+        index += 1
+      }
+      continue
+    }
+
+    cell += char
+  }
+
+  row.push(cell)
+  rows.push(row)
+
+  while (rows.length > 1 && rows[rows.length - 1]?.every((value) => value === '')) {
+    rows.pop()
+  }
+
+  return rows
+}
+
+function countUnquotedDelimiter(line: string, delimiter: string): number {
+  let inQuotes = false
+  let count = 0
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (!inQuotes && char === delimiter) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+function detectClipboardDelimiter(raw: string): string {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+  const sampleLine = lines[0] ?? ''
+
+  const tabCount = countUnquotedDelimiter(sampleLine, '\t')
+  if (tabCount > 0) {
+    return '\t'
+  }
+
+  const semicolonCount = countUnquotedDelimiter(sampleLine, ';')
+  const commaCount = countUnquotedDelimiter(sampleLine, ',')
+
+  if (semicolonCount > commaCount && semicolonCount > 0) {
+    return ';'
+  }
+
+  if (commaCount > 0) {
+    return ','
+  }
+
+  return '\t'
+}
+
+function parseClipboardMatrix(raw: string): string[][] {
+  const delimiter = detectClipboardDelimiter(raw)
+  return parseDelimited(raw, delimiter)
 }
 
 export function useWorkspaceActions({
@@ -1220,6 +1321,158 @@ export function useWorkspaceActions({
     }
   }
 
+  function pasteIntoTableSelection(rawClipboardText: string): void {
+    const tab = getTableTab(activeTabId)
+    if (!tab?.data || !tab.schema) {
+      return
+    }
+
+    if (!tab.schema.supportsRowEdit) {
+      toast.info('Paste por célula não está disponível para este banco.')
+      return
+    }
+
+    const parsed = parseClipboardMatrix(rawClipboardText)
+    if (parsed.length === 0) {
+      return
+    }
+
+    const matrix = parsed.map((row) => row.map((value) => value ?? ''))
+    const sourceHeight = matrix.length
+    const sourceWidth = Math.max(...matrix.map((row) => row.length), 0)
+    if (sourceWidth <= 0) {
+      return
+    }
+
+    const rowCount = tab.data.rows.length
+    const columnCount = tab.schema.columns.length
+    if (rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    const hasCellRange = tab.selectionMode === 'cell' && Boolean(tab.selectedCellRange)
+    const rangeStart = tab.selectedCellRange?.start ?? tab.activeCell
+    const rangeEnd = tab.selectedCellRange?.end ?? tab.activeCell
+    if (!rangeStart || !rangeEnd) {
+      return
+    }
+
+    const minRow = Math.max(0, Math.min(rangeStart.rowIndex, rangeEnd.rowIndex))
+    const maxRow = Math.min(rowCount - 1, Math.max(rangeStart.rowIndex, rangeEnd.rowIndex))
+    const minCol = Math.max(0, Math.min(rangeStart.columnIndex, rangeEnd.columnIndex))
+    const maxCol = Math.min(columnCount - 1, Math.max(rangeStart.columnIndex, rangeEnd.columnIndex))
+    const targetHeight = maxRow - minRow + 1
+    const targetWidth = maxCol - minCol + 1
+    const fillSelection = hasCellRange && sourceHeight === 1 && sourceWidth === 1 && (targetHeight > 1 || targetWidth > 1)
+
+    let changedCount = 0
+    let attemptedCount = 0
+    let skippedCount = 0
+
+    updateTableTab(tab.id, (current) => {
+      if (!current.data || !current.schema) {
+        return current
+      }
+
+      const nextRows = current.data.rows.map((row) => ({ ...row }))
+      const nextPendingUpdates: RowPendingUpdates = { ...current.pendingUpdates }
+
+      const maxTargetRowExclusive = fillSelection ? maxRow + 1 : Math.min(rowCount, minRow + sourceHeight)
+      const maxTargetColExclusive = fillSelection ? maxCol + 1 : Math.min(columnCount, minCol + sourceWidth)
+
+      for (let targetRow = minRow; targetRow < maxTargetRowExclusive; targetRow += 1) {
+        if (current.pendingDeletes.includes(targetRow)) {
+          skippedCount += 1
+          continue
+        }
+
+        const row = nextRows[targetRow]
+        if (!row) {
+          continue
+        }
+
+        for (let targetCol = minCol; targetCol < maxTargetColExclusive; targetCol += 1) {
+          const sourceRow = fillSelection ? 0 : targetRow - minRow
+          const sourceCol = fillSelection ? 0 : targetCol - minCol
+          const sourceValue = matrix[sourceRow]?.[sourceCol]
+          if (sourceValue === undefined) {
+            continue
+          }
+
+          const column = current.schema.columns[targetCol]
+          if (!column || column.isPrimaryKey) {
+            skippedCount += 1
+            continue
+          }
+
+          attemptedCount += 1
+          const currentValue = row[column.name]
+          const baseRow = current.baseRows?.[targetRow] ?? null
+          const baseValue = baseRow ? baseRow[column.name] : undefined
+          const nextValue = coerceValueByOriginal(sourceValue, currentValue, column.dataType)
+
+          if (valuesEqual(currentValue, nextValue)) {
+            const rowPendingUpdate = { ...(nextPendingUpdates[targetRow] ?? {}) }
+            if (valuesEqual(nextValue, baseValue)) {
+              delete rowPendingUpdate[column.name]
+            } else {
+              rowPendingUpdate[column.name] = nextValue
+            }
+
+            if (Object.keys(rowPendingUpdate).length === 0) {
+              delete nextPendingUpdates[targetRow]
+            } else {
+              nextPendingUpdates[targetRow] = rowPendingUpdate
+            }
+            continue
+          }
+
+          row[column.name] = nextValue
+          changedCount += 1
+
+          const rowPendingUpdate = { ...(nextPendingUpdates[targetRow] ?? {}) }
+          if (valuesEqual(nextValue, baseValue)) {
+            delete rowPendingUpdate[column.name]
+          } else {
+            rowPendingUpdate[column.name] = nextValue
+          }
+
+          if (Object.keys(rowPendingUpdate).length === 0) {
+            delete nextPendingUpdates[targetRow]
+          } else {
+            nextPendingUpdates[targetRow] = rowPendingUpdate
+          }
+        }
+      }
+
+      if (changedCount === 0 && attemptedCount === 0) {
+        return current
+      }
+
+      return {
+        ...current,
+        data: {
+          ...current.data,
+          rows: nextRows,
+        },
+        pendingUpdates: nextPendingUpdates,
+      }
+    })
+
+    if (changedCount > 0) {
+      const skippedLabel = skippedCount > 0 ? ` • ${skippedCount} ignorada(s)` : ''
+      toast.success(`${changedCount} célula(s) atualizada(s)${skippedLabel}. Use Cmd+S para salvar.`)
+      return
+    }
+
+    if (attemptedCount > 0) {
+      toast.info('Nenhuma célula alterada (valores já estavam iguais).')
+      return
+    }
+
+    toast.info('Nenhuma célula válida para colar na seleção atual.')
+  }
+
   function exportSqlResultSetVisibleCsv({
     tabId,
     resultSetIndex,
@@ -1541,6 +1794,7 @@ export function useWorkspaceActions({
     updateInsertDraftValue,
     handleDeleteRow,
     copyTableSelection,
+    pasteIntoTableSelection,
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
