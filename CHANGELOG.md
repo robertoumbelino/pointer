@@ -2,6 +2,18 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.3 - 2026-03-11
+
+### ✨ Novidades
+- A visualização de tabelas agora suporta multi-seleção de células e intervalos de linhas, com fluxo por `Shift+Click`, arraste e navegação por teclado com setas.
+- O `Cmd+V` ganhou paste em lote direto na seleção da tabela, com suporte a `TSV` e `CSV` (separadores `,` e `;`) para preencher múltiplas células de uma vez.
+- O `Cmd+C` passou a copiar o range selecionado da tabela para facilitar edição em planilhas e retorno ao app.
+
+### 🐛 Correções
+- Corrigida a exibição de colunas de data/hora no grid para remover aspas indevidas e manter leitura mais limpa.
+- Ajustado o tratamento de timestamp no Postgres para evitar deslocamento de fuso horário (+3h) durante edição e salvamento inline.
+- Corrigido o foco da edição inline para permitir clique dentro do campo sem encerrar o modo de edição.
+
 ## v0.8.0 - 2026-03-11
 
 ### ✨ Novidades
