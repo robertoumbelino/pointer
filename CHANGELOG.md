@@ -2,6 +2,16 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.0 - 2026-03-11
+
+### ✨ Novidades
+- Novo fluxo de SQL com IA no Command Palette (`Cmd+K`), incluindo chat contextual e gerenciamento de chave para acelerar consultas assistidas no app.
+- Atalho `Ctrl+Tab` adicionado para ciclagem de abas, deixando a navegação entre contextos de trabalho mais rápida.
+
+### 🐛 Correções
+- Corrigida a renderização de colunas no resultado SQL para evitar exibição defasada após novas execuções.
+- Reforçada a confirmação de risco em execuções SQL e bloqueada a execução indevida de atalho de salvar durante esse fluxo.
+
 ## v0.7.2 - 2026-03-10
 
 ### ✨ Novidades
