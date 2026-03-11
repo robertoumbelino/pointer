@@ -75,6 +75,7 @@ type UseWorkspaceResult = {
   saveActiveTableChangesRef: MutableRefObject<(() => Promise<void>) | undefined>
   commitInlineEditRef: MutableRefObject<(() => void) | undefined>
   toggleSelectedRowDeleteRef: MutableRefObject<(() => void) | undefined>
+  copyTableSelectionRef: MutableRefObject<(() => Promise<void>) | undefined>
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
   getTableTab: (tabId: string) => TableTab | null
@@ -132,6 +133,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const saveActiveTableChangesRef = useRef<() => Promise<void>>()
   const commitInlineEditRef = useRef<() => void>()
   const toggleSelectedRowDeleteRef = useRef<() => void>()
+  const copyTableSelectionRef = useRef<() => Promise<void>>()
   const openNewSqlTabRef = useRef<() => void>()
   const closeActiveTabRef = useRef<() => void>()
 
@@ -220,6 +222,7 @@ export function useWorkspace(): UseWorkspaceResult {
     saveActiveTableChangesRef,
     commitInlineEditRef,
     toggleSelectedRowDeleteRef,
+    copyTableSelectionRef,
     openNewSqlTabRef,
     closeActiveTabRef,
     getTableTab,

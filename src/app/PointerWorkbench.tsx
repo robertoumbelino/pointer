@@ -176,6 +176,7 @@ function App(): JSX.Element {
     saveActiveTableChangesRef,
     commitInlineEditRef,
     toggleSelectedRowDeleteRef,
+    copyTableSelectionRef,
     openNewSqlTabRef,
     closeActiveTabRef,
     getTableTab,
@@ -277,14 +278,6 @@ function App(): JSX.Element {
     const tab = workTabs.find((candidate) => candidate.id === activeTabId)
     return tab?.type === 'sql' ? tab : null
   }, [activeTabId, workTabs])
-
-  const selectedRow = useMemo(() => {
-    if (!activeTableTab?.data || activeTableTab.selectedRowIndex === null) {
-      return null
-    }
-
-    return activeTableTab.data.rows[activeTableTab.selectedRowIndex] ?? null
-  }, [activeTableTab])
 
   const sqlCompletions = useMemo<Completion[]>(() => {
     const completionMap = new Map<string, Completion>()
@@ -498,6 +491,7 @@ function App(): JSX.Element {
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
+    copyTableSelection,
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
@@ -675,6 +669,7 @@ function App(): JSX.Element {
   saveActiveTableChangesRef.current = saveActiveTableChanges
   commitInlineEditRef.current = commitInlineEdit
   toggleSelectedRowDeleteRef.current = handleDeleteRow
+  copyTableSelectionRef.current = copyTableSelection
   openNewSqlTabRef.current = openNewSqlTab
   closeActiveTabRef.current = closeActiveTab
 
@@ -688,6 +683,7 @@ function App(): JSX.Element {
     saveActiveTableChangesRef,
     commitInlineEditRef,
     toggleSelectedRowDeleteRef,
+    copyTableSelectionRef,
     openNewSqlTabRef,
     closeActiveTabRef,
     activeTabIdRef,
@@ -815,7 +811,6 @@ function App(): JSX.Element {
             reloadTableTab={reloadTableTab}
             navigateToForeignKey={navigateToForeignKey}
             handleToggleInsertDraftRow={handleToggleInsertDraftRow}
-            selectedRow={selectedRow}
             handleDeleteRow={handleDeleteRow}
             updateTableTab={updateTableTab}
             beginInlineEdit={beginInlineEdit}

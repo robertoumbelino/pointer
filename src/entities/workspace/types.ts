@@ -39,6 +39,17 @@ export type SqlTab = {
 
 export type RowPendingUpdates = Record<number, Record<string, unknown>>
 export type InsertDraftRow = Record<string, unknown>
+export type TableSelectionMode = 'row' | 'cell'
+
+export type TableCellPosition = {
+  rowIndex: number
+  columnIndex: number
+}
+
+export type TableCellRange = {
+  start: TableCellPosition
+  end: TableCellPosition
+}
 
 export type TableTab = {
   id: string
@@ -56,7 +67,13 @@ export type TableTab = {
   filterColumn: string
   filterOperator: TableFilterOperator
   filterValue: string
-  selectedRowIndex: number | null
+  selectedRowIndexes: number[]
+  rowAnchorIndex: number | null
+  activeRowIndex: number | null
+  activeCell: TableCellPosition | null
+  cellAnchor: TableCellPosition | null
+  selectedCellRange: TableCellRange | null
+  selectionMode: TableSelectionMode
   pendingUpdates: RowPendingUpdates
   pendingDeletes: number[]
   insertDraft: InsertDraftRow | null

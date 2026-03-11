@@ -12,6 +12,7 @@ type UseWorkspaceShortcutsParams = {
   saveActiveTableChangesRef: MutableRefObject<(() => Promise<void>) | undefined>
   commitInlineEditRef: MutableRefObject<(() => void) | undefined>
   toggleSelectedRowDeleteRef: MutableRefObject<(() => void) | undefined>
+  copyTableSelectionRef: MutableRefObject<(() => Promise<void>) | undefined>
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
   activeTabIdRef: MutableRefObject<string>
@@ -30,6 +31,7 @@ export function useWorkspaceShortcuts({
   saveActiveTableChangesRef,
   commitInlineEditRef,
   toggleSelectedRowDeleteRef,
+  copyTableSelectionRef,
   openNewSqlTabRef,
   closeActiveTabRef,
   activeTabIdRef,
@@ -115,22 +117,37 @@ export function useWorkspaceShortcuts({
         return
       }
 
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const isTypingTarget = Boolean(target?.closest('input, textarea, select, [contenteditable="true"], .cm-editor'))
+
       const isDeleteKey =
         (event.key === 'Delete' || event.key === 'Backspace') && !event.metaKey && !event.ctrlKey && !event.altKey
       if (isDeleteKey) {
-        const target = event.target instanceof HTMLElement ? event.target : null
-        const isTypingTarget = Boolean(
-          target?.closest('input, textarea, select, [contenteditable="true"], .cm-editor'),
-        )
         if (isTypingTarget) {
           return
         }
 
         const activeTable = getTableTab(activeTabIdRef.current)
-        if (activeTable?.schema?.supportsRowEdit && activeTable.selectedRowIndex !== null) {
+        if (activeTable?.schema?.supportsRowEdit && activeTable.selectedRowIndexes.length > 0) {
           event.preventDefault()
           toggleSelectedRowDeleteRef.current?.()
         }
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+        if (isTypingTarget) {
+          return
+        }
+
+        const activeTable = getTableTab(activeTabIdRef.current)
+        if (!activeTable) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        void copyTableSelectionRef.current?.()
         return
       }
 
@@ -177,6 +194,7 @@ export function useWorkspaceShortcuts({
     commitInlineEditRef,
     getTableTab,
     isWorkspaceActive,
+    copyTableSelectionRef,
     openNewSqlTabRef,
     runSqlRef,
     saveActiveTableChangesRef,

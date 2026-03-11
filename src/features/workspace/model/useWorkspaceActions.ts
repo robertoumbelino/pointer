@@ -87,6 +87,7 @@ type UseWorkspaceActionsResult = {
   handleToggleInsertDraftRow: () => void
   updateInsertDraftValue: (columnName: string, value: string | null) => void
   handleDeleteRow: () => void
+  copyTableSelection: () => Promise<void>
   exportSqlResultSetVisibleCsv: (params: {
     tabId: string
     resultSetIndex: number
@@ -199,6 +200,38 @@ function resolveForeignKeyFilterValue(value: unknown): string | null {
 
 function normalizeIdentifier(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function formatClipboardValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function escapeTsvCell(value: string): string {
+  if (!/[\t\n\r"]/.test(value)) {
+    return value
+  }
+
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+function buildTsv(rows: string[][]): string {
+  return rows.map((row) => row.map((value) => escapeTsvCell(value)).join('\t')).join('\n')
 }
 
 export function useWorkspaceActions({
@@ -323,7 +356,13 @@ export function useWorkspaceActions({
               filterColumn: resolvedFilterColumn,
               filterOperator: nextFilterOperator,
               filterValue: nextFilterValue,
-              selectedRowIndex: null,
+              selectedRowIndexes: [],
+              rowAnchorIndex: null,
+              activeRowIndex: null,
+              activeCell: null,
+              cellAnchor: null,
+              selectedCellRange: null,
+              selectionMode: 'cell',
               pendingUpdates: {},
               pendingDeletes: [],
               insertDraft: null,
@@ -441,7 +480,13 @@ export function useWorkspaceActions({
         filterColumn: initialLoad?.filterColumn ?? '',
         filterOperator: initialLoad?.filterOperator ?? 'ilike',
         filterValue: initialLoad?.filterValue ?? '',
-        selectedRowIndex: null,
+        selectedRowIndexes: [],
+        rowAnchorIndex: null,
+        activeRowIndex: null,
+        activeCell: null,
+        cellAnchor: null,
+        selectedCellRange: null,
+        selectionMode: 'cell',
         pendingUpdates: {},
         pendingDeletes: [],
         insertDraft: null,
@@ -529,7 +574,13 @@ export function useWorkspaceActions({
         filterOperator: nextFilterOperator,
         filterValue: nextFilterValue,
         data: result,
-        selectedRowIndex: null,
+        selectedRowIndexes: [],
+        rowAnchorIndex: null,
+        activeRowIndex: null,
+        activeCell: null,
+        cellAnchor: null,
+        selectedCellRange: null,
+        selectionMode: 'cell',
         pendingUpdates: {},
         pendingDeletes: [],
         insertDraft: null,
@@ -1053,25 +1104,29 @@ export function useWorkspaceActions({
       return
     }
 
-    if (activeTableTab.selectedRowIndex === null) {
+    const selectedRows = Array.from(new Set(activeTableTab.selectedRowIndexes))
+      .filter((rowIndex) => Number.isInteger(rowIndex) && rowIndex >= 0)
+      .sort((a, b) => a - b)
+
+    if (selectedRows.length === 0) {
       return
     }
-
-    const rowIndex = activeTableTab.selectedRowIndex
-    const isAlreadyMarked = activeTableTab.pendingDeletes.includes(rowIndex)
+    const shouldUnmarkAll = selectedRows.every((rowIndex) => activeTableTab.pendingDeletes.includes(rowIndex))
 
     updateTableTab(activeTableTab.id, (tab) => {
       if (!tab.data) {
         return tab
       }
 
-      const nextPendingDeletes = isAlreadyMarked
-        ? tab.pendingDeletes.filter((index) => index !== rowIndex)
-        : Array.from(new Set([...tab.pendingDeletes, rowIndex]))
+      const nextPendingDeletes = shouldUnmarkAll
+        ? tab.pendingDeletes.filter((index) => !selectedRows.includes(index))
+        : Array.from(new Set([...tab.pendingDeletes, ...selectedRows])).sort((a, b) => a - b)
 
       const nextPendingUpdates: RowPendingUpdates = { ...tab.pendingUpdates }
-      if (!isAlreadyMarked) {
-        delete nextPendingUpdates[rowIndex]
+      if (!shouldUnmarkAll) {
+        for (const rowIndex of selectedRows) {
+          delete nextPendingUpdates[rowIndex]
+        }
       }
 
       return {
@@ -1082,16 +1137,86 @@ export function useWorkspaceActions({
     })
 
     setEditingCell((current) => {
-      if (!current || current.tabId !== activeTableTab.id || current.rowIndex !== rowIndex) {
+      if (!current || current.tabId !== activeTableTab.id || !selectedRows.includes(current.rowIndex)) {
         return current
       }
       return null
     })
 
-    if (isAlreadyMarked) {
-      toast.info('Delete pendente removido da linha selecionada.')
+    if (shouldUnmarkAll) {
+      toast.info('Delete pendente removido das linhas selecionadas.')
     } else {
-      toast.info('Linha marcada para exclusão. Use Cmd+S para salvar.')
+      toast.info('Linhas marcadas para exclusão. Use Cmd+S para salvar.')
+    }
+  }
+
+  async function copyTableSelection(): Promise<void> {
+    const tab = getTableTab(activeTabId)
+    if (!tab?.data || !tab.schema) {
+      return
+    }
+
+    const rowCount = tab.data.rows.length
+    const columnCount = tab.schema.columns.length
+    if (rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    let matrix: string[][] = []
+
+    if (tab.selectedCellRange) {
+      const startRow = Math.max(0, Math.min(tab.selectedCellRange.start.rowIndex, rowCount - 1))
+      const endRow = Math.max(0, Math.min(tab.selectedCellRange.end.rowIndex, rowCount - 1))
+      const startCol = Math.max(0, Math.min(tab.selectedCellRange.start.columnIndex, columnCount - 1))
+      const endCol = Math.max(0, Math.min(tab.selectedCellRange.end.columnIndex, columnCount - 1))
+      const minRow = Math.min(startRow, endRow)
+      const maxRow = Math.max(startRow, endRow)
+      const minCol = Math.min(startCol, endCol)
+      const maxCol = Math.max(startCol, endCol)
+
+      for (let rowIndex = minRow; rowIndex <= maxRow; rowIndex += 1) {
+        const row = tab.data.rows[rowIndex]
+        if (!row) {
+          continue
+        }
+        const line: string[] = []
+        for (let columnIndex = minCol; columnIndex <= maxCol; columnIndex += 1) {
+          const columnName = tab.schema.columns[columnIndex]?.name
+          if (!columnName) {
+            continue
+          }
+          line.push(formatClipboardValue(row[columnName]))
+        }
+        matrix.push(line)
+      }
+    } else if (tab.selectedRowIndexes.length > 0) {
+      const selectedRows = Array.from(new Set(tab.selectedRowIndexes))
+        .filter((rowIndex) => Number.isInteger(rowIndex) && rowIndex >= 0 && rowIndex < rowCount)
+        .sort((a, b) => a - b)
+
+      matrix = selectedRows.map((rowIndex) => {
+        const row = tab.data?.rows[rowIndex] ?? {}
+        return tab.schema?.columns.map((column) => formatClipboardValue(row[column.name])) ?? []
+      })
+    } else if (tab.activeCell) {
+      const rowIndex = tab.activeCell.rowIndex
+      const columnIndex = tab.activeCell.columnIndex
+      const row = tab.data.rows[rowIndex]
+      const columnName = tab.schema.columns[columnIndex]?.name
+      if (row && columnName) {
+        matrix = [[formatClipboardValue(row[columnName])]]
+      }
+    }
+
+    if (matrix.length === 0 || matrix.every((line) => line.length === 0)) {
+      return
+    }
+
+    try {
+      await pointerApi.copyToClipboard(buildTsv(matrix))
+      toast.success('Seleção copiada.')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
     }
   }
 
@@ -1415,6 +1540,7 @@ export function useWorkspaceActions({
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
+    copyTableSelection,
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,

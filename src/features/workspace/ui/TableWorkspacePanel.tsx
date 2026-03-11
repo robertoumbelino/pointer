@@ -1,8 +1,17 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type SetStateAction,
+} from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Download, Link2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ColumnForeignKeyRef, TableFilterOperator, TableSort } from '../../../../shared/db-types'
-import type { EditingCell, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
+import type { EditingCell, TableCellPosition, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
@@ -118,6 +127,20 @@ function hasForeignKeyCellValue(value: unknown): boolean {
   return String(value).trim().length > 0
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function buildRowRange(start: number, end: number): number[] {
+  const min = Math.min(start, end)
+  const max = Math.max(start, end)
+  const range: number[] = []
+  for (let index = min; index <= max; index += 1) {
+    range.push(index)
+  }
+  return range
+}
+
 type TableWorkspacePanelProps = {
   activeTableTab: TableTab
   saveActiveTableChanges: () => Promise<void>
@@ -126,7 +149,6 @@ type TableWorkspacePanelProps = {
   navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   closeTableTab: (tabId: string) => void
   handleToggleInsertDraftRow: () => void
-  selectedRow: Record<string, unknown> | null
   handleDeleteRow: () => void
   updateTableTab: (tabId: string, updater: (tab: TableTab) => TableTab) => void
   beginInlineEdit: (rowIndex: number, column: string) => void
@@ -151,7 +173,6 @@ export function TableWorkspacePanel({
   navigateToForeignKey,
   closeTableTab,
   handleToggleInsertDraftRow,
-  selectedRow,
   handleDeleteRow,
   updateTableTab,
   beginInlineEdit,
@@ -172,14 +193,31 @@ export function TableWorkspacePanel({
   const [pageSizeInput, setPageSizeInput] = useState(() => String(activeTableTab.pageSize))
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
+  const gridContainerRef = useRef<HTMLDivElement | null>(null)
+  const cellDragAnchorRef = useRef<TableCellPosition | null>(null)
+  const didDragSelectionRef = useRef(false)
   const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
   const hasLoadError = Boolean(activeTableTab.loadError)
   const isInitialTableLoading = activeTableTab.loading && !activeTableTab.data
   const isTableActionDisabled = activeTableTab.loading || isSavingTableChanges
+  const columns = useMemo(() => activeTableTab.schema?.columns ?? [], [activeTableTab.schema?.columns])
+  const rowCount = activeTableTab.data?.rows.length ?? 0
+  const columnCount = columns.length
+  const selectedRowsSet = useMemo(() => new Set(activeTableTab.selectedRowIndexes), [activeTableTab.selectedRowIndexes])
+  const hasSelectedRows = activeTableTab.selectedRowIndexes.length > 0
 
   useEffect(() => {
     setPageSizeInput(String(activeTableTab.pageSize))
   }, [activeTableTab.id, activeTableTab.pageSize])
+
+  useEffect(() => {
+    const handleMouseUp = (): void => {
+      cellDragAnchorRef.current = null
+    }
+
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
+  }, [])
 
   const closeJsonEditor = (): void => {
     setJsonEditorCell(null)
@@ -263,6 +301,403 @@ export function TableWorkspacePanel({
     } finally {
       setIsExportingAllPages(false)
     }
+  }
+
+  const focusGrid = (): void => {
+    gridContainerRef.current?.focus()
+  }
+
+  const openJsonEditorForCell = (rowIndex: number, columnName: string, value: unknown, canEdit: boolean): void => {
+    cancelInlineEdit()
+    setJsonEditorCell({
+      rowIndex,
+      columnName,
+      canEdit,
+    })
+    setJsonEditorValue(formatJsonEditorValue(value))
+  }
+
+  const normalizeCellPosition = (position: TableCellPosition): TableCellPosition => ({
+    rowIndex: clamp(position.rowIndex, 0, Math.max(0, rowCount - 1)),
+    columnIndex: clamp(position.columnIndex, 0, Math.max(0, columnCount - 1)),
+  })
+
+  const setSingleCellSelection = (position: TableCellPosition): void => {
+    const nextPosition = normalizeCellPosition(position)
+
+    updateTableTab(activeTableTab.id, (tab) => ({
+      ...tab,
+      selectionMode: 'cell',
+      selectedRowIndexes: [],
+      rowAnchorIndex: null,
+      activeRowIndex: nextPosition.rowIndex,
+      activeCell: nextPosition,
+      cellAnchor: nextPosition,
+      selectedCellRange: {
+        start: nextPosition,
+        end: nextPosition,
+      },
+    }))
+  }
+
+  const handleRowSelectorClick = (event: ReactMouseEvent<HTMLButtonElement>, rowIndex: number): void => {
+    if (rowCount === 0) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    focusGrid()
+    cellDragAnchorRef.current = null
+
+    const normalizedRow = clamp(rowIndex, 0, rowCount - 1)
+    const activeColumnIndex = clamp(activeTableTab.activeCell?.columnIndex ?? 0, 0, Math.max(0, columnCount - 1))
+    const isMetaToggle = event.metaKey || event.ctrlKey
+
+    updateTableTab(activeTableTab.id, (tab) => {
+      if (event.shiftKey) {
+        const anchor = clamp(
+          tab.rowAnchorIndex ?? tab.activeRowIndex ?? tab.activeCell?.rowIndex ?? normalizedRow,
+          0,
+          rowCount - 1,
+        )
+
+        return {
+          ...tab,
+          selectionMode: 'row',
+          selectedRowIndexes: buildRowRange(anchor, normalizedRow),
+          rowAnchorIndex: anchor,
+          activeRowIndex: normalizedRow,
+          activeCell: {
+            rowIndex: normalizedRow,
+            columnIndex: activeColumnIndex,
+          },
+          cellAnchor: null,
+          selectedCellRange: null,
+        }
+      }
+
+      if (isMetaToggle) {
+        const alreadySelected = tab.selectedRowIndexes.includes(normalizedRow)
+        const nextSelected = alreadySelected
+          ? tab.selectedRowIndexes.filter((index) => index !== normalizedRow)
+          : [...tab.selectedRowIndexes, normalizedRow]
+
+        return {
+          ...tab,
+          selectionMode: 'row',
+          selectedRowIndexes: Array.from(new Set(nextSelected)).sort((a, b) => a - b),
+          rowAnchorIndex: normalizedRow,
+          activeRowIndex: normalizedRow,
+          activeCell: {
+            rowIndex: normalizedRow,
+            columnIndex: activeColumnIndex,
+          },
+          cellAnchor: null,
+          selectedCellRange: null,
+        }
+      }
+
+      return {
+        ...tab,
+        selectionMode: 'row',
+        selectedRowIndexes: [normalizedRow],
+        rowAnchorIndex: normalizedRow,
+        activeRowIndex: normalizedRow,
+        activeCell: {
+          rowIndex: normalizedRow,
+          columnIndex: activeColumnIndex,
+        },
+        cellAnchor: null,
+        selectedCellRange: null,
+      }
+    })
+  }
+
+  const handleCellMouseDown = (
+    event: ReactMouseEvent<HTMLTableCellElement>,
+    rowIndex: number,
+    columnIndex: number,
+  ): void => {
+    if (rowCount === 0 || columnCount === 0 || event.button !== 0) {
+      return
+    }
+
+    event.preventDefault()
+    focusGrid()
+    const position = normalizeCellPosition({ rowIndex, columnIndex })
+    if (event.shiftKey) {
+      cellDragAnchorRef.current = null
+      return
+    }
+
+    didDragSelectionRef.current = false
+    cellDragAnchorRef.current = position
+    setSingleCellSelection(position)
+  }
+
+  const handleCellMouseEnter = (
+    event: ReactMouseEvent<HTMLTableCellElement>,
+    rowIndex: number,
+    columnIndex: number,
+  ): void => {
+    if (rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    const anchor = cellDragAnchorRef.current
+    if (!anchor || (event.buttons & 1) === 0) {
+      return
+    }
+
+    const current = normalizeCellPosition({ rowIndex, columnIndex })
+    if (current.rowIndex !== anchor.rowIndex || current.columnIndex !== anchor.columnIndex) {
+      didDragSelectionRef.current = true
+    }
+    updateTableTab(activeTableTab.id, (tab) => ({
+      ...tab,
+      selectionMode: 'cell',
+      selectedRowIndexes: [],
+      rowAnchorIndex: null,
+      activeRowIndex: current.rowIndex,
+      activeCell: current,
+      cellAnchor: anchor,
+      selectedCellRange: {
+        start: anchor,
+        end: current,
+      },
+    }))
+  }
+
+  const handleCellClick = (
+    event: ReactMouseEvent<HTMLTableCellElement>,
+    rowIndex: number,
+    columnIndex: number,
+  ): void => {
+    if (rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    focusGrid()
+    const current = normalizeCellPosition({ rowIndex, columnIndex })
+
+    if (didDragSelectionRef.current && !event.shiftKey) {
+      didDragSelectionRef.current = false
+      return
+    }
+
+    if (event.shiftKey) {
+      const anchor = normalizeCellPosition(activeTableTab.cellAnchor ?? activeTableTab.activeCell ?? current)
+      updateTableTab(activeTableTab.id, (tab) => ({
+        ...tab,
+        selectionMode: 'cell',
+        selectedRowIndexes: [],
+        rowAnchorIndex: null,
+        activeRowIndex: current.rowIndex,
+        activeCell: current,
+        cellAnchor: anchor,
+        selectedCellRange: {
+          start: anchor,
+          end: current,
+        },
+      }))
+      return
+    }
+
+    setSingleCellSelection(current)
+  }
+
+  const handleCellDoubleClick = (
+    rowIndex: number,
+    columnIndex: number,
+    columnName: string,
+    value: unknown,
+    canEditCell: boolean,
+    isJsonColumn: boolean,
+  ): void => {
+    const position = normalizeCellPosition({ rowIndex, columnIndex })
+    setSingleCellSelection(position)
+
+    if (isJsonColumn) {
+      openJsonEditorForCell(rowIndex, columnName, value, canEditCell)
+      return
+    }
+
+    if (canEditCell) {
+      beginInlineEdit(rowIndex, columnName)
+    }
+  }
+
+  const handleGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const isTypingTarget = Boolean(
+      (event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]'),
+    )
+
+    if (isTypingTarget || rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const fallbackRowIndex = clamp(
+        activeTableTab.activeRowIndex ?? activeTableTab.selectedRowIndexes[0] ?? activeTableTab.activeCell?.rowIndex ?? 0,
+        0,
+        rowCount - 1,
+      )
+      const fallbackColumnIndex = clamp(activeTableTab.activeCell?.columnIndex ?? 0, 0, columnCount - 1)
+      const targetCell =
+        activeTableTab.selectionMode === 'row'
+          ? {
+              rowIndex: fallbackRowIndex,
+              columnIndex: fallbackColumnIndex,
+            }
+          : normalizeCellPosition(activeTableTab.activeCell ?? { rowIndex: 0, columnIndex: 0 })
+
+      const column = columns[targetCell.columnIndex]
+      const row = activeTableTab.data?.rows[targetCell.rowIndex]
+
+      if (!column || !row) {
+        return
+      }
+
+      const isJsonColumn = isJsonLikeDataType(column.dataType)
+      const isPendingDelete = activeTableTab.pendingDeletes.includes(targetCell.rowIndex)
+      const canEditCell = !column.isPrimaryKey && Boolean(activeTableTab.schema?.supportsRowEdit) && !isPendingDelete
+
+      event.preventDefault()
+      if (isJsonColumn) {
+        openJsonEditorForCell(targetCell.rowIndex, column.name, row[column.name], canEditCell)
+        return
+      }
+
+      if (canEditCell) {
+        beginInlineEdit(targetCell.rowIndex, column.name)
+      }
+      return
+    }
+
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      return
+    }
+
+    if (activeTableTab.selectionMode === 'row') {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+        return
+      }
+
+      event.preventDefault()
+      const step = event.key === 'ArrowUp' ? -1 : 1
+      const anchor = clamp(
+        activeTableTab.rowAnchorIndex ?? activeTableTab.activeRowIndex ?? activeTableTab.activeCell?.rowIndex ?? 0,
+        0,
+        rowCount - 1,
+      )
+      const current = clamp(activeTableTab.activeRowIndex ?? anchor, 0, rowCount - 1)
+      const nextRow = clamp(current + step, 0, rowCount - 1)
+      const nextColumnIndex = clamp(activeTableTab.activeCell?.columnIndex ?? 0, 0, columnCount - 1)
+
+      updateTableTab(activeTableTab.id, (tab) => {
+        if (event.shiftKey) {
+          return {
+            ...tab,
+            selectionMode: 'row',
+            selectedRowIndexes: buildRowRange(anchor, nextRow),
+            rowAnchorIndex: anchor,
+            activeRowIndex: nextRow,
+            activeCell: {
+              rowIndex: nextRow,
+              columnIndex: nextColumnIndex,
+            },
+            cellAnchor: null,
+            selectedCellRange: null,
+          }
+        }
+
+        return {
+          ...tab,
+          selectionMode: 'row',
+          selectedRowIndexes: [nextRow],
+          rowAnchorIndex: nextRow,
+          activeRowIndex: nextRow,
+          activeCell: {
+            rowIndex: nextRow,
+            columnIndex: nextColumnIndex,
+          },
+          cellAnchor: null,
+          selectedCellRange: null,
+        }
+      })
+      return
+    }
+
+    event.preventDefault()
+    const current = normalizeCellPosition(activeTableTab.activeCell ?? { rowIndex: 0, columnIndex: 0 })
+    const next = {
+      rowIndex:
+        event.key === 'ArrowUp'
+          ? current.rowIndex - 1
+          : event.key === 'ArrowDown'
+            ? current.rowIndex + 1
+            : current.rowIndex,
+      columnIndex:
+        event.key === 'ArrowLeft'
+          ? current.columnIndex - 1
+          : event.key === 'ArrowRight'
+            ? current.columnIndex + 1
+            : current.columnIndex,
+    }
+    const nextPosition = normalizeCellPosition(next)
+
+    updateTableTab(activeTableTab.id, (tab) => {
+      if (event.shiftKey) {
+        const anchor = normalizeCellPosition(tab.cellAnchor ?? tab.activeCell ?? current)
+        return {
+          ...tab,
+          selectionMode: 'cell',
+          selectedRowIndexes: [],
+          rowAnchorIndex: null,
+          activeRowIndex: nextPosition.rowIndex,
+          activeCell: nextPosition,
+          cellAnchor: anchor,
+          selectedCellRange: {
+            start: anchor,
+            end: nextPosition,
+          },
+        }
+      }
+
+      return {
+        ...tab,
+        selectionMode: 'cell',
+        selectedRowIndexes: [],
+        rowAnchorIndex: null,
+        activeRowIndex: nextPosition.rowIndex,
+        activeCell: nextPosition,
+        cellAnchor: nextPosition,
+        selectedCellRange: {
+          start: nextPosition,
+          end: nextPosition,
+        },
+      }
+    })
+  }
+
+  const isCellInSelectedRange = (rowIndex: number, columnIndex: number): boolean => {
+    if (activeTableTab.selectionMode !== 'cell' || !activeTableTab.selectedCellRange) {
+      return false
+    }
+
+    const minRow = Math.min(activeTableTab.selectedCellRange.start.rowIndex, activeTableTab.selectedCellRange.end.rowIndex)
+    const maxRow = Math.max(activeTableTab.selectedCellRange.start.rowIndex, activeTableTab.selectedCellRange.end.rowIndex)
+    const minCol = Math.min(
+      activeTableTab.selectedCellRange.start.columnIndex,
+      activeTableTab.selectedCellRange.end.columnIndex,
+    )
+    const maxCol = Math.max(
+      activeTableTab.selectedCellRange.start.columnIndex,
+      activeTableTab.selectedCellRange.end.columnIndex,
+    )
+
+    return rowIndex >= minRow && rowIndex <= maxRow && columnIndex >= minCol && columnIndex <= maxCol
   }
 
   return (
@@ -398,7 +833,7 @@ export function TableWorkspacePanel({
               variant='destructive'
               size='sm'
               className='h-8 text-[13px]'
-              disabled={isTableActionDisabled || !selectedRow || !activeTableTab.schema?.supportsRowEdit}
+              disabled={isTableActionDisabled || !hasSelectedRows || !activeTableTab.schema?.supportsRowEdit}
               onClick={() => void handleDeleteRow()}
             >
               <Trash2 className='mr-1.5 h-3.5 w-3.5' /> Excluir
@@ -438,11 +873,19 @@ export function TableWorkspacePanel({
           </div>
         ) : (
           <>
-            <div className='pointer-card-soft h-full overflow-auto'>
+            <div
+              ref={gridContainerRef}
+              tabIndex={0}
+              onKeyDown={handleGridKeyDown}
+              className='pointer-card-soft h-full overflow-auto outline-none focus-visible:outline-none'
+            >
               <table className='min-w-max border-collapse text-sm'>
                 <thead className='sticky top-0 z-10 bg-slate-900'>
                   <tr>
-                    {activeTableTab.schema?.columns.map((column) => (
+                    <th className='w-10 border-b border-slate-800/80 px-1 py-2 text-center font-semibold text-slate-400'>
+                      #
+                    </th>
+                    {columns.map((column) => (
                       <th
                         key={column.name}
                         className='border-b border-slate-800/80 px-3 py-2 text-left font-semibold text-slate-300 whitespace-nowrap'
@@ -496,9 +939,10 @@ export function TableWorkspacePanel({
                 </thead>
                 <tbody>
                   {activeTableTab.data?.rows.map((row, rowIndex) => {
-                    const isSelected = activeTableTab.selectedRowIndex === rowIndex
+                    const isRowSelected = selectedRowsSet.has(rowIndex)
                     const isPendingDelete = activeTableTab.pendingDeletes.includes(rowIndex)
                     const isPendingUpdate = Boolean(activeTableTab.pendingUpdates[rowIndex])
+                    const isActiveRow = activeTableTab.activeRowIndex === rowIndex
 
                     return (
                       <tr
@@ -509,13 +953,39 @@ export function TableWorkspacePanel({
                             ? 'bg-red-500/22 hover:bg-red-500/28 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.48)]'
                             : isPendingUpdate
                               ? 'bg-amber-400/20 hover:bg-amber-400/28 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.42)]'
-                              : isSelected
+                              : isRowSelected
                                 ? 'bg-slate-200/10'
                                 : 'hover:bg-slate-800/50',
-                          isSelected && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]',
+                          isRowSelected && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]',
                         )}
                       >
-                        {activeTableTab.schema?.columns.map((column) => {
+                        <td
+                          className={cn(
+                            'sticky left-0 z-[1] border-r border-slate-800/70 px-1 py-1 text-center',
+                            isPendingDelete
+                              ? 'bg-red-500/20'
+                              : isPendingUpdate
+                                ? 'bg-amber-400/18'
+                                : isRowSelected
+                                  ? 'bg-slate-700/70'
+                                  : 'bg-slate-900/95',
+                          )}
+                        >
+                          <button
+                            type='button'
+                            onClick={(event) => handleRowSelectorClick(event, rowIndex)}
+                            className={cn(
+                              'h-6 w-full rounded text-[10px] font-medium text-slate-200 transition-colors border border-transparent',
+                              isRowSelected
+                                ? 'bg-slate-600/70 hover:bg-slate-600/85'
+                                : 'hover:bg-slate-800/70',
+                              isActiveRow && 'border-slate-500/60',
+                            )}
+                          >
+                            {rowIndex + 1}
+                          </button>
+                        </td>
+                        {columns.map((column, columnIndex) => {
                           const isEditing =
                             editingCell?.tabId === activeTableTab.id &&
                             editingCell.rowIndex === rowIndex &&
@@ -524,9 +994,12 @@ export function TableWorkspacePanel({
                           const isJsonColumn = isJsonLikeDataType(column.dataType)
                           const enumValues = column.enumValues ?? []
                           const hasEnumColumnValues = enumValues.length > 0
-                          const canEditCell =
-                            !column.isPrimaryKey && activeTableTab.schema?.supportsRowEdit && !isPendingDelete
+                          const canEditCell = !column.isPrimaryKey && Boolean(activeTableTab.schema?.supportsRowEdit) && !isPendingDelete
                           const canNavigateForeignKey = Boolean(column.foreignKey) && hasForeignKeyCellValue(cellValue)
+                          const isActiveCell =
+                            activeTableTab.activeCell?.rowIndex === rowIndex &&
+                            activeTableTab.activeCell?.columnIndex === columnIndex
+                          const isCellSelected = isCellInSelectedRange(rowIndex, columnIndex)
 
                           return (
                             <td
@@ -538,29 +1011,24 @@ export function TableWorkspacePanel({
                                   ? 'bg-red-500/20'
                                   : isPendingUpdate
                                     ? 'bg-amber-400/18'
-                                    : '',
+                                    : isCellSelected
+                                      ? 'bg-slate-700/45'
+                                      : '',
+                                isActiveCell && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.8)]',
                               )}
-                              onClick={() => {
-                                updateTableTab(activeTableTab.id, (tab) => ({
-                                  ...tab,
-                                  selectedRowIndex: rowIndex,
-                                }))
-
-                                if (isJsonColumn) {
-                                  cancelInlineEdit()
-                                  setJsonEditorCell({
-                                    rowIndex,
-                                    columnName: column.name,
-                                    canEdit: Boolean(canEditCell),
-                                  })
-                                  setJsonEditorValue(formatJsonEditorValue(row[column.name]))
-                                  return
-                                }
-
-                                if (canEditCell) {
-                                  beginInlineEdit(rowIndex, column.name)
-                                }
-                              }}
+                              onMouseDown={(event) => handleCellMouseDown(event, rowIndex, columnIndex)}
+                              onMouseEnter={(event) => handleCellMouseEnter(event, rowIndex, columnIndex)}
+                              onClick={(event) => handleCellClick(event, rowIndex, columnIndex)}
+                              onDoubleClick={() =>
+                                handleCellDoubleClick(
+                                  rowIndex,
+                                  columnIndex,
+                                  column.name,
+                                  row[column.name],
+                                  canEditCell,
+                                  isJsonColumn,
+                                )
+                              }
                             >
                               {isEditing ? (
                                 hasEnumColumnValues ? (
@@ -674,7 +1142,10 @@ export function TableWorkspacePanel({
                   })}
                   {activeTableTab.insertDraft && (
                     <tr className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'>
-                      {activeTableTab.schema?.columns.map((column) => {
+                      <td className='sticky left-0 z-[1] border-r border-emerald-400/35 bg-emerald-500/15 px-1 py-1 text-center text-[10px] text-emerald-200'>
+                        +
+                      </td>
+                      {columns.map((column) => {
                         const enumValues = column.enumValues ?? []
                         const hasEnumColumnValues = enumValues.length > 0
 
