@@ -141,6 +141,14 @@ function buildRowRange(start: number, end: number): number[] {
   return range
 }
 
+function isInteractiveCellTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return Boolean(target.closest('input, textarea, select, button, a, [contenteditable="true"]'))
+}
+
 type TableWorkspacePanelProps = {
   activeTableTab: TableTab
   saveActiveTableChanges: () => Promise<void>
@@ -423,6 +431,10 @@ export function TableWorkspacePanel({
       return
     }
 
+    if (isInteractiveCellTarget(event.target)) {
+      return
+    }
+
     event.preventDefault()
     focusGrid()
     const position = normalizeCellPosition({ rowIndex, columnIndex })
@@ -442,6 +454,10 @@ export function TableWorkspacePanel({
     columnIndex: number,
   ): void => {
     if (rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    if (isInteractiveCellTarget(event.target)) {
       return
     }
 
@@ -475,6 +491,10 @@ export function TableWorkspacePanel({
     columnIndex: number,
   ): void => {
     if (rowCount === 0 || columnCount === 0) {
+      return
+    }
+
+    if (isInteractiveCellTarget(event.target)) {
       return
     }
 

@@ -104,6 +104,13 @@ export function formatDraftInputValue(value: unknown): string {
     return ''
   }
 
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    if (!Number.isNaN(timestamp)) {
+      return formatLocalDateTime(value)
+    }
+  }
+
   if (typeof value === 'object') {
     return JSON.stringify(value)
   }
@@ -176,6 +183,13 @@ export function quoteSqlIdentifier(engine: DatabaseEngine, identifier: string): 
 export function formatCell(value: unknown): string {
   if (value === null || value === undefined) {
     return 'NULL'
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    if (!Number.isNaN(timestamp)) {
+      return formatLocalDateTime(value)
+    }
   }
 
   if (typeof value === 'object') {
@@ -723,6 +737,18 @@ export function coerceValueByOriginal(nextValue: string, originalValue: unknown,
     return null
   }
 
+  if (dataType && isDateTimeDataType(dataType)) {
+    if (trimmedValue.toLowerCase() === 'null') {
+      return null
+    }
+
+    return unwrapQuotedText(trimmedValue)
+  }
+
+  if (originalValue instanceof Date) {
+    return unwrapQuotedText(trimmedValue)
+  }
+
   if (dataType && isJsonLikeDataType(dataType)) {
     if (trimmedValue.toLowerCase() === 'null') {
       return null
@@ -827,6 +853,42 @@ function generateCuid(): string {
   const timestamp = Date.now().toString(36)
   const random = Math.random().toString(36).slice(2, 12)
   return `c${timestamp}${random}`.slice(0, 25)
+}
+
+function padDatePart(value: number, size = 2): string {
+  return String(value).padStart(size, '0')
+}
+
+function formatLocalDateTime(value: Date): string {
+  const year = value.getFullYear()
+  const month = padDatePart(value.getMonth() + 1)
+  const day = padDatePart(value.getDate())
+  const hours = padDatePart(value.getHours())
+  const minutes = padDatePart(value.getMinutes())
+  const seconds = padDatePart(value.getSeconds())
+  const millis = padDatePart(value.getMilliseconds(), 3)
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`
+}
+
+function unwrapQuotedText(value: string): string {
+  if (value.length < 2) {
+    return value
+  }
+
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(value)
+      return typeof parsed === 'string' ? parsed : value
+    } catch {
+      return value.slice(1, -1).replace(/\\"/g, '"')
+    }
+  }
+
+  if (value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replace(/\\'/g, "'")
+  }
+
+  return value
 }
 
 function isTextualDataType(dataType: string): boolean {

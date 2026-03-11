@@ -4,7 +4,7 @@ import { createClient, type ClickHouseClient } from '@clickhouse/client'
 import BetterSqlite3 from 'better-sqlite3'
 import Store from 'electron-store'
 import keytar from 'keytar'
-import { Client as PgClient, Pool, type PoolClient, type QueryResult } from 'pg'
+import { Client as PgClient, Pool, type PoolClient, type QueryResult, types as pgTypes } from 'pg'
 import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../shared/db-types'
 import type {
   ColumnDef,
@@ -38,6 +38,11 @@ const CREDENTIAL_SERVICE = 'pointer-db-explorer'
 const DEFAULT_ENVIRONMENT_COLOR = '#0EA5E9'
 const CLICKHOUSE_READ_KEYWORDS = new Set(['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'WITH'])
 const SQLITE_WORKER_FAILURE_MESSAGE = 'Falha ao executar query no SQLite.'
+const POSTGRES_OID_DATE = 1082
+const POSTGRES_OID_TIME = 1083
+const POSTGRES_OID_TIMESTAMP = 1114
+const POSTGRES_OID_TIMESTAMPTZ = 1184
+const POSTGRES_OID_TIMETZ = 1266
 
 const SQLITE_SQL_EXECUTION_WORKER_SOURCE = `
 const { parentPort, workerData } = require('node:worker_threads')
@@ -98,6 +103,17 @@ try {
   }
 }
 `
+
+function configurePostgresTypeParsers(): void {
+  // Keep temporal values as raw strings to avoid implicit timezone shifts in renderer/edit payloads.
+  pgTypes.setTypeParser(POSTGRES_OID_DATE, (value) => value)
+  pgTypes.setTypeParser(POSTGRES_OID_TIME, (value) => value)
+  pgTypes.setTypeParser(POSTGRES_OID_TIMESTAMP, (value) => value)
+  pgTypes.setTypeParser(POSTGRES_OID_TIMESTAMPTZ, (value) => value)
+  pgTypes.setTypeParser(POSTGRES_OID_TIMETZ, (value) => value)
+}
+
+configurePostgresTypeParsers()
 
 type SqlExecutionController = {
   isCanceled: boolean
