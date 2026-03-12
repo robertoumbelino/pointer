@@ -2,6 +2,17 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.7 - 2026-03-12
+
+### ✨ Novidades
+- Nova folha de estrutura de tabela no workspace, facilitando inspeção rápida de colunas, tipos e detalhes técnicos sem sair do fluxo principal.
+- Agora é possível usar `Cmd+Click` em referências SQL para abrir contexto relacionado com mais agilidade durante análise.
+- Atalhos contextuais ampliados no workspace, incluindo refresh de tabela e troca de ambiente com comportamento mais inteligente por contexto.
+
+### 🐛 Correções
+- Melhorado o split de statements SQL com cursor, incluindo fallback para blocos com linhas em branco para reduzir execuções inesperadas.
+- Adicionado suporte correto a seleção booleana (`true/false`) em edição inline e inserção de registros na visualização de tabela.
+
 ## v0.8.3 - 2026-03-11
 
 ### ✨ Novidades
