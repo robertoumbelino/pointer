@@ -306,9 +306,237 @@ export function getSqlStatementAtCursor(sqlText: string, cursorOffset: number): 
   return segments[0].sql
 }
 
+const SQL_STATEMENT_START_KEYWORDS = new Set([
+  'SELECT',
+  'WITH',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'CREATE',
+  'ALTER',
+  'DROP',
+  'TRUNCATE',
+  'MERGE',
+  'EXPLAIN',
+  'SHOW',
+  'DESCRIBE',
+  'DESC',
+  'USE',
+  'SET',
+  'CALL',
+  'PRAGMA',
+])
+
+function isSqlStatementStartKeyword(source: string, start: number, end: number): boolean {
+  let index = start
+
+  while (index < end) {
+    while (index < end && /\s/.test(source[index])) {
+      index += 1
+    }
+
+    if (index >= end) {
+      return false
+    }
+
+    const char = source[index]
+    const nextChar = source[index + 1]
+
+    if (char === '-' && nextChar === '-') {
+      index += 2
+      while (index < end && source[index] !== '\n') {
+        index += 1
+      }
+      continue
+    }
+
+    if (char === '/' && nextChar === '*') {
+      index += 2
+      while (index < end) {
+        if (source[index] === '*' && source[index + 1] === '/') {
+          index += 2
+          break
+        }
+
+        index += 1
+      }
+      continue
+    }
+
+    break
+  }
+
+  if (index >= end || !/[A-Za-z_]/.test(source[index])) {
+    return false
+  }
+
+  let keywordEnd = index + 1
+  while (keywordEnd < end && /[A-Za-z_]/.test(source[keywordEnd])) {
+    keywordEnd += 1
+  }
+
+  const keyword = source.slice(index, keywordEnd).toUpperCase()
+  return SQL_STATEMENT_START_KEYWORDS.has(keyword)
+}
+
+function splitChunkByBlankLineConservative(
+  source: string,
+  start: number,
+  end: number,
+): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = []
+  if (start >= end) {
+    return ranges
+  }
+
+  let statementStart = start
+  let lineStart = start
+  let lineHasNonWhitespace = false
+  let blankRunStart: number | null = null
+  let sawContentSinceStatementStart = false
+
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  const finalizeLine = (nextLineStart: number): void => {
+    const lineIsBlank = !lineHasNonWhitespace && !inSingleQuote && !inDoubleQuote && !inBlockComment
+
+    if (lineIsBlank) {
+      if (blankRunStart === null && sawContentSinceStatementStart) {
+        blankRunStart = lineStart
+      }
+    } else {
+      sawContentSinceStatementStart = true
+
+      if (blankRunStart !== null) {
+        if (isSqlStatementStartKeyword(source, lineStart, end)) {
+          ranges.push({ start: statementStart, end: blankRunStart })
+          statementStart = lineStart
+        }
+
+        blankRunStart = null
+      }
+    }
+
+    lineStart = nextLineStart
+    lineHasNonWhitespace = false
+  }
+
+  for (let index = start; index < end; index += 1) {
+    const char = source[index]
+    const nextChar = source[index + 1]
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false
+        finalizeLine(index + 1)
+      } else {
+        lineHasNonWhitespace = true
+      }
+      continue
+    }
+
+    if (inBlockComment) {
+      lineHasNonWhitespace = true
+
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false
+        index += 1
+        continue
+      }
+
+      if (char === '\n') {
+        finalizeLine(index + 1)
+      }
+      continue
+    }
+
+    if (inSingleQuote) {
+      lineHasNonWhitespace = true
+
+      if (char === "'" && nextChar === "'") {
+        index += 1
+        continue
+      }
+
+      if (char === "'") {
+        inSingleQuote = false
+        continue
+      }
+
+      if (char === '\n') {
+        finalizeLine(index + 1)
+      }
+      continue
+    }
+
+    if (inDoubleQuote) {
+      lineHasNonWhitespace = true
+
+      if (char === '"' && nextChar === '"') {
+        index += 1
+        continue
+      }
+
+      if (char === '"') {
+        inDoubleQuote = false
+        continue
+      }
+
+      if (char === '\n') {
+        finalizeLine(index + 1)
+      }
+      continue
+    }
+
+    if (char === '\n') {
+      finalizeLine(index + 1)
+      continue
+    }
+
+    if (char === '-' && nextChar === '-') {
+      inLineComment = true
+      lineHasNonWhitespace = true
+      index += 1
+      continue
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true
+      lineHasNonWhitespace = true
+      index += 1
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      lineHasNonWhitespace = true
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      lineHasNonWhitespace = true
+      continue
+    }
+
+    if (!/\s/.test(char)) {
+      lineHasNonWhitespace = true
+    }
+  }
+
+  finalizeLine(end)
+  ranges.push({ start: statementStart, end })
+
+  return ranges
+}
+
 export function splitSqlSegmentsWithRange(sqlText: string): Array<{ sql: string; start: number; end: number }> {
   const segments: Array<{ sql: string; start: number; end: number }> = []
   const source = sqlText
+  const semicolonChunks: Array<{ start: number; end: number }> = []
 
   let chunkStart = 0
   let inSingleQuote = false
@@ -316,7 +544,7 @@ export function splitSqlSegmentsWithRange(sqlText: string): Array<{ sql: string;
   let inLineComment = false
   let inBlockComment = false
 
-  const pushChunk = (start: number, end: number): void => {
+  const pushSegment = (start: number, end: number): void => {
     const chunk = source.slice(start, end)
     if (!chunk.trim()) {
       return
@@ -336,6 +564,15 @@ export function splitSqlSegmentsWithRange(sqlText: string): Array<{ sql: string;
       start: statementStart,
       end: statementEnd,
     })
+  }
+
+  const pushSemicolonChunk = (start: number, end: number): void => {
+    const chunk = source.slice(start, end)
+    if (!chunk.trim()) {
+      return
+    }
+
+    semicolonChunks.push({ start, end })
   }
 
   for (let index = 0; index < source.length; index += 1) {
@@ -404,12 +641,20 @@ export function splitSqlSegmentsWithRange(sqlText: string): Array<{ sql: string;
     }
 
     if (char === ';') {
-      pushChunk(chunkStart, index)
+      pushSemicolonChunk(chunkStart, index)
       chunkStart = index + 1
     }
   }
 
-  pushChunk(chunkStart, source.length)
+  pushSemicolonChunk(chunkStart, source.length)
+
+  for (const chunk of semicolonChunks) {
+    const splitRanges = splitChunkByBlankLineConservative(source, chunk.start, chunk.end)
+
+    for (const range of splitRanges) {
+      pushSegment(range.start, range.end)
+    }
+  }
 
   return segments
 }
