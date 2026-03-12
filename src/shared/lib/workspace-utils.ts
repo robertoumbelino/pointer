@@ -29,6 +29,10 @@ export function createInitialInsertDraft(schema: TableSchema): InsertDraftRow {
     if (column.enumValues && column.enumValues.length > 0 && draft[column.name] === undefined) {
       draft[column.name] = column.nullable ? null : column.enumValues[0]
     }
+
+    if (isBooleanDataType(column.dataType) && column.nullable && draft[column.name] === undefined) {
+      draft[column.name] = null
+    }
   }
 
   return draft
@@ -761,6 +765,17 @@ export function coerceValueByOriginal(nextValue: string, originalValue: unknown,
     }
   }
 
+  if (dataType && isBooleanDataType(dataType)) {
+    const normalized = trimmedValue.toLowerCase()
+    if (normalized === 'true') {
+      return true
+    }
+
+    if (normalized === 'false') {
+      return false
+    }
+  }
+
   if (typeof originalValue === 'number') {
     const parsed = Number(trimmedValue)
     return Number.isNaN(parsed) ? nextValue : parsed
@@ -903,7 +918,7 @@ function isDateTimeDataType(dataType: string): boolean {
   return /(date|time)/i.test(dataType)
 }
 
-function isBooleanDataType(dataType: string): boolean {
+export function isBooleanDataType(dataType: string): boolean {
   return /bool/i.test(dataType)
 }
 

@@ -27,7 +27,7 @@ import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
 import { cn } from '../../../lib/utils'
 import { TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
-import { isJsonLikeDataType } from '../../../shared/lib/workspace-utils'
+import { isBooleanDataType, isJsonLikeDataType } from '../../../shared/lib/workspace-utils'
 
 type JsonEditorCellState = {
   rowIndex: number
@@ -36,46 +36,73 @@ type JsonEditorCellState = {
 }
 
 const NULL_SELECT_VALUE = '__pointer_null__'
-const ENUM_SELECT_PREFIX = 'enum:'
+const UNSET_SELECT_VALUE = '__pointer_unset__'
+const SELECT_OPTION_PREFIX = 'option:'
+const BOOLEAN_SELECT_OPTIONS = ['true', 'false']
 
-function encodeEnumSelectValue(value: string): string {
-  return `${ENUM_SELECT_PREFIX}${value}`
+function encodeSelectOptionValue(value: string): string {
+  return `${SELECT_OPTION_PREFIX}${value}`
 }
 
-function decodeEnumSelectValue(value: string): string | null {
+function decodeSelectOptionValue(value: string): string | null {
   if (value === NULL_SELECT_VALUE) {
     return null
   }
 
-  if (value.startsWith(ENUM_SELECT_PREFIX)) {
-    return value.slice(ENUM_SELECT_PREFIX.length)
+  if (value === UNSET_SELECT_VALUE) {
+    return ''
+  }
+
+  if (value.startsWith(SELECT_OPTION_PREFIX)) {
+    return value.slice(SELECT_OPTION_PREFIX.length)
   }
 
   return value
 }
 
-function resolveEnumSelectValue(rawValue: unknown, nullable: boolean, fallbackValue: string): string {
+function resolveSelectValue(
+  rawValue: unknown,
+  options: {
+    nullable: boolean
+    fallbackValue?: string
+    allowUnset?: boolean
+  },
+): string {
+  const { nullable, fallbackValue, allowUnset = false } = options
+
   if (rawValue === null) {
     return NULL_SELECT_VALUE
   }
 
   if (typeof rawValue === 'string') {
+    if (rawValue === '' && allowUnset) {
+      return UNSET_SELECT_VALUE
+    }
+
     if (rawValue === '' && nullable) {
       return NULL_SELECT_VALUE
     }
 
-    return encodeEnumSelectValue(rawValue)
+    return encodeSelectOptionValue(rawValue)
   }
 
   if (rawValue === undefined) {
+    if (allowUnset) {
+      return UNSET_SELECT_VALUE
+    }
+
     if (nullable) {
       return NULL_SELECT_VALUE
     }
 
-    return encodeEnumSelectValue(fallbackValue)
+    if (fallbackValue !== undefined) {
+      return encodeSelectOptionValue(fallbackValue)
+    }
+
+    return UNSET_SELECT_VALUE
   }
 
-  return encodeEnumSelectValue(String(rawValue))
+  return encodeSelectOptionValue(String(rawValue))
 }
 
 function formatJsonEditorValue(value: unknown): string {
@@ -1012,8 +1039,11 @@ export function TableWorkspacePanel({
                             editingCell.column === column.name
                           const cellValue = row[column.name]
                           const isJsonColumn = isJsonLikeDataType(column.dataType)
+                          const isBooleanColumn = isBooleanDataType(column.dataType)
                           const enumValues = column.enumValues ?? []
                           const hasEnumColumnValues = enumValues.length > 0
+                          const selectValues = hasEnumColumnValues ? enumValues : isBooleanColumn ? BOOLEAN_SELECT_OPTIONS : []
+                          const hasSelectValues = selectValues.length > 0
                           const canEditCell = !column.isPrimaryKey && Boolean(activeTableTab.schema?.supportsRowEdit) && !isPendingDelete
                           const canNavigateForeignKey = Boolean(column.foreignKey) && hasForeignKeyCellValue(cellValue)
                           const isActiveCell =
@@ -1051,12 +1081,15 @@ export function TableWorkspacePanel({
                               }
                             >
                               {isEditing ? (
-                                hasEnumColumnValues ? (
+                                hasSelectValues ? (
                                   <select
-                                    value={resolveEnumSelectValue(editingCell.value, column.nullable, enumValues[0])}
+                                    value={resolveSelectValue(editingCell.value, {
+                                      nullable: column.nullable,
+                                      fallbackValue: selectValues[0],
+                                    })}
                                     autoFocus
                                     onChange={(event) => {
-                                      const selected = decodeEnumSelectValue(event.target.value)
+                                      const selected = decodeSelectOptionValue(event.target.value)
                                       const nextEditingCell: EditingCell = {
                                         tabId: activeTableTab.id,
                                         rowIndex,
@@ -1081,9 +1114,9 @@ export function TableWorkspacePanel({
                                     className='h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100 outline-none ring-slate-300/45 focus:ring-2'
                                   >
                                     {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
-                                    {enumValues.map((enumValue) => (
-                                      <option key={enumValue} value={encodeEnumSelectValue(enumValue)}>
-                                        {enumValue}
+                                    {selectValues.map((selectValue) => (
+                                      <option key={selectValue} value={encodeSelectOptionValue(selectValue)}>
+                                        {selectValue}
                                       </option>
                                     ))}
                                   </select>
@@ -1166,28 +1199,37 @@ export function TableWorkspacePanel({
                         +
                       </td>
                       {columns.map((column) => {
+                        const isBooleanColumn = isBooleanDataType(column.dataType)
                         const enumValues = column.enumValues ?? []
                         const hasEnumColumnValues = enumValues.length > 0
+                        const selectValues = hasEnumColumnValues ? enumValues : isBooleanColumn ? BOOLEAN_SELECT_OPTIONS : []
+                        const hasSelectValues = selectValues.length > 0
+                        const allowUnsetBooleanInsert = isBooleanColumn && !column.nullable
 
                         return (
                           <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
-                            {hasEnumColumnValues ? (
+                            {hasSelectValues ? (
                               <select
-                                value={resolveEnumSelectValue(
-                                  activeTableTab.insertDraft?.[column.name],
-                                  column.nullable,
-                                  enumValues[0],
-                                )}
+                                value={resolveSelectValue(activeTableTab.insertDraft?.[column.name], {
+                                  nullable: column.nullable,
+                                  fallbackValue: selectValues[0],
+                                  allowUnset: allowUnsetBooleanInsert,
+                                })}
                                 onChange={(event) => {
-                                  const selected = decodeEnumSelectValue(event.target.value)
+                                  const selected = decodeSelectOptionValue(event.target.value)
                                   updateInsertDraftValue(column.name, selected)
                                 }}
                                 className='h-7 w-full rounded-md border border-emerald-500/35 bg-slate-900/90 px-2 text-[12px] text-slate-100 outline-none ring-emerald-300/40 focus:ring-2'
                               >
+                                {allowUnsetBooleanInsert && (
+                                  <option value={UNSET_SELECT_VALUE}>
+                                    Selecione...
+                                  </option>
+                                )}
                                 {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
-                                {enumValues.map((enumValue) => (
-                                  <option key={enumValue} value={encodeEnumSelectValue(enumValue)}>
-                                    {enumValue}
+                                {selectValues.map((selectValue) => (
+                                  <option key={selectValue} value={encodeSelectOptionValue(selectValue)}>
+                                    {selectValue}
                                   </option>
                                 ))}
                               </select>
