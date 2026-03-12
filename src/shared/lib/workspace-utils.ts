@@ -665,6 +665,15 @@ export type SqlFromTableReference = {
   fqName: string
 }
 
+type SqlTableReferenceKeyword = 'from' | 'join'
+
+type SqlFromTableReferenceRange = {
+  reference: SqlFromTableReference
+  start: number
+  end: number
+  keyword: SqlTableReferenceKeyword
+}
+
 function isSqlIdentifierChar(char: string): boolean {
   return /[A-Za-z0-9_$]/.test(char)
 }
@@ -764,15 +773,18 @@ function readSqlIdentifierPart(source: string, start: number): { value: string; 
   }
 }
 
-function readFromTableReference(
+function readTableReferenceAfterKeyword(
   source: string,
-  fromKeywordStart: number,
-): { reference: SqlFromTableReference | null; nextIndex: number } {
-  let cursor = skipWhitespace(source, fromKeywordStart + 4)
+  keywordStart: number,
+  keywordLength: number,
+): { reference: SqlFromTableReference | null; nextIndex: number; start: number; end: number } {
+  let cursor = skipWhitespace(source, keywordStart + keywordLength)
   if (cursor >= source.length) {
     return {
       reference: null,
       nextIndex: source.length,
+      start: cursor,
+      end: cursor,
     }
   }
 
@@ -780,14 +792,19 @@ function readFromTableReference(
     return {
       reference: null,
       nextIndex: cursor + 1,
+      start: cursor,
+      end: cursor,
     }
   }
 
+  const referenceStart = cursor
   const firstPart = readSqlIdentifierPart(source, cursor)
   if (!firstPart) {
     return {
       reference: null,
       nextIndex: cursor + 1,
+      start: cursor,
+      end: cursor,
     }
   }
 
@@ -796,6 +813,8 @@ function readFromTableReference(
     return {
       reference: null,
       nextIndex: cursor + 1,
+      start: referenceStart,
+      end: cursor,
     }
   }
 
@@ -809,6 +828,8 @@ function readFromTableReference(
       return {
         reference: null,
         nextIndex: cursor + 1,
+        start: referenceStart,
+        end: cursor,
       }
     }
 
@@ -823,6 +844,8 @@ function readFromTableReference(
     return {
       reference: null,
       nextIndex: cursor,
+      start: referenceStart,
+      end: cursor,
     }
   }
 
@@ -833,11 +856,31 @@ function readFromTableReference(
       fqName: normalizedSchema ? `${normalizedSchema}.${normalizedName}` : normalizedName,
     },
     nextIndex: cursor,
+    start: referenceStart,
+    end: cursor,
   }
 }
 
-export function extractFirstFromTableReference(sqlText: string): SqlFromTableReference | null {
+function isSqlKeywordAt(source: string, index: number, keyword: SqlTableReferenceKeyword): boolean {
+  if (source.slice(index, index + keyword.length).toLowerCase() !== keyword) {
+    return false
+  }
+
+  const previousChar = source[index - 1] ?? ''
+  const followingChar = source[index + keyword.length] ?? ''
+  if ((previousChar && isSqlIdentifierChar(previousChar)) || (followingChar && isSqlIdentifierChar(followingChar))) {
+    return false
+  }
+
+  return true
+}
+
+function collectSqlTableReferences(
+  sqlText: string,
+  keywords: SqlTableReferenceKeyword[],
+): SqlFromTableReferenceRange[] {
   const source = sqlText
+  const results: SqlFromTableReferenceRange[] = []
 
   let inSingleQuote = false
   let inDoubleQuote = false
@@ -909,22 +952,57 @@ export function extractFirstFromTableReference(sqlText: string): SqlFromTableRef
       continue
     }
 
-    if (source.slice(index, index + 4).toLowerCase() !== 'from') {
-      continue
-    }
+    for (const keyword of keywords) {
+      if (!isSqlKeywordAt(source, index, keyword)) {
+        continue
+      }
 
-    const previousChar = source[index - 1] ?? ''
-    const followingChar = source[index + 4] ?? ''
-    if ((previousChar && isSqlIdentifierChar(previousChar)) || (followingChar && isSqlIdentifierChar(followingChar))) {
-      continue
+      const parsed = readTableReferenceAfterKeyword(source, index, keyword.length)
+      if (parsed.reference) {
+        results.push({
+          reference: parsed.reference,
+          start: parsed.start,
+          end: parsed.end,
+          keyword,
+        })
+      }
+      index = Math.max(index, parsed.nextIndex - 1)
+      break
     }
+  }
 
-    const parsed = readFromTableReference(source, index)
-    if (parsed.reference) {
-      return parsed.reference
-    }
+  return results
+}
 
-    index = Math.max(index, parsed.nextIndex - 1)
+export function extractFirstFromTableReference(sqlText: string): SqlFromTableReference | null {
+  const firstFrom = collectSqlTableReferences(sqlText, ['from'])[0]
+  if (firstFrom) {
+    return firstFrom.reference
+  }
+
+  return null
+}
+
+export function extractFromJoinTableReferenceAtCursor(
+  sqlText: string,
+  cursorOffset: number,
+): SqlFromTableReference | null {
+  if (!sqlText) {
+    return null
+  }
+
+  const normalizedCursor = Math.max(0, Math.min(cursorOffset, sqlText.length))
+  const references = collectSqlTableReferences(sqlText, ['from', 'join'])
+  if (references.length === 0) {
+    return null
+  }
+
+  const match =
+    references.find((reference) => normalizedCursor >= reference.start && normalizedCursor <= reference.end) ??
+    references.find((reference) => normalizedCursor > reference.start && normalizedCursor < reference.end)
+
+  if (match) {
+    return match.reference
   }
 
   return null

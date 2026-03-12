@@ -1,6 +1,7 @@
-import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useCallback, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { EditorView } from '@codemirror/view'
 import { Bot, ChevronDown, Download, Loader2, Play, SendHorizontal, X } from 'lucide-react'
 import type { ConnectionSummary } from '../../../../shared/db-types'
 import type { SqlTab } from '../../../entities/workspace/types'
@@ -9,6 +10,7 @@ import { ButtonGroup } from '../../../components/ui/button-group'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 import { Textarea } from '../../../components/ui/textarea'
 import { AUTO_SQL_CONNECTION_ID } from '../../../shared/constants/app'
+import { extractFromJoinTableReferenceAtCursor } from '../../../shared/lib/workspace-utils'
 
 type SqlWorkspacePanelProps = {
   activeSqlTab: SqlTab
@@ -29,6 +31,12 @@ type SqlWorkspacePanelProps = {
   }) => void
   sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
   setAiDraftOnSqlTab: (tabId: string, value: string) => void
+  onRequestSqlTableStructure: (params: {
+    tabId: string
+    connectionId: string
+    sqlText: string
+    cursorOffset: number
+  }) => Promise<void>
 }
 
 type ResultSetSortState = {
@@ -88,8 +96,134 @@ export function SqlWorkspacePanel({
   exportSqlResultSetVisibleCsv,
   sendAiPromptToSqlTab,
   setAiDraftOnSqlTab,
+  onRequestSqlTableStructure,
 }: SqlWorkspacePanelProps): JSX.Element {
   const [resultSetSortByKey, setResultSetSortByKey] = useState<Record<string, ResultSetSortState>>({})
+  const isMacPlatform = navigator.platform.includes('Mac')
+  const hoverPointerRef = useRef(false)
+  const lastMousePositionRef = useRef<{ x: number; y: number } | null>(null)
+
+  const applyPointerCursor = useCallback((view: EditorView, shouldUsePointer: boolean): void => {
+    if (hoverPointerRef.current === shouldUsePointer) {
+      return
+    }
+
+    hoverPointerRef.current = shouldUsePointer
+    const cursor = shouldUsePointer ? 'pointer' : ''
+    view.dom.style.cursor = cursor
+    view.contentDOM.style.cursor = cursor
+  }, [])
+
+  const isPointerHoveringTableReference = useCallback(
+    (view: EditorView, clientX: number, clientY: number, isModifierPressed: boolean): boolean => {
+      if (!isModifierPressed) {
+        return false
+      }
+
+      const cursorOffset = view.posAtCoords({ x: clientX, y: clientY })
+      if (typeof cursorOffset !== 'number') {
+        return false
+      }
+
+      return Boolean(extractFromJoinTableReferenceAtCursor(activeSqlTab.sqlText, cursorOffset))
+    },
+    [activeSqlTab.sqlText],
+  )
+
+  const sqlEditorWithStructureClick = useMemo(
+    () => [
+      ...sqlEditorExtensions,
+      EditorView.domEventHandlers({
+        mousedown: (event, view) => {
+          const isModifierPressed = isMacPlatform ? event.metaKey : event.ctrlKey
+          if (!isModifierPressed || event.button !== 0) {
+            return false
+          }
+
+          const cursorOffset = view.posAtCoords({ x: event.clientX, y: event.clientY })
+          if (typeof cursorOffset !== 'number') {
+            return false
+          }
+
+          if (!extractFromJoinTableReferenceAtCursor(activeSqlTab.sqlText, cursorOffset)) {
+            return false
+          }
+
+          event.preventDefault()
+          event.stopPropagation()
+          void onRequestSqlTableStructure({
+            tabId: activeSqlTab.id,
+            connectionId: activeSqlTab.connectionId,
+            sqlText: activeSqlTab.sqlText,
+            cursorOffset,
+          })
+          return true
+        },
+        mousemove: (event, view) => {
+          lastMousePositionRef.current = { x: event.clientX, y: event.clientY }
+          const isModifierPressed = isMacPlatform ? event.metaKey : event.ctrlKey
+          const shouldUsePointer = isPointerHoveringTableReference(
+            view,
+            event.clientX,
+            event.clientY,
+            isModifierPressed,
+          )
+          applyPointerCursor(view, shouldUsePointer)
+          return false
+        },
+        mouseleave: (_event, view) => {
+          lastMousePositionRef.current = null
+          applyPointerCursor(view, false)
+          return false
+        },
+        keydown: (event, view) => {
+          if (event.key !== 'Meta' && event.key !== 'Control') {
+            return false
+          }
+
+          const lastMouse = lastMousePositionRef.current
+          if (!lastMouse) {
+            return false
+          }
+
+          const isModifierPressed = isMacPlatform ? event.metaKey : event.ctrlKey
+          const shouldUsePointer = isPointerHoveringTableReference(view, lastMouse.x, lastMouse.y, isModifierPressed)
+          applyPointerCursor(view, shouldUsePointer)
+          return false
+        },
+        keyup: (event, view) => {
+          if (event.key !== 'Meta' && event.key !== 'Control') {
+            return false
+          }
+
+          const lastMouse = lastMousePositionRef.current
+          if (!lastMouse) {
+            applyPointerCursor(view, false)
+            return false
+          }
+
+          const isModifierPressed = isMacPlatform ? event.metaKey : event.ctrlKey
+          const shouldUsePointer = isPointerHoveringTableReference(view, lastMouse.x, lastMouse.y, isModifierPressed)
+          applyPointerCursor(view, shouldUsePointer)
+          return false
+        },
+        blur: (_event, view) => {
+          applyPointerCursor(view, false)
+          return false
+        },
+      }),
+    ],
+    [
+      activeSqlTab.connectionId,
+      activeSqlTab.id,
+      activeSqlTab.sqlText,
+      applyPointerCursor,
+      isMacPlatform,
+      isPointerHoveringTableReference,
+      onRequestSqlTableStructure,
+      sqlEditorExtensions,
+    ],
+  )
   const canRunSql =
     !activeSqlTab.sqlRunning &&
     Boolean(activeSqlTab.connectionId) &&
@@ -101,7 +235,7 @@ export function SqlWorkspacePanel({
         <div>
           <h2 className='text-sm font-semibold'>{activeSqlTab.title}</h2>
           <p className='text-[12px] text-slate-400'>
-            Executar escopo: Cmd+Enter • Autocomplete: Cmd+/ • Ambiente: Ctrl+R • Tabela: Cmd+R • Nova aba SQL: Cmd+T
+            Executar escopo: Cmd+Enter • Autocomplete: Cmd+/ • Estrutura: Cmd+Click em FROM/JOIN • Ambiente: Cmd+R • Nova aba SQL: Cmd+T
           </p>
         </div>
         <div className='flex items-center gap-2'>
@@ -175,7 +309,7 @@ export function SqlWorkspacePanel({
                   highlightActiveLine: true,
                   autocompletion: true,
                 }}
-                extensions={sqlEditorExtensions as never}
+                extensions={sqlEditorWithStructureClick as never}
                 onChange={(value) =>
                   updateSqlTab(activeSqlTab.id, (tab) => ({
                     ...tab,

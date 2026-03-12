@@ -64,6 +64,12 @@ type WorkspaceMainProps = {
   exportTableAllPagesCsv: (tabId: string) => Promise<void>
   sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
   setAiDraftOnSqlTab: (tabId: string, value: string) => void
+  onRequestSqlTableStructure: (params: {
+    tabId: string
+    connectionId: string
+    sqlText: string
+    cursorOffset: number
+  }) => Promise<void>
 }
 
 export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
@@ -108,6 +114,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     exportTableAllPagesCsv,
     sendAiPromptToSqlTab,
     setAiDraftOnSqlTab,
+    onRequestSqlTableStructure,
   } = props
 
   return (
@@ -143,6 +150,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
                 sendAiPromptToSqlTab={sendAiPromptToSqlTab}
                 setAiDraftOnSqlTab={setAiDraftOnSqlTab}
+                onRequestSqlTableStructure={onRequestSqlTableStructure}
               />
             ) : activeTableTab ? (
               <TableWorkspacePanel

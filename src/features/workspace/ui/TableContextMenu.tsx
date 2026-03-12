@@ -1,4 +1,4 @@
-import { Copy, FileCode2, Table2 } from 'lucide-react'
+import { Copy, Eye, FileCode2, Table2 } from 'lucide-react'
 import type { TableSearchHit } from '../../../../shared/db-types'
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ type TableContextMenuState = {
 type TableContextMenuProps = {
   tableContextMenu: TableContextMenuState | null
   setTableContextMenu: (value: TableContextMenuState | null) => void
+  onViewStructure: (hit: TableSearchHit) => Promise<void>
   onCopyStructureSql: (hit: TableSearchHit) => Promise<void>
   onCopyInsertSql: (hit: TableSearchHit) => Promise<void>
 }
@@ -25,6 +26,7 @@ type TableContextMenuProps = {
 export function TableContextMenu({
   tableContextMenu,
   setTableContextMenu,
+  onViewStructure,
   onCopyStructureSql,
   onCopyInsertSql,
 }: TableContextMenuProps): JSX.Element {
@@ -61,6 +63,19 @@ export function TableContextMenu({
           TABELA
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            if (!tableContextMenu) {
+              return
+            }
+
+            void onViewStructure(tableContextMenu.hit)
+          }}
+        >
+          <Eye className='h-3.5 w-3.5 text-slate-400' />
+          Ver estrutura
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={(event) => {
             event.preventDefault()

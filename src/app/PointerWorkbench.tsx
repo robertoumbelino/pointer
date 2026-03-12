@@ -8,7 +8,7 @@ import {
 } from '@codemirror/autocomplete'
 import { EditorView, keymap } from '@codemirror/view'
 import { toast } from 'sonner'
-import type { AiConfig, AiProvider } from '../../shared/db-types'
+import type { AiConfig, AiProvider, ConnectionSummary, TableRef, TableSchema, TableSearchHit } from '../../shared/db-types'
 import { useAppUpdate } from '../features/app-update/model/useAppUpdate'
 import { AppTopBar } from '../features/app-update/ui/AppTopBar'
 import { ChangelogDialog } from '../features/app-update/ui/ChangelogDialog'
@@ -27,28 +27,40 @@ import { useSchemaSelectionGuard } from '../features/workspace/model/useSchemaSe
 import { useWorkspaceActions } from '../features/workspace/model/useWorkspaceActions'
 import { useWorkspaceShortcuts } from '../features/workspace/model/useWorkspaceShortcuts'
 import { SqlAutoConnectionResolveDialog } from '../features/workspace/ui/SqlAutoConnectionResolveDialog'
+import {
+  TableStructureConnectionResolveDialog,
+  type PendingTableStructureConnectionResolution,
+  type TableStructureConnectionOption,
+} from '../features/workspace/ui/TableStructureConnectionResolveDialog'
 import { SqlRiskConfirmDialog } from '../features/workspace/ui/SqlRiskConfirmDialog'
 import { SqlTabRenameDialog } from '../features/workspace/ui/SqlTabRenameDialog'
 import { TableContextMenu } from '../features/workspace/ui/TableContextMenu'
+import { TableStructureSheet, type TableStructureSheetTarget } from '../features/workspace/ui/TableStructureSheet'
 import { WorkspaceEmptyState } from '../features/workspace/ui/WorkspaceEmptyState'
 import { WorkspaceMain } from '../features/workspace/ui/WorkspaceMain'
 import { pointerApi } from '../shared/api/pointer-api'
-import { DEFAULT_ENVIRONMENT_COLOR } from '../shared/constants/app'
+import { AUTO_SQL_CONNECTION_ID, DEFAULT_ENVIRONMENT_COLOR } from '../shared/constants/app'
 import {
   engineLabel,
   engineShortLabel,
+  extractFromJoinTableReferenceAtCursor,
   formatCell,
   formatDraftInputValue,
   formatTableLabel,
   getErrorMessage,
   hexToRgb,
   normalizeHexColor,
+  type SqlFromTableReference,
 } from '../shared/lib/workspace-utils'
 import { useWorkbenchFlows } from './model/useWorkbenchFlows'
 import { useWorkbenchPersistence } from './model/useWorkbenchPersistence'
 
 const AI_PROVIDER = 'vercel-gateway' as const
 const AI_MODEL = 'minimax/minimax-m2.1'
+
+function normalizeIdentifier(value: string): string {
+  return value.trim().toLowerCase()
+}
 
 function App(): JSX.Element {
   const {
@@ -210,9 +222,18 @@ function App(): JSX.Element {
   const [aiApiKeyDraft, setAiApiKeyDraft] = useState('')
   const [isAiConfigSaving, setIsAiConfigSaving] = useState(false)
   const [pendingAiPrompt, setPendingAiPrompt] = useState('')
+  const [isTableStructureSheetOpen, setIsTableStructureSheetOpen] = useState(false)
+  const [isTableStructureLoading, setIsTableStructureLoading] = useState(false)
+  const [tableStructureError, setTableStructureError] = useState<string | null>(null)
+  const [tableStructureSchema, setTableStructureSchema] = useState<TableSchema | null>(null)
+  const [tableStructureTarget, setTableStructureTarget] = useState<TableStructureSheetTarget | null>(null)
+  const [isTableStructureResolveOpen, setIsTableStructureResolveOpen] = useState(false)
+  const [pendingTableStructureResolution, setPendingTableStructureResolution] =
+    useState<PendingTableStructureConnectionResolution | null>(null)
 
   const commandColumnInputRef = useRef<HTMLSelectElement | null>(null)
   const commandValueInputRef = useRef<HTMLInputElement | null>(null)
+  const structureTablesByConnectionRef = useRef<Record<string, TableRef[]>>({})
 
   const loadAiConfig = useCallback(async (): Promise<AiConfig | null> => {
     try {
@@ -240,6 +261,32 @@ function App(): JSX.Element {
   useEffect(() => {
     selectedSchemaRef.current = selectedSchema
   }, [selectedSchema, selectedSchemaRef])
+
+  useEffect(() => {
+    structureTablesByConnectionRef.current = {}
+  }, [connections])
+
+  useEffect(() => {
+    if (currentView === 'workspace') {
+      return
+    }
+
+    setIsTableStructureResolveOpen(false)
+    setPendingTableStructureResolution(null)
+    setIsTableStructureSheetOpen(false)
+    setTableStructureError(null)
+    setTableStructureSchema(null)
+    setTableStructureTarget(null)
+  }, [currentView])
+
+  useEffect(() => {
+    setIsTableStructureResolveOpen(false)
+    setPendingTableStructureResolution(null)
+    setIsTableStructureSheetOpen(false)
+    setTableStructureError(null)
+    setTableStructureSchema(null)
+    setTableStructureTarget(null)
+  }, [selectedEnvironmentId])
 
   const selectedEnvironmentRgb = useMemo(
     () => hexToRgb(normalizeHexColor(selectedEnvironment?.color ?? DEFAULT_ENVIRONMENT_COLOR)),
@@ -534,6 +581,188 @@ function App(): JSX.Element {
     updateTableTab,
     updateSqlTab,
   })
+
+  const openTableStructureSheetByTarget = useCallback(async (target: TableStructureSheetTarget): Promise<void> => {
+    setIsTableStructureSheetOpen(true)
+    setIsTableStructureLoading(true)
+    setTableStructureError(null)
+    setTableStructureTarget(target)
+    setTableStructureSchema(null)
+
+    try {
+      const schema = await pointerApi.describeTable(target.connectionId, target.table)
+      setTableStructureSchema(schema)
+    } catch (error) {
+      const message = getErrorMessage(error)
+      setTableStructureError(message)
+      toast.error(message)
+    } finally {
+      setIsTableStructureLoading(false)
+    }
+  }, [])
+
+  const listStructureTablesByConnection = useCallback(async (connectionId: string): Promise<TableRef[]> => {
+    const cached = structureTablesByConnectionRef.current[connectionId]
+    if (cached) {
+      return cached
+    }
+
+    const tables = await pointerApi.listTables(connectionId)
+    structureTablesByConnectionRef.current[connectionId] = tables
+    return tables
+  }, [])
+
+  const resolveTableForConnection = useCallback(
+    async (
+      connection: ConnectionSummary,
+      tableReference: SqlFromTableReference,
+    ): Promise<TableRef | null | 'ambiguous'> => {
+      const normalizedName = normalizeIdentifier(tableReference.name)
+      const normalizedSchema = tableReference.schema ? normalizeIdentifier(tableReference.schema) : null
+      const tables = await listStructureTablesByConnection(connection.id)
+
+      const matches = tables.filter((table) => {
+        if (normalizeIdentifier(table.name) !== normalizedName) {
+          return false
+        }
+
+        if (!normalizedSchema) {
+          return true
+        }
+
+        return normalizeIdentifier(table.schema) === normalizedSchema
+      })
+
+      if (matches.length === 0) {
+        return null
+      }
+
+      if (!normalizedSchema && matches.length > 1) {
+        return 'ambiguous'
+      }
+
+      return matches[0]
+    },
+    [listStructureTablesByConnection],
+  )
+
+  const handleOpenTableStructure = useCallback(
+    async (hit: TableSearchHit): Promise<void> => {
+      setTableContextMenu(null)
+      await openTableStructureSheetByTarget({
+        connectionId: hit.connectionId,
+        connectionName: hit.connectionName,
+        engine: hit.engine,
+        table: hit.table,
+      })
+    },
+    [openTableStructureSheetByTarget, setTableContextMenu],
+  )
+
+  const handleRequestSqlTableStructure = useCallback(
+    async (params: {
+      tabId: string
+      connectionId: string
+      sqlText: string
+      cursorOffset: number
+    }): Promise<void> => {
+      const tableReference = extractFromJoinTableReferenceAtCursor(params.sqlText, params.cursorOffset)
+      if (!tableReference) {
+        return
+      }
+
+      if (!params.connectionId) {
+        toast.error('Selecione uma conexão para abrir a estrutura da tabela.')
+        return
+      }
+
+      if (params.connectionId !== AUTO_SQL_CONNECTION_ID) {
+        const connection = connections.find((candidate) => candidate.id === params.connectionId)
+        if (!connection) {
+          toast.error('A conexão da aba SQL não está mais disponível.')
+          return
+        }
+
+        const resolvedTable = await resolveTableForConnection(connection, tableReference)
+        if (resolvedTable === 'ambiguous') {
+          toast.error(
+            `Tabela "${tableReference.name}" existe em múltiplos schemas na conexão "${connection.name}". Use schema.tabela no SQL.`,
+          )
+          return
+        }
+
+        if (!resolvedTable) {
+          toast.error(`Tabela "${tableReference.fqName}" não foi encontrada na conexão "${connection.name}".`)
+          return
+        }
+
+        await openTableStructureSheetByTarget({
+          connectionId: connection.id,
+          connectionName: connection.name,
+          engine: connection.engine,
+          table: resolvedTable,
+        })
+        return
+      }
+
+      if (connections.length === 0) {
+        toast.error('Nenhuma conexão disponível para resolver a estrutura da tabela.')
+        return
+      }
+
+      const options: TableStructureConnectionOption[] = []
+
+      for (const connection of connections) {
+        const resolvedTable = await resolveTableForConnection(connection, tableReference)
+        if (resolvedTable === 'ambiguous') {
+          toast.error(
+            `Tabela "${tableReference.name}" existe em múltiplos schemas na conexão "${connection.name}". Use schema.tabela no SQL.`,
+          )
+          return
+        }
+
+        if (!resolvedTable) {
+          continue
+        }
+
+        options.push({
+          connectionId: connection.id,
+          connectionName: connection.name,
+          engine: connection.engine,
+          table: resolvedTable,
+        })
+      }
+
+      if (options.length === 0) {
+        toast.error(`Nenhuma conexão encontrada para a tabela "${tableReference.fqName}".`)
+        return
+      }
+
+      if (options.length === 1) {
+        const option = options[0]
+        await openTableStructureSheetByTarget({
+          connectionId: option.connectionId,
+          connectionName: option.connectionName,
+          engine: option.engine,
+          table: option.table,
+        })
+        return
+      }
+
+      setPendingTableStructureResolution({
+        tableLabel: tableReference.fqName,
+        options: options.sort((left, right) => left.connectionName.localeCompare(right.connectionName)),
+      })
+      setIsTableStructureResolveOpen(true)
+    },
+    [
+      connections,
+      openTableStructureSheetByTarget,
+      resolveTableForConnection,
+      setPendingTableStructureResolution,
+      setIsTableStructureResolveOpen,
+    ],
+  )
 
   function handleOpenAiConfig(mode: AiConfigDialogMode = 'full'): void {
     setAiProviderDraft(aiConfig?.provider ?? AI_PROVIDER)
@@ -835,6 +1064,7 @@ function App(): JSX.Element {
             exportTableAllPagesCsv={exportTableAllPagesCsv}
             sendAiPromptToSqlTab={sendAiPromptToSqlTab}
             setAiDraftOnSqlTab={setAiDraftOnSqlTab}
+            onRequestSqlTableStructure={handleRequestSqlTableStructure}
           />
         </div>
       )}
@@ -842,9 +1072,21 @@ function App(): JSX.Element {
       <TableContextMenu
         tableContextMenu={tableContextMenu}
         setTableContextMenu={setTableContextMenu}
+        onViewStructure={handleOpenTableStructure}
         onCopyStructureSql={handleCopyTableStructureSql}
         onCopyInsertSql={handleCopyInsertTemplateSql}
       />
+
+      {currentView === 'workspace' && (
+        <TableStructureSheet
+          isOpen={isTableStructureSheetOpen}
+          isLoading={isTableStructureLoading}
+          error={tableStructureError}
+          schema={tableStructureSchema}
+          target={tableStructureTarget}
+          onClose={() => setIsTableStructureSheetOpen(false)}
+        />
+      )}
 
       <ChangelogDialog
         isOpen={isChangelogOpen}
@@ -885,6 +1127,21 @@ function App(): JSX.Element {
         connections={connections}
         onRunSqlWithConnection={async (tabId, sqlText, connectionId) => {
           await runSql(false, undefined, sqlText, tabId, connectionId)
+        }}
+      />
+
+      <TableStructureConnectionResolveDialog
+        isOpen={isTableStructureResolveOpen}
+        onOpenChange={setIsTableStructureResolveOpen}
+        pendingResolution={pendingTableStructureResolution}
+        setPendingResolution={setPendingTableStructureResolution}
+        onSelectOption={async (option) => {
+          await openTableStructureSheetByTarget({
+            connectionId: option.connectionId,
+            connectionName: option.connectionName,
+            engine: option.engine,
+            table: option.table,
+          })
         }}
       />
 
