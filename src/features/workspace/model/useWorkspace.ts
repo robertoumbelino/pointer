@@ -78,6 +78,7 @@ type UseWorkspaceResult = {
   copyTableSelectionRef: MutableRefObject<(() => Promise<void>) | undefined>
   pasteIntoTableSelectionRef: MutableRefObject<((rawClipboardText: string) => void) | undefined>
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
+  reloadTableTabRef: MutableRefObject<((tabId: string) => Promise<void>) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
   getTableTab: (tabId: string) => TableTab | null
   getSqlTab: (tabId: string) => SqlTab | null
@@ -137,6 +138,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const copyTableSelectionRef = useRef<() => Promise<void>>()
   const pasteIntoTableSelectionRef = useRef<(rawClipboardText: string) => void>()
   const openNewSqlTabRef = useRef<() => void>()
+  const reloadTableTabRef = useRef<(tabId: string) => Promise<void>>()
   const closeActiveTabRef = useRef<() => void>()
 
   function getTableTab(tabId: string): TableTab | null {
@@ -227,6 +229,7 @@ export function useWorkspace(): UseWorkspaceResult {
     copyTableSelectionRef,
     pasteIntoTableSelectionRef,
     openNewSqlTabRef,
+    reloadTableTabRef,
     closeActiveTabRef,
     getTableTab,
     getSqlTab,

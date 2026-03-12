@@ -101,7 +101,7 @@ export function SqlWorkspacePanel({
         <div>
           <h2 className='text-sm font-semibold'>{activeSqlTab.title}</h2>
           <p className='text-[12px] text-slate-400'>
-            Executar escopo: Cmd+Enter • Autocomplete: Cmd+/ • Ambiente: Cmd+R • Nova aba SQL: Cmd+T
+            Executar escopo: Cmd+Enter • Autocomplete: Cmd+/ • Ambiente: Ctrl+R • Tabela: Cmd+R • Nova aba SQL: Cmd+T
           </p>
         </div>
         <div className='flex items-center gap-2'>

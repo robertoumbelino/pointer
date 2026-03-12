@@ -845,7 +845,7 @@ export function TableWorkspacePanel({
               ) : (
                 <Save className='mr-1.5 h-3.5 w-3.5' />
               )}
-              {isSavingTableChanges ? 'Salvando...' : 'Salvar (Cmd+S)'}
+              {isSavingTableChanges ? 'Salvando...' : 'Salvar'}
             </Button>
           )}
           {!hasLoadError && (

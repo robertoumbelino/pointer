@@ -50,7 +50,7 @@ export function WorkspaceEmptyState({
                     <Command className='h-4 w-4' />
                   </div>
                   <p className='onboarding-chip-title'>Atalhos rápidos</p>
-                  <p className='onboarding-chip-text'>Cmd+K para busca e Cmd+R para alternar ambientes.</p>
+                  <p className='onboarding-chip-text'>Cmd+K para busca e Ctrl+R para alternar ambientes.</p>
                 </div>
               </div>
             </div>
@@ -60,7 +60,7 @@ export function WorkspaceEmptyState({
                 <Plus className='mr-1.5 h-3.5 w-3.5' /> Criar ambiente
               </Button>
               <p className='mt-2 text-center text-[11px] tracking-wide text-slate-500'>
-                Depois você poderá trocar de ambiente com Cmd+R.
+                Depois você poderá trocar de ambiente com Ctrl+R.
               </p>
             </div>
 
@@ -92,7 +92,7 @@ export function WorkspaceEmptyState({
                 </div>
                 <div className='onboarding-shortcuts'>
                   <span className='onboarding-shortcut-pill'>Cmd+K Buscar tabelas</span>
-                  <span className='onboarding-shortcut-pill'>Cmd+R Trocar ambiente</span>
+                  <span className='onboarding-shortcut-pill'>Ctrl+R Trocar ambiente</span>
                   <span className='onboarding-shortcut-pill'>Cmd+T Nova aba SQL</span>
                 </div>
               </div>

@@ -54,7 +54,7 @@ export function EnvironmentSwitcherDialog({
             autoFocus
             value={environmentCommandQuery}
             onValueChange={setEnvironmentCommandQuery}
-            placeholder='Trocar ambiente... (Cmd+R)'
+            placeholder='Trocar ambiente... (Ctrl+R)'
             onKeyDown={handleEnvironmentCommandInputKeyDown}
           />
           <CommandList>

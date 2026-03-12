@@ -179,6 +179,7 @@ function App(): JSX.Element {
     copyTableSelectionRef,
     pasteIntoTableSelectionRef,
     openNewSqlTabRef,
+    reloadTableTabRef,
     closeActiveTabRef,
     getTableTab,
     updateTableTab,
@@ -674,6 +675,7 @@ function App(): JSX.Element {
   copyTableSelectionRef.current = copyTableSelection
   pasteIntoTableSelectionRef.current = pasteIntoTableSelection
   openNewSqlTabRef.current = openNewSqlTab
+  reloadTableTabRef.current = reloadTableTab
   closeActiveTabRef.current = closeActiveTab
 
   useWorkspaceShortcuts({
@@ -689,6 +691,7 @@ function App(): JSX.Element {
     copyTableSelectionRef,
     pasteIntoTableSelectionRef,
     openNewSqlTabRef,
+    reloadTableTabRef,
     closeActiveTabRef,
     activeTabIdRef,
     workTabsRef,

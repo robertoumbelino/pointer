@@ -15,6 +15,7 @@ type UseWorkspaceShortcutsParams = {
   copyTableSelectionRef: MutableRefObject<(() => Promise<void>) | undefined>
   pasteIntoTableSelectionRef: MutableRefObject<((rawClipboardText: string) => void) | undefined>
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
+  reloadTableTabRef: MutableRefObject<((tabId: string) => Promise<void>) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
   activeTabIdRef: MutableRefObject<string>
   workTabsRef: MutableRefObject<WorkTab[]>
@@ -35,6 +36,7 @@ export function useWorkspaceShortcuts({
   copyTableSelectionRef,
   pasteIntoTableSelectionRef,
   openNewSqlTabRef,
+  reloadTableTabRef,
   closeActiveTabRef,
   activeTabIdRef,
   workTabsRef,
@@ -43,9 +45,26 @@ export function useWorkspaceShortcuts({
 }: UseWorkspaceShortcutsParams): void {
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
+      const isCtrlR = event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'r'
+      if (isCtrlR) {
         event.preventDefault()
         setIsEnvironmentCommandOpen(true)
+        return
+      }
+
+      const isCmdR = event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'r'
+      if (isCmdR) {
+        event.preventDefault()
+        event.stopPropagation()
+
+        if (!isWorkspaceActive) {
+          return
+        }
+
+        const activeTableTab = getTableTab(activeTabIdRef.current)
+        if (activeTableTab) {
+          void reloadTableTabRef.current?.(activeTableTab.id)
+        }
         return
       }
 
@@ -229,6 +248,7 @@ export function useWorkspaceShortcuts({
     copyTableSelectionRef,
     pasteIntoTableSelectionRef,
     openNewSqlTabRef,
+    reloadTableTabRef,
     runSqlRef,
     saveActiveTableChangesRef,
     setActiveTabId,
