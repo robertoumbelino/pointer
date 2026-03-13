@@ -229,6 +229,9 @@ export function TableWorkspacePanel({
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
   const gridContainerRef = useRef<HTMLDivElement | null>(null)
+  const insertRowRef = useRef<HTMLTableRowElement | null>(null)
+  const firstInsertFieldRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
+  const previousInsertStateRef = useRef<{ tabId: string; isOpen: boolean } | null>(null)
   const cellDragAnchorRef = useRef<TableCellPosition | null>(null)
   const didDragSelectionRef = useRef(false)
   const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
@@ -253,6 +256,43 @@ export function TableWorkspacePanel({
     window.addEventListener('mouseup', handleMouseUp)
     return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [])
+
+  useEffect(() => {
+    const isInsertOpen = Boolean(activeTableTab.insertDraft)
+    const previousState = previousInsertStateRef.current
+
+    if (!previousState || previousState.tabId !== activeTableTab.id) {
+      previousInsertStateRef.current = {
+        tabId: activeTableTab.id,
+        isOpen: isInsertOpen,
+      }
+      return
+    }
+
+    const didOpenInsert = !previousState.isOpen && isInsertOpen
+    previousInsertStateRef.current = {
+      tabId: activeTableTab.id,
+      isOpen: isInsertOpen,
+    }
+
+    if (!didOpenInsert) {
+      return
+    }
+
+    const gridContainer = gridContainerRef.current
+    if (gridContainer) {
+      gridContainer.scrollTo({
+        top: gridContainer.scrollHeight,
+        left: gridContainer.scrollLeft,
+      })
+    } else {
+      insertRowRef.current?.scrollIntoView({ block: 'end' })
+    }
+
+    requestAnimationFrame(() => {
+      firstInsertFieldRef.current?.focus({ preventScroll: true })
+    })
+  }, [activeTableTab.id, activeTableTab.insertDraft])
 
   const closeJsonEditor = (): void => {
     setJsonEditorCell(null)
@@ -1194,11 +1234,14 @@ export function TableWorkspacePanel({
                     )
                   })}
                   {activeTableTab.insertDraft && (
-                    <tr className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'>
+                    <tr
+                      ref={insertRowRef}
+                      className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'
+                    >
                       <td className='sticky left-0 z-[1] border-r border-emerald-400/35 bg-emerald-500/15 px-1 py-1 text-center text-[10px] text-emerald-200'>
                         +
                       </td>
-                      {columns.map((column) => {
+                      {columns.map((column, columnIndex) => {
                         const isBooleanColumn = isBooleanDataType(column.dataType)
                         const enumValues = column.enumValues ?? []
                         const hasEnumColumnValues = enumValues.length > 0
@@ -1210,6 +1253,13 @@ export function TableWorkspacePanel({
                           <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
                             {hasSelectValues ? (
                               <select
+                                ref={
+                                  columnIndex === 0
+                                    ? (element) => {
+                                        firstInsertFieldRef.current = element
+                                      }
+                                    : undefined
+                                }
                                 value={resolveSelectValue(activeTableTab.insertDraft?.[column.name], {
                                   nullable: column.nullable,
                                   fallbackValue: selectValues[0],
@@ -1235,6 +1285,13 @@ export function TableWorkspacePanel({
                               </select>
                             ) : (
                               <Input
+                                ref={
+                                  columnIndex === 0
+                                    ? (element) => {
+                                        firstInsertFieldRef.current = element
+                                      }
+                                    : undefined
+                                }
                                 value={formatDraftInputValue(activeTableTab.insertDraft?.[column.name])}
                                 placeholder={column.isPrimaryKey ? 'PK' : column.name}
                                 onChange={(event) => updateInsertDraftValue(column.name, event.target.value)}
