@@ -25,6 +25,7 @@ type WorkspaceMainProps = {
   activeTabId: string
   setActiveTabId: Dispatch<SetStateAction<string>>
   openRenameSqlTabDialog: (tab: SqlTab) => void
+  reorderWorkTabs: (draggedTabId: string, targetTabId: string, position?: 'before' | 'after') => void
   closeTableTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
   activeTableTab: TableTab | null
@@ -80,6 +81,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     activeTabId,
     setActiveTabId,
     openRenameSqlTabDialog,
+    reorderWorkTabs,
     closeTableTab,
     closeSqlTab,
     activeTableTab,
@@ -129,6 +131,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
               activeTabId={activeTabId}
               setActiveTabId={setActiveTabId}
               openRenameSqlTabDialog={openRenameSqlTabDialog}
+              reorderWorkTabs={reorderWorkTabs}
               closeTableTab={closeTableTab}
               closeSqlTab={closeSqlTab}
             />

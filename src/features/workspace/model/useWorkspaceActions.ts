@@ -76,6 +76,7 @@ type UseWorkspaceActionsResult = {
   openTableTab: (hit: TableSearchHit, initialLoad?: TableReloadOverrides) => Promise<void>
   navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
+  reorderWorkTabs: (draggedTabId: string, targetTabId: string, position?: 'before' | 'after') => void
   closeTableTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
   closeActiveTab: () => void
@@ -824,6 +825,35 @@ export function useWorkspaceActions({
     setWorkTabs(nextTabs)
     setActiveTabId(fallbackTab.id)
     setEditingCell((current) => (current?.tabId === activeId ? null : current))
+  }
+
+  function reorderWorkTabs(draggedTabId: string, targetTabId: string, position: 'before' | 'after' = 'before'): void {
+    if (!draggedTabId || !targetTabId || draggedTabId === targetTabId) {
+      return
+    }
+
+    setWorkTabs((current) => {
+      const draggedIndex = current.findIndex((tab) => tab.id === draggedTabId)
+      const targetIndex = current.findIndex((tab) => tab.id === targetTabId)
+      if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) {
+        return current
+      }
+
+      const nextTabs = [...current]
+      const [draggedTab] = nextTabs.splice(draggedIndex, 1)
+      if (!draggedTab) {
+        return current
+      }
+
+      let insertionIndex = targetIndex + (position === 'after' ? 1 : 0)
+      if (draggedIndex < insertionIndex) {
+        insertionIndex -= 1
+      }
+
+      const boundedInsertionIndex = Math.max(0, Math.min(nextTabs.length, insertionIndex))
+      nextTabs.splice(boundedInsertionIndex, 0, draggedTab)
+      return nextTabs
+    })
   }
 
   function openNewSqlTab(): void {
@@ -1796,6 +1826,7 @@ export function useWorkspaceActions({
     openTableTab,
     navigateToForeignKey,
     reloadTableTab,
+    reorderWorkTabs,
     closeTableTab,
     closeSqlTab,
     closeActiveTab,

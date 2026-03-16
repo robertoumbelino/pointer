@@ -529,6 +529,7 @@ function App(): JSX.Element {
     openTableTab,
     navigateToForeignKey,
     reloadTableTab,
+    reorderWorkTabs,
     closeTableTab,
     closeSqlTab,
     closeActiveTab,
@@ -1030,6 +1031,7 @@ function App(): JSX.Element {
             activeTabId={activeTabId}
             setActiveTabId={setActiveTabId}
             openRenameSqlTabDialog={openRenameSqlTabDialog}
+            reorderWorkTabs={reorderWorkTabs}
             closeTableTab={closeTableTab}
             closeSqlTab={closeSqlTab}
             activeTableTab={activeTableTab}
