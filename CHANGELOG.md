@@ -2,6 +2,17 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.12 - 2026-03-16
+
+### ✨ Novidades
+- Edição de conexão ganhou ação para revelar/ocultar senha no formulário, melhorando conferência de credenciais sem sair do fluxo.
+- Resultado SQL agora exibe numeração de linhas no grid, facilitando leitura e referência rápida durante análise.
+- Workspace passou a suportar reordenação de abas por drag and drop, deixando a organização do contexto mais fluida.
+
+### 🐛 Correções
+- Corrigida a tratativa de falha no modo automático de conexão SQL para evitar estados inconsistentes em erro de conexão.
+- Ajustado o comportamento de scroll e foco no fluxo de inserção em tabela para reduzir interrupções durante edição.
+
 ## v0.8.7 - 2026-03-12
 
 ### ✨ Novidades
