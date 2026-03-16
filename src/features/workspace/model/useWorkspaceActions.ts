@@ -6,7 +6,6 @@ import type {
   ColumnForeignKeyRef,
   ConnectionSummary,
   SqlExecutionResult,
-  TableRef,
   TableFilter,
   TableSearchHit,
 } from '../../../../shared/db-types'
@@ -383,10 +382,15 @@ export function useWorkspaceActions({
   const isSavingTableChangesRef = useRef(false)
   const sqlCancelRequestByTabRef = useRef<Record<string, string>>({})
   const sqlCancelUnlockTimerByTabRef = useRef<Record<string, number>>({})
-  const tablesByConnectionRef = useRef<Record<string, TableRef[]>>({})
+  const autoConnectionFailureNotifiedRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    tablesByConnectionRef.current = {}
+    const activeConnectionIds = new Set(connections.map((connection) => connection.id))
+    for (const connectionId of autoConnectionFailureNotifiedRef.current) {
+      if (!activeConnectionIds.has(connectionId)) {
+        autoConnectionFailureNotifiedRef.current.delete(connectionId)
+      }
+    }
   }, [connections])
 
   const clearSqlCancelFallback = useCallback((tabId: string): void => {
@@ -1613,48 +1617,71 @@ export function useWorkspaceActions({
     }
   }
 
-  async function listTablesWithCache(connectionId: string): Promise<TableRef[]> {
-    const cached = tablesByConnectionRef.current[connectionId]
-    if (cached) {
-      return cached
-    }
-
-    const tables = await pointerApi.listTables(connectionId)
-    tablesByConnectionRef.current[connectionId] = tables
-    return tables
-  }
-
   async function resolveAutoConnectionCandidates(
     tableReference: ReturnType<typeof extractFirstFromTableReference>,
-  ): Promise<ConnectionSummary[]> {
+  ): Promise<{ candidates: ConnectionSummary[]; failedConnections: ConnectionSummary[] }> {
     if (!tableReference) {
-      return []
+      return {
+        candidates: [],
+        failedConnections: [],
+      }
     }
 
     const normalizedName = normalizeIdentifier(tableReference.name)
     const normalizedSchema = tableReference.schema ? normalizeIdentifier(tableReference.schema) : null
 
+    const candidatesById = new Map<string, ConnectionSummary>()
+    const healthyConnectionIds = new Set<string>()
+    const failedConnections: ConnectionSummary[] = []
+
     const matches = await Promise.all(
       connections.map(async (connection) => {
-        const tables = await listTablesWithCache(connection.id)
-        const found = tables.some((table) => {
-          const tableName = normalizeIdentifier(table.name)
-          if (tableName !== normalizedName) {
-            return false
-          }
+        try {
+          const tables = await pointerApi.searchTables(connection.id, tableReference.fqName)
+          healthyConnectionIds.add(connection.id)
 
-          if (!normalizedSchema) {
-            return true
-          }
+          const found = tables.some((table) => {
+            const tableName = normalizeIdentifier(table.name)
+            if (tableName !== normalizedName) {
+              return false
+            }
 
-          return normalizeIdentifier(table.schema) === normalizedSchema
-        })
+            if (!normalizedSchema) {
+              return true
+            }
 
-        return found ? connection : null
+            return normalizeIdentifier(table.schema) === normalizedSchema
+          })
+
+          return found ? connection : null
+        } catch (error) {
+          console.warn('[ui][sql][auto] falha ao buscar tabelas da conexão', {
+            connectionId: connection.id,
+            connectionName: connection.name,
+            message: getErrorMessage(error),
+          })
+          failedConnections.push(connection)
+          return null
+        }
       }),
     )
 
-    return matches.filter((connection): connection is ConnectionSummary => Boolean(connection))
+    for (const connection of matches) {
+      if (!connection) {
+        continue
+      }
+
+      candidatesById.set(connection.id, connection)
+    }
+
+    for (const connectionId of healthyConnectionIds) {
+      autoConnectionFailureNotifiedRef.current.delete(connectionId)
+    }
+
+    return {
+      candidates: Array.from(candidatesById.values()),
+      failedConnections,
+    }
   }
 
   async function resolveSqlConnectionId(
@@ -1690,7 +1717,25 @@ export function useWorkspaceActions({
       return null
     }
 
-    const candidates = await resolveAutoConnectionCandidates(tableReference)
+    const { candidates, failedConnections } = await resolveAutoConnectionCandidates(tableReference)
+    const newlyFailedConnections = failedConnections.filter(
+      (connection) => !autoConnectionFailureNotifiedRef.current.has(connection.id),
+    )
+    if (newlyFailedConnections.length > 0) {
+      const failedNames = newlyFailedConnections.map((connection) => connection.name)
+      const failedLabel = failedNames.join(', ')
+      const plural = newlyFailedConnections.length > 1
+      toast.error(
+        plural
+          ? `Modo Auto: conexões com falha/disconectadas: ${failedLabel}.`
+          : `Modo Auto: conexão com falha/disconectada: ${failedLabel}.`,
+      )
+
+      for (const connection of newlyFailedConnections) {
+        autoConnectionFailureNotifiedRef.current.add(connection.id)
+      }
+    }
+
     if (candidates.length === 0) {
       toast.error(`Nenhuma conexão encontrada para a tabela "${tableReference.fqName}".`)
       return null
@@ -1742,6 +1787,7 @@ export function useWorkspaceActions({
         return
       }
 
+      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: true, sqlCanceling: false }))
       const effectiveConnectionId = await resolveSqlConnectionId(sqlTab, sqlToExecute, resolvedConnectionId)
       if (!effectiveConnectionId) {
         return
@@ -1764,7 +1810,6 @@ export function useWorkspaceActions({
       sqlExecutionByTabRef.current[sqlTab.id] = executionId
       clearSqlCancelFallback(sqlTab.id)
       console.info('[ui][sql] execute start', { tabId: sqlTab.id, executionId, connectionId: effectiveConnectionId })
-      updateSqlTab(sqlTab.id, (tab) => ({ ...tab, sqlRunning: true, sqlCanceling: false }))
       let result: SqlExecutionResult
 
       try {
