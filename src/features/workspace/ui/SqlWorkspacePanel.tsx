@@ -422,6 +422,9 @@ export function SqlWorkspacePanel({
                           <table className='w-full min-w-max text-xs'>
                             <thead className='bg-slate-900'>
                               <tr>
+                                <th className='sticky left-0 z-[1] w-10 border-r border-slate-800/80 bg-slate-900 px-1 py-1 text-center font-semibold text-slate-400'>
+                                  #
+                                </th>
                                 {resultSet.fields.map((field, fieldIndex) => (
                                   <th
                                     key={`field-${fieldIndex}`}
@@ -456,6 +459,9 @@ export function SqlWorkspacePanel({
                             <tbody>
                               {visibleRows.map((row, rowIndex) => (
                                 <tr key={`${rowIndex}-${JSON.stringify(row)}`} className='border-t border-slate-800/70'>
+                                  <td className='sticky left-0 z-[1] border-r border-slate-800/70 bg-slate-900/95 px-1 py-1 text-center font-medium text-slate-300'>
+                                    {rowIndex + 1}
+                                  </td>
                                   {resultSet.fields.map((field, fieldIndex) => (
                                     <td key={`cell-${rowIndex}-${fieldIndex}`} className='px-2 py-1 text-slate-200 whitespace-nowrap'>
                                       {formatCell(row[field])}
