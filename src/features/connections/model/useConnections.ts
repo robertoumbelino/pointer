@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { ConnectionInput, ConnectionSummary } from '../../../../shared/db-types'
@@ -33,6 +33,7 @@ type UseConnectionsResult = {
   setIsConnectionUpdating: Dispatch<SetStateAction<boolean>>
   isEditConnectionTesting: boolean
   setIsEditConnectionTesting: Dispatch<SetStateAction<boolean>>
+  isEditConnectionPasswordLoading: boolean
   loadConnections: (environmentId: string) => Promise<ConnectionSummary[]>
   handleCreateConnection: (selectedEnvironmentId: string) => Promise<ConnectionSummary | null>
   handleTestCreateConnection: (selectedEnvironmentId: string) => Promise<boolean>
@@ -56,6 +57,18 @@ export function useConnections(): UseConnectionsResult {
   const [connectionEditDraft, setConnectionEditDraft] = useState<ConnectionDraft>(createConnectionDraft(''))
   const [isConnectionUpdating, setIsConnectionUpdating] = useState(false)
   const [isEditConnectionTesting, setIsEditConnectionTesting] = useState(false)
+  const [isEditConnectionPasswordLoading, setIsEditConnectionPasswordLoading] = useState(false)
+  const editingConnectionIdRef = useRef('')
+
+  useEffect(() => {
+    editingConnectionIdRef.current = editingConnectionId
+  }, [editingConnectionId])
+
+  useEffect(() => {
+    if (!editingConnectionId) {
+      setIsEditConnectionPasswordLoading(false)
+    }
+  }, [editingConnectionId])
 
   const loadConnections = useCallback(async (environmentId: string): Promise<ConnectionSummary[]> => {
     const all = await pointerApi.listConnections(environmentId)
@@ -140,6 +153,36 @@ export function useConnections(): UseConnectionsResult {
     setEditingConnectionId(connection.id)
     setConnectionEditDraft(createConnectionDraftFromConnection(connection))
     setIsEditConnectionOpen(true)
+
+    if (connection.engine === 'sqlite') {
+      setIsEditConnectionPasswordLoading(false)
+      return
+    }
+
+    setIsEditConnectionPasswordLoading(true)
+    void pointerApi.getConnectionPassword(connection.id)
+      .then((password) => {
+        if (editingConnectionIdRef.current !== connection.id) {
+          return
+        }
+
+        setConnectionEditDraft((current) => ({
+          ...current,
+          password,
+        }))
+      })
+      .catch((error) => {
+        if (editingConnectionIdRef.current !== connection.id) {
+          return
+        }
+
+        toast.error(getErrorMessage(error))
+      })
+      .finally(() => {
+        if (editingConnectionIdRef.current === connection.id) {
+          setIsEditConnectionPasswordLoading(false)
+        }
+      })
   }, [])
 
   const handleUpdateConnection = useCallback(async (selectedEnvironmentId: string): Promise<ConnectionSummary | null> => {
@@ -287,6 +330,7 @@ export function useConnections(): UseConnectionsResult {
     setIsConnectionUpdating,
     isEditConnectionTesting,
     setIsEditConnectionTesting,
+    isEditConnectionPasswordLoading,
     loadConnections,
     handleCreateConnection,
     handleTestCreateConnection,

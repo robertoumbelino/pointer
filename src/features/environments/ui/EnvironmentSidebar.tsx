@@ -48,6 +48,7 @@ type EnvironmentSidebarProps = {
   isConnectionUpdating: boolean
   isEditConnectionTesting: boolean
   setIsEditConnectionTesting: Dispatch<SetStateAction<boolean>>
+  isEditConnectionPasswordLoading: boolean
   handleTestCreateConnection: () => Promise<void>
   handleCreateConnection: () => Promise<void>
   handlePickSqliteFile: (target: 'create' | 'edit') => Promise<void>
@@ -106,6 +107,7 @@ export function EnvironmentSidebar({
   isConnectionUpdating,
   isEditConnectionTesting,
   setIsEditConnectionTesting,
+  isEditConnectionPasswordLoading,
   handleTestCreateConnection,
   handleCreateConnection,
   handlePickSqliteFile,
@@ -175,6 +177,7 @@ export function EnvironmentSidebar({
           isConnectionUpdating={isConnectionUpdating}
           isEditConnectionTesting={isEditConnectionTesting}
           setIsEditConnectionTesting={setIsEditConnectionTesting}
+          isEditConnectionPasswordLoading={isEditConnectionPasswordLoading}
           handleTestCreateConnection={handleTestCreateConnection}
           handleCreateConnection={handleCreateConnection}
           handlePickSqliteFile={handlePickSqliteFile}

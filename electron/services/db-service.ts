@@ -237,6 +237,15 @@ export class DbService {
       .sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  async getConnectionPasswordForEdit(id: string): Promise<string> {
+    const connection = this.getConnectionOrThrow(id)
+    if (connection.engine === 'sqlite') {
+      return ''
+    }
+
+    return this.getConnectionPassword(id)
+  }
+
   async createConnection(input: ConnectionInput): Promise<ConnectionSummary> {
     this.assertEnvironmentExists(input.environmentId)
 

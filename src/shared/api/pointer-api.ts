@@ -19,6 +19,7 @@ export const pointerApi: PointerApi = {
   deleteEnvironment: (id) => api().deleteEnvironment(id),
 
   listConnections: (environmentId) => api().listConnections(environmentId),
+  getConnectionPassword: (id) => api().getConnectionPassword(id),
   createConnection: (input) => api().createConnection(input),
   updateConnection: (id, input) => api().updateConnection(id, input),
   testConnectionInput: (input, existingConnectionId) => api().testConnectionInput(input, existingConnectionId),

@@ -1,5 +1,5 @@
-import type { Dispatch, SetStateAction } from 'react'
-import { Database, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { Database, Eye, EyeOff, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { ConnectionInput, ConnectionSummary, DatabaseEngine } from '../../../../shared/db-types'
 import { createConnectionDraft, type ConnectionDraft } from '../../../entities/workspace/types'
 import { SIDEBAR_SECTION_LABEL_CLASS } from '../../../shared/constants/app'
@@ -37,6 +37,7 @@ type ConnectionsPanelProps = {
   isConnectionUpdating: boolean
   isEditConnectionTesting: boolean
   setIsEditConnectionTesting: Dispatch<SetStateAction<boolean>>
+  isEditConnectionPasswordLoading: boolean
   handleTestCreateConnection: () => Promise<void>
   handleCreateConnection: () => Promise<void>
   handlePickSqliteFile: (target: 'create' | 'edit') => Promise<void>
@@ -64,12 +65,21 @@ export function ConnectionsPanel({
   isConnectionUpdating,
   isEditConnectionTesting,
   setIsEditConnectionTesting,
+  isEditConnectionPasswordLoading,
   handleTestCreateConnection,
   handleCreateConnection,
   handlePickSqliteFile,
   handleTestEditConnection,
   handleUpdateConnection,
 }: ConnectionsPanelProps): JSX.Element {
+  const [isEditPasswordVisible, setIsEditPasswordVisible] = useState(false)
+
+  useEffect(() => {
+    if (!isEditConnectionOpen) {
+      setIsEditPasswordVisible(false)
+    }
+  }, [isEditConnectionOpen])
+
   return (
     <>
       <label className={cn(SIDEBAR_SECTION_LABEL_CLASS, 'mt-3')}>CONEXÕES</label>
@@ -92,7 +102,7 @@ export function ConnectionsPanel({
                 variant='ghost'
                 size='icon'
                 className='h-7 w-7 shrink-0'
-                onClick={() => openEditConnectionDialog(connection)}
+                onClick={() => void openEditConnectionDialog(connection)}
               >
                 <Pencil className='h-3.5 w-3.5' />
               </Button>
@@ -289,7 +299,7 @@ export function ConnectionsPanel({
             <DialogHeader>
               <DialogTitle>Editar conexão</DialogTitle>
               <DialogDescription>
-                Atualize os dados da conexão selecionada. A senha só muda se você preencher o campo.
+                Atualize os dados da conexão selecionada e revise a senha atual quando necessário.
               </DialogDescription>
             </DialogHeader>
 
@@ -392,14 +402,29 @@ export function ConnectionsPanel({
                       setConnectionEditDraft((current) => ({ ...current, user: event.target.value }))
                     }
                   />
-                  <Input
-                    placeholder='Nova senha (opcional)'
-                    type='password'
-                    value={connectionEditDraft.password}
-                    onChange={(event) =>
-                      setConnectionEditDraft((current) => ({ ...current, password: event.target.value }))
-                    }
-                  />
+                  <div className='relative'>
+                    <Input
+                      placeholder={isEditConnectionPasswordLoading ? 'Carregando senha...' : 'Senha'}
+                      type={isEditPasswordVisible ? 'text' : 'password'}
+                      value={connectionEditDraft.password}
+                      autoComplete='current-password'
+                      disabled={isEditConnectionPasswordLoading}
+                      className='pr-10'
+                      onChange={(event) =>
+                        setConnectionEditDraft((current) => ({ ...current, password: event.target.value }))
+                      }
+                    />
+                    <button
+                      type='button'
+                      className='absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition-colors hover:text-slate-200 disabled:opacity-40'
+                      onClick={() => setIsEditPasswordVisible((current) => !current)}
+                      disabled={isEditConnectionPasswordLoading || !connectionEditDraft.password}
+                      aria-label={isEditPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'}
+                      title={isEditPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'}
+                    >
+                      {isEditPasswordVisible ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
+                    </button>
+                  </div>
                 </>
               )}
             </div>

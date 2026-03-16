@@ -109,6 +109,7 @@ function App(): JSX.Element {
     isConnectionUpdating,
     isEditConnectionTesting,
     setIsEditConnectionTesting,
+    isEditConnectionPasswordLoading,
     loadConnections,
     handleCreateConnection,
     handleTestCreateConnection,
@@ -1008,6 +1009,7 @@ function App(): JSX.Element {
             isConnectionUpdating={isConnectionUpdating}
             isEditConnectionTesting={isEditConnectionTesting}
             setIsEditConnectionTesting={setIsEditConnectionTesting}
+            isEditConnectionPasswordLoading={isEditConnectionPasswordLoading}
             handleTestCreateConnection={handleTestCreateConnectionFlow}
             handleCreateConnection={handleCreateConnectionFlow}
             handlePickSqliteFile={handlePickSqliteFile}

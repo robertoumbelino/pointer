@@ -20,6 +20,7 @@ const pointerApi: PointerApi = {
   deleteEnvironment: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteEnvironment, id),
 
   listConnections: (environmentId) => ipcRenderer.invoke(IPC_CHANNELS.listConnections, environmentId),
+  getConnectionPassword: (id) => ipcRenderer.invoke(IPC_CHANNELS.getConnectionPassword, id),
   createConnection: (input) => ipcRenderer.invoke(IPC_CHANNELS.createConnection, input),
   updateConnection: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.updateConnection, id, input),
   testConnectionInput: (input, existingConnectionId) =>

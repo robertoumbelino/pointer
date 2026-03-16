@@ -184,6 +184,7 @@ export interface PointerApi {
   deleteEnvironment: (id: string) => Promise<void>
 
   listConnections: (environmentId: string) => Promise<ConnectionSummary[]>
+  getConnectionPassword: (id: string) => Promise<string>
   createConnection: (input: ConnectionInput) => Promise<ConnectionSummary>
   updateConnection: (id: string, input: ConnectionInput) => Promise<ConnectionSummary>
   testConnectionInput: (input: ConnectionInput, existingConnectionId?: string) => Promise<{ ok: boolean; latencyMs: number }>

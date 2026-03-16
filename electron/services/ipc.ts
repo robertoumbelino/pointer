@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   deleteEnvironment: 'pointer:environments:delete',
 
   listConnections: 'pointer:connections:list',
+  getConnectionPassword: 'pointer:connections:get-password',
   createConnection: 'pointer:connections:create',
   updateConnection: 'pointer:connections:update',
   testConnectionInput: 'pointer:connections:test-input',
@@ -80,6 +81,9 @@ export function registerIpc(dbService: DbService, updaterService: UpdaterService
 
   ipcMain.handle(IPC_CHANNELS.listConnections, (_, environmentId: string) =>
     wrap(() => dbService.listConnections(environmentId)),
+  )
+  ipcMain.handle(IPC_CHANNELS.getConnectionPassword, (_, id: string) =>
+    wrap(() => dbService.getConnectionPasswordForEdit(id)),
   )
   ipcMain.handle(IPC_CHANNELS.createConnection, (_, input: ConnectionInput) =>
     wrap(() => dbService.createConnection(input)),
