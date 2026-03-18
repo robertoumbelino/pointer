@@ -72,7 +72,6 @@ export function useConnections(): UseConnectionsResult {
 
   const loadConnections = useCallback(async (environmentId: string): Promise<ConnectionSummary[]> => {
     const all = await pointerApi.listConnections(environmentId)
-    setConnections(all)
     return all
   }, [])
 

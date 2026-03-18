@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { Dispatch, KeyboardEvent, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { AiConfig, TableSchema, TableSearchHit } from '../../../../shared/db-types'
@@ -114,6 +114,8 @@ export function useCommandPaletteActions({
   onUseAiPrompt,
   aiConfig,
 }: UseCommandPaletteActionsParams): UseCommandPaletteActionsResult {
+  const commandSearchRequestSeqRef = useRef(0)
+
   const commandActions = useMemo<CommandActionItem[]>(() => {
     const query = commandQuery.trim()
     const normalizedQuery = query.toLowerCase()
@@ -238,22 +240,38 @@ export function useCommandPaletteActions({
       return
     }
 
+    let isActive = true
+    const requestSeq = ++commandSearchRequestSeqRef.current
+    const requestedEnvironmentId = selectedEnvironmentId
+    const trimmedQuery = commandQuery.trim()
+
     const timeout = setTimeout(() => {
       void (async () => {
         try {
-          const hits = await pointerApi.searchTablesInEnvironment(selectedEnvironmentId, commandQuery.trim())
+          const hits = await pointerApi.searchTablesInEnvironment(requestedEnvironmentId, trimmedQuery)
+          if (!isActive || requestSeq !== commandSearchRequestSeqRef.current) {
+            return
+          }
+
           setCommandHits(hits)
 
-          if (!commandQuery.trim()) {
+          if (!trimmedQuery) {
             setCatalogHits(hits)
           }
         } catch (error) {
+          if (!isActive || requestSeq !== commandSearchRequestSeqRef.current) {
+            return
+          }
+
           toast.error(getErrorMessage(error))
         }
       })()
     }, 180)
 
-    return () => clearTimeout(timeout)
+    return () => {
+      isActive = false
+      clearTimeout(timeout)
+    }
   }, [commandQuery, isCommandOpen, selectedEnvironmentId, setCatalogHits, setCommandHits])
 
   useEffect(() => {

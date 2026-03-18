@@ -109,6 +109,11 @@ export function useWorkbenchPersistence({
     }
 
     setConnectionDraft(createConnectionDraft(selectedEnvironmentId))
+    setConnections([])
+    setSelectedConnectionId('')
+    setCatalogHits([])
+    setCommandHits([])
+
     const snapshot = environmentWorkspaceRef.current[selectedEnvironmentId]
     if (snapshot) {
       setWorkTabs(snapshot.workTabs)

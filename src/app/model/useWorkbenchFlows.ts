@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { ConnectionSummary, EnvironmentSummary, TableSearchHit } from '../../../shared/db-types'
@@ -73,6 +73,9 @@ export function useWorkbenchFlows({
   handleTestEditConnection,
   handleDeleteConnection,
 }: UseWorkbenchFlowsParams): UseWorkbenchFlowsResult {
+  const connectionsRequestSeqRef = useRef(0)
+  const catalogRequestSeqRef = useRef(0)
+
   const loadEnvironmentsWithSelection = useCallback(async (): Promise<void> => {
     try {
       const all = await loadEnvironments()
@@ -100,8 +103,15 @@ export function useWorkbenchFlows({
   }, [loadEnvironments, preferredEnvironmentIdRef, setEnvironments, setSelectedEnvironmentId])
 
   const loadConnectionsWithSelection = useCallback(async (environmentId: string): Promise<void> => {
+    const requestSeq = ++connectionsRequestSeqRef.current
+
     try {
       const all = await loadConnections(environmentId)
+      const isStale = requestSeq !== connectionsRequestSeqRef.current
+      if (isStale) {
+        return
+      }
+
       setConnections(all)
 
       if (all.length > 0) {
@@ -137,16 +147,33 @@ export function useWorkbenchFlows({
         setSelectedConnectionId('')
       }
     } catch (error) {
+      const isStale = requestSeq !== connectionsRequestSeqRef.current
+      if (isStale) {
+        return
+      }
+
       toast.error(getErrorMessage(error))
     }
   }, [loadConnections, setConnections, setSelectedConnectionId, setWorkTabs])
 
   const loadEnvironmentCatalog = useCallback(async (environmentId: string): Promise<void> => {
+    const requestSeq = ++catalogRequestSeqRef.current
+
     try {
       const hits = await pointerApi.searchTablesInEnvironment(environmentId, '')
+      const isStale = requestSeq !== catalogRequestSeqRef.current
+      if (isStale) {
+        return
+      }
+
       setCatalogHits(hits)
       setCommandHits(hits.slice(0, 220))
     } catch (error) {
+      const isStale = requestSeq !== catalogRequestSeqRef.current
+      if (isStale) {
+        return
+      }
+
       toast.error(getErrorMessage(error))
     }
   }, [setCatalogHits, setCommandHits])
