@@ -2,6 +2,12 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.13 - 2026-03-18
+
+### 🐛 Correções
+- Corrigida a troca de ambiente no workspace para evitar vazamento de tabelas e conexões do ambiente anterior após mudanças rápidas de contexto.
+- Ajustado o carregamento assíncrono do catálogo e da busca (`Cmd+K`) para descartar respostas obsoletas e manter a sidebar consistente com o ambiente ativo.
+
 ## v0.8.12 - 2026-03-16
 
 ### ✨ Novidades
