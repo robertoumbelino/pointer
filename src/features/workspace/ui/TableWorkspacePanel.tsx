@@ -237,6 +237,7 @@ export function TableWorkspacePanel({
   const effectivePageSize = activeTableTab.data?.pageSize ?? activeTableTab.pageSize
   const hasLoadError = Boolean(activeTableTab.loadError)
   const isInitialTableLoading = activeTableTab.loading && !activeTableTab.data
+  const isBackgroundTableReload = activeTableTab.loading && Boolean(activeTableTab.data) && !hasLoadError
   const isTableActionDisabled = activeTableTab.loading || isSavingTableChanges
   const columns = useMemo(() => activeTableTab.schema?.columns ?? [], [activeTableTab.schema?.columns])
   const rowCount = activeTableTab.data?.rows.length ?? 0
@@ -886,7 +887,8 @@ export function TableWorkspacePanel({
             disabled={isTableActionDisabled}
             onClick={() => void reloadTableTab(activeTableTab.id)}
           >
-            <RefreshCw className='mr-1.5 h-3.5 w-3.5' /> Atualizar
+            <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', activeTableTab.loading && 'animate-spin')} />
+            Atualizar
           </Button>
           {!hasLoadError && (
             <Button
@@ -960,351 +962,371 @@ export function TableWorkspacePanel({
           </div>
         ) : (
           <>
-            <div
-              ref={gridContainerRef}
-              tabIndex={0}
-              onKeyDown={handleGridKeyDown}
-              className='pointer-card-soft h-full overflow-auto outline-none focus-visible:outline-none'
-            >
-              <table className='min-w-max border-collapse text-sm'>
-                <thead className='sticky top-0 z-10 bg-slate-900'>
-                  <tr>
-                    <th className='w-10 border-b border-slate-800/80 px-1 py-2 text-center font-semibold text-slate-400'>
-                      #
-                    </th>
-                    {columns.map((column) => (
-                      <th
-                        key={column.name}
-                        className='border-b border-slate-800/80 px-3 py-2 text-left font-semibold text-slate-300 whitespace-nowrap'
-                      >
-                        <button
-                          type='button'
-                          className='flex items-center gap-1'
-                          onClick={() => {
-                            updateTableTab(activeTableTab.id, (tab) => {
-                              let nextSort: TableSort | undefined
-
-                              if (!tab.sort || tab.sort.column !== column.name) {
-                                nextSort = { column: column.name, direction: 'asc' }
-                              } else if (tab.sort.direction === 'asc') {
-                                nextSort = { column: column.name, direction: 'desc' }
-                              }
-
-                              return {
-                                ...tab,
-                                page: 0,
-                                sort: nextSort,
-                              }
-                            })
-
-                            let nextSort: TableSort | undefined
-                            if (!activeTableTab.sort || activeTableTab.sort.column !== column.name) {
-                              nextSort = { column: column.name, direction: 'asc' }
-                            } else if (activeTableTab.sort.direction === 'asc') {
-                              nextSort = { column: column.name, direction: 'desc' }
-                            }
-
-                            void reloadTableTab(activeTableTab.id, {
-                              page: 0,
-                              sort: nextSort,
-                            })
-                          }}
-                        >
-                          <span>{column.name}</span>
-                          {activeTableTab.loading && activeTableTab.sort?.column === column.name ? (
-                            <RefreshCw className='h-3.5 w-3.5 animate-spin text-slate-300' />
-                          ) : activeTableTab.sort?.column === column.name && (
-                            <span className='text-slate-300'>
-                              {activeTableTab.sort.direction === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                          {column.isPrimaryKey && <Badge className='ml-1'>PK</Badge>}
-                        </button>
+            <div className='relative h-full'>
+              <div
+                ref={gridContainerRef}
+                tabIndex={0}
+                onKeyDown={handleGridKeyDown}
+                className='pointer-card-soft h-full overflow-auto outline-none focus-visible:outline-none'
+              >
+                <table className='min-w-max border-collapse text-sm'>
+                  <thead className='sticky top-0 z-10 bg-slate-900'>
+                    <tr>
+                      <th className='w-10 border-b border-slate-800/80 px-1 py-2 text-center font-semibold text-slate-400'>
+                        #
                       </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeTableTab.data?.rows.map((row, rowIndex) => {
-                    const isRowSelected = selectedRowsSet.has(rowIndex)
-                    const isPendingDelete = activeTableTab.pendingDeletes.includes(rowIndex)
-                    const isPendingUpdate = Boolean(activeTableTab.pendingUpdates[rowIndex])
-                    const isActiveRow = activeTableTab.activeRowIndex === rowIndex
-
-                    return (
-                      <tr
-                        key={`${rowIndex}-${JSON.stringify(row)}`}
-                        className={cn(
-                          'border-b border-slate-800/70 transition-colors',
-                          isPendingDelete
-                            ? 'bg-red-500/22 hover:bg-red-500/28 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.48)]'
-                            : isPendingUpdate
-                              ? 'bg-amber-400/20 hover:bg-amber-400/28 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.42)]'
-                              : isRowSelected
-                                ? 'bg-slate-200/10'
-                                : 'hover:bg-slate-800/50',
-                          isRowSelected && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]',
-                        )}
-                      >
-                        <td
-                          className={cn(
-                            'sticky left-0 z-[1] border-r border-slate-800/70 px-1 py-1 text-center',
-                            isPendingDelete
-                              ? 'bg-red-500/20'
-                              : isPendingUpdate
-                                ? 'bg-amber-400/18'
-                                : isRowSelected
-                                  ? 'bg-slate-700/70'
-                                  : 'bg-slate-900/95',
-                          )}
+                      {columns.map((column) => (
+                        <th
+                          key={column.name}
+                          className='border-b border-slate-800/80 px-3 py-2 text-left font-semibold text-slate-300 whitespace-nowrap'
                         >
                           <button
                             type='button'
-                            onClick={(event) => handleRowSelectorClick(event, rowIndex)}
+                            className='flex items-center gap-1'
+                            onClick={() => {
+                              updateTableTab(activeTableTab.id, (tab) => {
+                                let nextSort: TableSort | undefined
+
+                                if (!tab.sort || tab.sort.column !== column.name) {
+                                  nextSort = { column: column.name, direction: 'asc' }
+                                } else if (tab.sort.direction === 'asc') {
+                                  nextSort = { column: column.name, direction: 'desc' }
+                                }
+
+                                return {
+                                  ...tab,
+                                  page: 0,
+                                  sort: nextSort,
+                                }
+                              })
+
+                              let nextSort: TableSort | undefined
+                              if (!activeTableTab.sort || activeTableTab.sort.column !== column.name) {
+                                nextSort = { column: column.name, direction: 'asc' }
+                              } else if (activeTableTab.sort.direction === 'asc') {
+                                nextSort = { column: column.name, direction: 'desc' }
+                              }
+
+                              void reloadTableTab(activeTableTab.id, {
+                                page: 0,
+                                sort: nextSort,
+                              })
+                            }}
+                          >
+                            <span>{column.name}</span>
+                            {activeTableTab.loading && activeTableTab.sort?.column === column.name ? (
+                              <RefreshCw className='h-3.5 w-3.5 animate-spin text-slate-300' />
+                            ) : activeTableTab.sort?.column === column.name && (
+                              <span className='text-slate-300'>
+                                {activeTableTab.sort.direction === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                            {column.isPrimaryKey && <Badge className='ml-1'>PK</Badge>}
+                          </button>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeTableTab.data?.rows.map((row, rowIndex) => {
+                      const isRowSelected = selectedRowsSet.has(rowIndex)
+                      const isPendingDelete = activeTableTab.pendingDeletes.includes(rowIndex)
+                      const isPendingUpdate = Boolean(activeTableTab.pendingUpdates[rowIndex])
+                      const isActiveRow = activeTableTab.activeRowIndex === rowIndex
+
+                      return (
+                        <tr
+                          key={`${rowIndex}-${JSON.stringify(row)}`}
+                          className={cn(
+                            'border-b border-slate-800/70 transition-colors',
+                            isPendingDelete
+                              ? 'bg-red-500/22 hover:bg-red-500/28 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.48)]'
+                              : isPendingUpdate
+                                ? 'bg-amber-400/20 hover:bg-amber-400/28 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.42)]'
+                                : isRowSelected
+                                  ? 'bg-slate-200/10'
+                                  : 'hover:bg-slate-800/50',
+                            isRowSelected && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]',
+                          )}
+                        >
+                          <td
                             className={cn(
-                              'h-6 w-full rounded text-[10px] font-medium text-slate-200 transition-colors border border-transparent',
-                              isRowSelected
-                                ? 'bg-slate-600/70 hover:bg-slate-600/85'
-                                : 'hover:bg-slate-800/70',
-                              isActiveRow && 'border-slate-500/60',
+                              'sticky left-0 z-[1] border-r border-slate-800/70 px-1 py-1 text-center',
+                              isPendingDelete
+                                ? 'bg-red-500/20'
+                                : isPendingUpdate
+                                  ? 'bg-amber-400/18'
+                                  : isRowSelected
+                                    ? 'bg-slate-700/70'
+                                    : 'bg-slate-900/95',
                             )}
                           >
-                            {rowIndex + 1}
-                          </button>
+                            <button
+                              type='button'
+                              onClick={(event) => handleRowSelectorClick(event, rowIndex)}
+                              className={cn(
+                                'h-6 w-full rounded text-[10px] font-medium text-slate-200 transition-colors border border-transparent',
+                                isRowSelected
+                                  ? 'bg-slate-600/70 hover:bg-slate-600/85'
+                                  : 'hover:bg-slate-800/70',
+                                isActiveRow && 'border-slate-500/60',
+                              )}
+                            >
+                              {rowIndex + 1}
+                            </button>
+                          </td>
+                          {columns.map((column, columnIndex) => {
+                            const isEditing =
+                              editingCell?.tabId === activeTableTab.id &&
+                              editingCell.rowIndex === rowIndex &&
+                              editingCell.column === column.name
+                            const cellValue = row[column.name]
+                            const isJsonColumn = isJsonLikeDataType(column.dataType)
+                            const isBooleanColumn = isBooleanDataType(column.dataType)
+                            const enumValues = column.enumValues ?? []
+                            const hasEnumColumnValues = enumValues.length > 0
+                            const selectValues = hasEnumColumnValues
+                              ? enumValues
+                              : isBooleanColumn
+                                ? BOOLEAN_SELECT_OPTIONS
+                                : []
+                            const hasSelectValues = selectValues.length > 0
+                            const canEditCell =
+                              !column.isPrimaryKey && Boolean(activeTableTab.schema?.supportsRowEdit) && !isPendingDelete
+                            const canNavigateForeignKey = Boolean(column.foreignKey) && hasForeignKeyCellValue(cellValue)
+                            const isActiveCell =
+                              activeTableTab.activeCell?.rowIndex === rowIndex &&
+                              activeTableTab.activeCell?.columnIndex === columnIndex
+                            const isCellSelected = isCellInSelectedRange(rowIndex, columnIndex)
+
+                            return (
+                              <td
+                                key={column.name}
+                                className={cn(
+                                  'min-w-[190px] px-3 py-2 text-slate-200 whitespace-nowrap',
+                                  isJsonColumn && 'cursor-pointer',
+                                  isPendingDelete
+                                    ? 'bg-red-500/20'
+                                    : isPendingUpdate
+                                      ? 'bg-amber-400/18'
+                                      : isCellSelected
+                                        ? 'bg-slate-700/45'
+                                        : '',
+                                  isActiveCell && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.8)]',
+                                )}
+                                onMouseDown={(event) => handleCellMouseDown(event, rowIndex, columnIndex)}
+                                onMouseEnter={(event) => handleCellMouseEnter(event, rowIndex, columnIndex)}
+                                onClick={(event) => handleCellClick(event, rowIndex, columnIndex)}
+                                onDoubleClick={() =>
+                                  handleCellDoubleClick(
+                                    rowIndex,
+                                    columnIndex,
+                                    column.name,
+                                    row[column.name],
+                                    canEditCell,
+                                    isJsonColumn,
+                                  )
+                                }
+                              >
+                                {isEditing ? (
+                                  hasSelectValues ? (
+                                    <select
+                                      value={resolveSelectValue(editingCell.value, {
+                                        nullable: column.nullable,
+                                        fallbackValue: selectValues[0],
+                                      })}
+                                      autoFocus
+                                      onChange={(event) => {
+                                        const selected = decodeSelectOptionValue(event.target.value)
+                                        const nextEditingCell: EditingCell = {
+                                          tabId: activeTableTab.id,
+                                          rowIndex,
+                                          column: column.name,
+                                          value: selected ?? '',
+                                        }
+                                        setEditingCell(nextEditingCell)
+                                        commitInlineEdit(nextEditingCell)
+                                      }}
+                                      onBlur={() => commitInlineEdit()}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault()
+                                          commitInlineEdit()
+                                        }
+
+                                        if (event.key === 'Escape') {
+                                          event.preventDefault()
+                                          cancelInlineEdit()
+                                        }
+                                      }}
+                                      className='h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100 outline-none ring-slate-300/45 focus:ring-2'
+                                    >
+                                      {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
+                                      {selectValues.map((selectValue) => (
+                                        <option key={selectValue} value={encodeSelectOptionValue(selectValue)}>
+                                          {selectValue}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <Input
+                                      value={editingCell.value}
+                                      autoFocus
+                                      onChange={(event) =>
+                                        setEditingCell((current) => {
+                                          if (!current) {
+                                            return null
+                                          }
+
+                                          return {
+                                            ...current,
+                                            value: event.target.value,
+                                          }
+                                        })
+                                      }
+                                      onBlur={() => commitInlineEdit()}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault()
+                                          commitInlineEdit()
+                                        }
+
+                                        if (event.key === 'Escape') {
+                                          event.preventDefault()
+                                          cancelInlineEdit()
+                                        }
+                                      }}
+                                      className='h-8'
+                                    />
+                                  )
+                                ) : (
+                                  <div className='flex items-center gap-1.5'>
+                                    <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
+                                      {isJsonColumn ? formatJsonPreviewValue(cellValue) : formatCell(cellValue)}
+                                    </span>
+                                    {column.foreignKey && (
+                                      <button
+                                        type='button'
+                                        onClick={(event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          if (!canNavigateForeignKey) {
+                                            return
+                                          }
+
+                                          void navigateToForeignKey(activeTableTab, column.foreignKey, cellValue)
+                                        }}
+                                        disabled={!canNavigateForeignKey}
+                                        className={cn(
+                                          'rounded p-0.5 text-slate-400 transition-colors',
+                                          canNavigateForeignKey
+                                            ? 'hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/60'
+                                            : 'cursor-not-allowed opacity-45',
+                                        )}
+                                        title={
+                                          canNavigateForeignKey
+                                            ? `Abrir ${column.foreignKey.table.fqName} filtrando ${column.foreignKey.column}`
+                                            : 'Valor vazio para navegação'
+                                        }
+                                        aria-label={`Abrir registro relacionado em ${column.foreignKey.table.fqName}`}
+                                      >
+                                        <Link2 className='h-3.5 w-3.5' />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                    {activeTableTab.insertDraft && (
+                      <tr
+                        ref={insertRowRef}
+                        className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'
+                      >
+                        <td className='sticky left-0 z-[1] border-r border-emerald-400/35 bg-emerald-500/15 px-1 py-1 text-center text-[10px] text-emerald-200'>
+                          +
                         </td>
                         {columns.map((column, columnIndex) => {
-                          const isEditing =
-                            editingCell?.tabId === activeTableTab.id &&
-                            editingCell.rowIndex === rowIndex &&
-                            editingCell.column === column.name
-                          const cellValue = row[column.name]
-                          const isJsonColumn = isJsonLikeDataType(column.dataType)
                           const isBooleanColumn = isBooleanDataType(column.dataType)
                           const enumValues = column.enumValues ?? []
                           const hasEnumColumnValues = enumValues.length > 0
-                          const selectValues = hasEnumColumnValues ? enumValues : isBooleanColumn ? BOOLEAN_SELECT_OPTIONS : []
+                          const selectValues = hasEnumColumnValues
+                            ? enumValues
+                            : isBooleanColumn
+                              ? BOOLEAN_SELECT_OPTIONS
+                              : []
                           const hasSelectValues = selectValues.length > 0
-                          const canEditCell = !column.isPrimaryKey && Boolean(activeTableTab.schema?.supportsRowEdit) && !isPendingDelete
-                          const canNavigateForeignKey = Boolean(column.foreignKey) && hasForeignKeyCellValue(cellValue)
-                          const isActiveCell =
-                            activeTableTab.activeCell?.rowIndex === rowIndex &&
-                            activeTableTab.activeCell?.columnIndex === columnIndex
-                          const isCellSelected = isCellInSelectedRange(rowIndex, columnIndex)
+                          const allowUnsetBooleanInsert = isBooleanColumn && !column.nullable
 
                           return (
-                            <td
-                              key={column.name}
-                              className={cn(
-                                'min-w-[190px] px-3 py-2 text-slate-200 whitespace-nowrap',
-                                isJsonColumn && 'cursor-pointer',
-                                isPendingDelete
-                                  ? 'bg-red-500/20'
-                                  : isPendingUpdate
-                                    ? 'bg-amber-400/18'
-                                    : isCellSelected
-                                      ? 'bg-slate-700/45'
-                                      : '',
-                                isActiveCell && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.8)]',
-                              )}
-                              onMouseDown={(event) => handleCellMouseDown(event, rowIndex, columnIndex)}
-                              onMouseEnter={(event) => handleCellMouseEnter(event, rowIndex, columnIndex)}
-                              onClick={(event) => handleCellClick(event, rowIndex, columnIndex)}
-                              onDoubleClick={() =>
-                                handleCellDoubleClick(
-                                  rowIndex,
-                                  columnIndex,
-                                  column.name,
-                                  row[column.name],
-                                  canEditCell,
-                                  isJsonColumn,
-                                )
-                              }
-                            >
-                              {isEditing ? (
-                                hasSelectValues ? (
-                                  <select
-                                    value={resolveSelectValue(editingCell.value, {
-                                      nullable: column.nullable,
-                                      fallbackValue: selectValues[0],
-                                    })}
-                                    autoFocus
-                                    onChange={(event) => {
-                                      const selected = decodeSelectOptionValue(event.target.value)
-                                      const nextEditingCell: EditingCell = {
-                                        tabId: activeTableTab.id,
-                                        rowIndex,
-                                        column: column.name,
-                                        value: selected ?? '',
-                                      }
-                                      setEditingCell(nextEditingCell)
-                                      commitInlineEdit(nextEditingCell)
-                                    }}
-                                    onBlur={() => commitInlineEdit()}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault()
-                                        commitInlineEdit()
-                                      }
-
-                                      if (event.key === 'Escape') {
-                                        event.preventDefault()
-                                        cancelInlineEdit()
-                                      }
-                                    }}
-                                    className='h-8 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100 outline-none ring-slate-300/45 focus:ring-2'
-                                  >
-                                    {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
-                                    {selectValues.map((selectValue) => (
-                                      <option key={selectValue} value={encodeSelectOptionValue(selectValue)}>
-                                        {selectValue}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <Input
-                                    value={editingCell.value}
-                                    autoFocus
-                                    onChange={(event) =>
-                                      setEditingCell((current) => {
-                                        if (!current) {
-                                          return null
+                            <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
+                              {hasSelectValues ? (
+                                <select
+                                  ref={
+                                    columnIndex === 0
+                                      ? (element) => {
+                                          firstInsertFieldRef.current = element
                                         }
-
-                                        return {
-                                          ...current,
-                                          value: event.target.value,
-                                        }
-                                      })
-                                    }
-                                    onBlur={() => commitInlineEdit()}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault()
-                                        commitInlineEdit()
-                                      }
-
-                                      if (event.key === 'Escape') {
-                                        event.preventDefault()
-                                        cancelInlineEdit()
-                                      }
-                                    }}
-                                    className='h-8'
-                                  />
-                                )
-                              ) : (
-                                <div className='flex items-center gap-1.5'>
-                                  <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
-                                    {isJsonColumn ? formatJsonPreviewValue(cellValue) : formatCell(cellValue)}
-                                  </span>
-                                  {column.foreignKey && (
-                                    <button
-                                      type='button'
-                                      onClick={(event) => {
-                                        event.preventDefault()
-                                        event.stopPropagation()
-                                        if (!canNavigateForeignKey) {
-                                          return
-                                        }
-
-                                        void navigateToForeignKey(activeTableTab, column.foreignKey, cellValue)
-                                      }}
-                                      disabled={!canNavigateForeignKey}
-                                      className={cn(
-                                        'rounded p-0.5 text-slate-400 transition-colors',
-                                        canNavigateForeignKey
-                                          ? 'hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/60'
-                                          : 'cursor-not-allowed opacity-45',
-                                      )}
-                                      title={
-                                        canNavigateForeignKey
-                                          ? `Abrir ${column.foreignKey.table.fqName} filtrando ${column.foreignKey.column}`
-                                          : 'Valor vazio para navegação'
-                                      }
-                                      aria-label={`Abrir registro relacionado em ${column.foreignKey.table.fqName}`}
-                                    >
-                                      <Link2 className='h-3.5 w-3.5' />
-                                    </button>
+                                      : undefined
+                                  }
+                                  value={resolveSelectValue(activeTableTab.insertDraft?.[column.name], {
+                                    nullable: column.nullable,
+                                    fallbackValue: selectValues[0],
+                                    allowUnset: allowUnsetBooleanInsert,
+                                  })}
+                                  onChange={(event) => {
+                                    const selected = decodeSelectOptionValue(event.target.value)
+                                    updateInsertDraftValue(column.name, selected)
+                                  }}
+                                  className='h-7 w-full rounded-md border border-emerald-500/35 bg-slate-900/90 px-2 text-[12px] text-slate-100 outline-none ring-emerald-300/40 focus:ring-2'
+                                >
+                                  {allowUnsetBooleanInsert && (
+                                    <option value={UNSET_SELECT_VALUE}>
+                                      Selecione...
+                                    </option>
                                   )}
-                                </div>
+                                  {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
+                                  {selectValues.map((selectValue) => (
+                                    <option key={selectValue} value={encodeSelectOptionValue(selectValue)}>
+                                      {selectValue}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <Input
+                                  ref={
+                                    columnIndex === 0
+                                      ? (element) => {
+                                          firstInsertFieldRef.current = element
+                                        }
+                                      : undefined
+                                  }
+                                  value={formatDraftInputValue(activeTableTab.insertDraft?.[column.name])}
+                                  placeholder={column.isPrimaryKey ? 'PK' : column.name}
+                                  onChange={(event) => updateInsertDraftValue(column.name, event.target.value)}
+                                  className='h-7 border-emerald-500/35 bg-slate-900/90 text-[12px] text-slate-100'
+                                />
                               )}
                             </td>
                           )
                         })}
                       </tr>
-                    )
-                  })}
-                  {activeTableTab.insertDraft && (
-                    <tr
-                      ref={insertRowRef}
-                      className='border-b border-emerald-400/35 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'
-                    >
-                      <td className='sticky left-0 z-[1] border-r border-emerald-400/35 bg-emerald-500/15 px-1 py-1 text-center text-[10px] text-emerald-200'>
-                        +
-                      </td>
-                      {columns.map((column, columnIndex) => {
-                        const isBooleanColumn = isBooleanDataType(column.dataType)
-                        const enumValues = column.enumValues ?? []
-                        const hasEnumColumnValues = enumValues.length > 0
-                        const selectValues = hasEnumColumnValues ? enumValues : isBooleanColumn ? BOOLEAN_SELECT_OPTIONS : []
-                        const hasSelectValues = selectValues.length > 0
-                        const allowUnsetBooleanInsert = isBooleanColumn && !column.nullable
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                        return (
-                          <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
-                            {hasSelectValues ? (
-                              <select
-                                ref={
-                                  columnIndex === 0
-                                    ? (element) => {
-                                        firstInsertFieldRef.current = element
-                                      }
-                                    : undefined
-                                }
-                                value={resolveSelectValue(activeTableTab.insertDraft?.[column.name], {
-                                  nullable: column.nullable,
-                                  fallbackValue: selectValues[0],
-                                  allowUnset: allowUnsetBooleanInsert,
-                                })}
-                                onChange={(event) => {
-                                  const selected = decodeSelectOptionValue(event.target.value)
-                                  updateInsertDraftValue(column.name, selected)
-                                }}
-                                className='h-7 w-full rounded-md border border-emerald-500/35 bg-slate-900/90 px-2 text-[12px] text-slate-100 outline-none ring-emerald-300/40 focus:ring-2'
-                              >
-                                {allowUnsetBooleanInsert && (
-                                  <option value={UNSET_SELECT_VALUE}>
-                                    Selecione...
-                                  </option>
-                                )}
-                                {column.nullable && <option value={NULL_SELECT_VALUE}>NULL</option>}
-                                {selectValues.map((selectValue) => (
-                                  <option key={selectValue} value={encodeSelectOptionValue(selectValue)}>
-                                    {selectValue}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <Input
-                                ref={
-                                  columnIndex === 0
-                                    ? (element) => {
-                                        firstInsertFieldRef.current = element
-                                      }
-                                    : undefined
-                                }
-                                value={formatDraftInputValue(activeTableTab.insertDraft?.[column.name])}
-                                placeholder={column.isPrimaryKey ? 'PK' : column.name}
-                                onChange={(event) => updateInsertDraftValue(column.name, event.target.value)}
-                                className='h-7 border-emerald-500/35 bg-slate-900/90 text-[12px] text-slate-100'
-                              />
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              {isBackgroundTableReload && (
+                <div className='absolute inset-0 z-20 flex items-center justify-center bg-slate-950/45 backdrop-blur-[1px]'>
+                  <div className='pointer-card-soft flex items-center gap-2 px-3 py-2 text-sm text-slate-200 shadow-[0_8px_24px_rgba(2,6,23,0.35)]'>
+                    <RefreshCw className='h-4 w-4 animate-spin text-slate-300' />
+                    <span>Atualizando registros...</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {(activeTableTab.data?.rows.length ?? 0) === 0 && !activeTableTab.loading && (
