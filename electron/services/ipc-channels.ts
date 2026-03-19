@@ -1,0 +1,42 @@
+export const IPC_CHANNELS = {
+  listEnvironments: 'pointer:environments:list',
+  createEnvironment: 'pointer:environments:create',
+  updateEnvironment: 'pointer:environments:update',
+  deleteEnvironment: 'pointer:environments:delete',
+
+  listConnections: 'pointer:connections:list',
+  getConnectionPassword: 'pointer:connections:get-password',
+  createConnection: 'pointer:connections:create',
+  updateConnection: 'pointer:connections:update',
+  testConnectionInput: 'pointer:connections:test-input',
+  deleteConnection: 'pointer:connections:delete',
+  testConnection: 'pointer:connections:test',
+
+  listSchemas: 'pointer:schemas:list',
+  listTables: 'pointer:tables:list',
+  searchTables: 'pointer:tables:search',
+  searchTablesInEnvironment: 'pointer:tables:search-in-environment',
+
+  describeTable: 'pointer:tables:describe',
+  readTable: 'pointer:tables:read',
+  insertRow: 'pointer:rows:insert',
+  updateRow: 'pointer:rows:update',
+  deleteRow: 'pointer:rows:delete',
+
+  previewSqlRisk: 'pointer:sql:preview-risk',
+  executeSql: 'pointer:sql:execute',
+  executeSqlWithExecutionId: 'pointer:sql:execute-with-execution-id',
+  cancelSqlExecution: 'pointer:sql:cancel-execution',
+
+  checkForAppUpdate: 'pointer:app:update:check',
+  installLatestUpdate: 'pointer:app:update:install',
+  getAppVersion: 'pointer:app:version',
+  copyToClipboard: 'pointer:clipboard:write',
+  pickSqliteFile: 'pointer:sqlite:pick-file',
+  openSqlFile: 'pointer:sql:file:open',
+  saveSqlFile: 'pointer:sql:file:save',
+  getAiConfig: 'pointer:ai:config:get',
+  saveAiConfig: 'pointer:ai:config:save',
+  removeAiConfig: 'pointer:ai:config:remove',
+  generateAiSqlTurn: 'pointer:ai:sql:turn',
+} as const

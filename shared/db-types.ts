@@ -122,6 +122,17 @@ export interface SqlExecutionResult {
 
 export const SQL_EXECUTION_CANCELED_MESSAGE = 'Execução cancelada pelo usuário.'
 
+export interface OpenSqlFileResult {
+  filePath: string
+  sqlText: string
+}
+
+export interface SaveSqlFileInput {
+  sqlText: string
+  filePath?: string
+  suggestedFileName?: string
+}
+
 export interface AppUpdateInfo {
   currentVersion: string
   latestVersion: string
@@ -173,6 +184,8 @@ export interface PointerApi {
   getAppVersion: () => Promise<string>
   copyToClipboard: (text: string) => Promise<void>
   pickSqliteFile: () => Promise<string | null>
+  openSqlFile: () => Promise<OpenSqlFileResult | null>
+  saveSqlFile: (input: SaveSqlFileInput) => Promise<string | null>
   getAiConfig: () => Promise<AiConfig>
   saveAiConfig: (input: AiConfigInput) => Promise<AiConfig>
   removeAiConfig: () => Promise<AiConfig>

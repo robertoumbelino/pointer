@@ -70,6 +70,8 @@ type UseWorkspaceActionsParams = {
 
 type UseWorkspaceActionsResult = {
   openNewSqlTab: () => void
+  loadSqlFileToNewTab: () => Promise<void>
+  saveActiveSqlFile: () => Promise<void>
   openRenameSqlTabDialog: (tab: SqlTab) => void
   handleRenameSqlTab: () => void
   openTableTab: (hit: TableSearchHit, initialLoad?: TableReloadOverrides) => Promise<void>
@@ -126,6 +128,25 @@ function sanitizeFilenamePart(value: string): string {
     .replace(/[^a-z0-9._-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+function fileNameFromPath(filePath: string): string {
+  const normalized = filePath.trim().replace(/[/\\]+$/g, '')
+  if (!normalized) {
+    return ''
+  }
+
+  const segments = normalized.split(/[/\\]/)
+  return segments[segments.length - 1] ?? ''
+}
+
+function ensureSqlFilename(filename: string): string {
+  const normalized = filename.trim()
+  if (!normalized) {
+    return 'query.sql'
+  }
+
+  return normalized.toLowerCase().endsWith('.sql') ? normalized : `${normalized}.sql`
 }
 
 function buildTimestamp(): string {
@@ -867,6 +888,63 @@ export function useWorkspaceActions({
 
     setWorkTabs((current) => [...current, createSqlTab(nextId, title)])
     setActiveTabId(nextId)
+  }
+
+  async function loadSqlFileToNewTab(): Promise<void> {
+    try {
+      const openedFile = await pointerApi.openSqlFile()
+      if (!openedFile) {
+        return
+      }
+
+      const nextId = `sql:${sqlTabCounterRef.current}`
+      const activeSqlTab = getSqlTab(activeTabId)
+      const connectionId =
+        typeof activeSqlTab?.connectionId === 'string' && activeSqlTab.connectionId.length > 0
+          ? activeSqlTab.connectionId
+          : AUTO_SQL_CONNECTION_ID
+      const title = fileNameFromPath(openedFile.filePath) || `SQL ${sqlTabCounterRef.current}`
+      const nextTab: SqlTab = {
+        ...createSqlTab(nextId, title, connectionId, { sqlText: openedFile.sqlText }),
+        filePath: openedFile.filePath,
+      }
+
+      sqlTabCounterRef.current += 1
+      setWorkTabs((current) => [...current, nextTab])
+      setActiveTabId(nextId)
+      toast.success(`Arquivo SQL carregado: ${title}.`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function saveActiveSqlFile(): Promise<void> {
+    const activeSqlTab = getSqlTab(activeTabId)
+    if (!activeSqlTab) {
+      return
+    }
+
+    try {
+      const suggestedFileName = ensureSqlFilename(sanitizeFilenamePart(activeSqlTab.title) || 'query')
+      const savedPath = await pointerApi.saveSqlFile({
+        sqlText: activeSqlTab.sqlText,
+        filePath: activeSqlTab.filePath ?? undefined,
+        suggestedFileName,
+      })
+      if (!savedPath) {
+        return
+      }
+
+      const nextTitle = fileNameFromPath(savedPath) || activeSqlTab.title
+      updateSqlTab(activeSqlTab.id, (tab) => ({
+        ...tab,
+        filePath: savedPath,
+        title: nextTitle,
+      }))
+      toast.success(`SQL salvo em ${nextTitle}.`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
   }
 
   async function completeAiSqlTurn(params: {
@@ -1866,6 +1944,8 @@ export function useWorkspaceActions({
 
   return {
     openNewSqlTab,
+    loadSqlFileToNewTab,
+    saveActiveSqlFile,
     openRenameSqlTabDialog,
     handleRenameSqlTab,
     openTableTab,

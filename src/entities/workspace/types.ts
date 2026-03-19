@@ -26,6 +26,7 @@ export type SqlTab = {
   type: 'sql'
   title: string
   connectionId: string
+  filePath: string | null
   sqlText: string
   sqlResult: SqlExecutionResult | null
   sqlRunning: boolean
@@ -118,6 +119,7 @@ export type PersistedSqlTab = {
   id: string
   title: string
   connectionId: string
+  filePath?: string | null
   sqlText: string
   splitRatio: number
   isAiTab?: boolean
@@ -168,6 +170,7 @@ export function createSqlTab(
     type: 'sql',
     title,
     connectionId,
+    filePath: null,
     sqlText: options?.sqlText ?? DEFAULT_SQL,
     sqlResult: null,
     sqlRunning: false,

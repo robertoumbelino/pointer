@@ -34,6 +34,8 @@ type WorkspaceMainProps = {
   activeSqlTab: SqlTab | null
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
   connections: ConnectionSummary[]
+  loadSqlFileToNewTab: () => Promise<void>
+  saveActiveSqlFile: () => Promise<void>
   runSql: () => Promise<void>
   cancelSqlExecution: () => Promise<void>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
@@ -90,6 +92,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     activeSqlTab,
     updateSqlTab,
     connections,
+    loadSqlFileToNewTab,
+    saveActiveSqlFile,
     runSql,
     cancelSqlExecution,
     sqlSplitContainerRef,
@@ -143,6 +147,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 activeSqlTab={activeSqlTab}
                 updateSqlTab={updateSqlTab}
                 connections={connections}
+                loadSqlFileToNewTab={loadSqlFileToNewTab}
+                saveActiveSqlFile={saveActiveSqlFile}
                 runSql={runSql}
                 cancelSqlExecution={cancelSqlExecution}
                 sqlSplitContainerRef={sqlSplitContainerRef}

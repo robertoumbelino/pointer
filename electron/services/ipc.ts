@@ -1,49 +1,23 @@
+import { readFile, writeFile } from 'node:fs/promises'
+import { extname } from 'node:path'
 import { app, clipboard, dialog, BrowserWindow, ipcMain, type OpenDialogOptions } from 'electron'
-import type { AiConfigInput, AiGenerateSqlTurnInput, ConnectionInput, TableReadInput, TableRef } from '../../shared/db-types'
+import type {
+  AiConfigInput,
+  AiGenerateSqlTurnInput,
+  ConnectionInput,
+  OpenSqlFileResult,
+  SaveSqlFileInput,
+  TableReadInput,
+  TableRef,
+} from '../../shared/db-types'
 import { AiService } from './ai-service'
 import { DbService } from './db-service'
+import { IPC_CHANNELS } from './ipc-channels'
 import { UpdaterService } from './updater-service'
 
-export const IPC_CHANNELS = {
-  listEnvironments: 'pointer:environments:list',
-  createEnvironment: 'pointer:environments:create',
-  updateEnvironment: 'pointer:environments:update',
-  deleteEnvironment: 'pointer:environments:delete',
-
-  listConnections: 'pointer:connections:list',
-  getConnectionPassword: 'pointer:connections:get-password',
-  createConnection: 'pointer:connections:create',
-  updateConnection: 'pointer:connections:update',
-  testConnectionInput: 'pointer:connections:test-input',
-  deleteConnection: 'pointer:connections:delete',
-  testConnection: 'pointer:connections:test',
-
-  listSchemas: 'pointer:schemas:list',
-  listTables: 'pointer:tables:list',
-  searchTables: 'pointer:tables:search',
-  searchTablesInEnvironment: 'pointer:tables:search-in-environment',
-
-  describeTable: 'pointer:tables:describe',
-  readTable: 'pointer:tables:read',
-  insertRow: 'pointer:rows:insert',
-  updateRow: 'pointer:rows:update',
-  deleteRow: 'pointer:rows:delete',
-
-  previewSqlRisk: 'pointer:sql:preview-risk',
-  executeSql: 'pointer:sql:execute',
-  executeSqlWithExecutionId: 'pointer:sql:execute-with-execution-id',
-  cancelSqlExecution: 'pointer:sql:cancel-execution',
-
-  checkForAppUpdate: 'pointer:app:update:check',
-  installLatestUpdate: 'pointer:app:update:install',
-  getAppVersion: 'pointer:app:version',
-  copyToClipboard: 'pointer:clipboard:write',
-  pickSqliteFile: 'pointer:sqlite:pick-file',
-  getAiConfig: 'pointer:ai:config:get',
-  saveAiConfig: 'pointer:ai:config:save',
-  removeAiConfig: 'pointer:ai:config:remove',
-  generateAiSqlTurn: 'pointer:ai:sql:turn',
-} as const
+function ensureSqlExtension(filePath: string): string {
+  return extname(filePath).toLowerCase() === '.sql' ? filePath : `${filePath}.sql`
+}
 
 export function registerIpc(dbService: DbService, updaterService: UpdaterService, aiService: AiService): void {
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
@@ -68,6 +42,63 @@ export function registerIpc(dbService: DbService, updaterService: UpdaterService
     }
 
     return result.filePaths[0] ?? null
+  })
+  ipcMain.handle(IPC_CHANNELS.openSqlFile, async (): Promise<OpenSqlFileResult | null> => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    const options: OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [
+        { name: 'SQL', extensions: ['sql'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    }
+    const result = focusedWindow
+      ? await dialog.showOpenDialog(focusedWindow, options)
+      : await dialog.showOpenDialog(options)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    const filePath = result.filePaths[0]
+    if (!filePath) {
+      return null
+    }
+
+    const sqlText = await readFile(filePath, 'utf8')
+    return { filePath, sqlText }
+  })
+  ipcMain.handle(IPC_CHANNELS.saveSqlFile, async (_, input: SaveSqlFileInput): Promise<string | null> => {
+    const sqlText = typeof input?.sqlText === 'string' ? input.sqlText : ''
+    let destinationPath =
+      typeof input?.filePath === 'string' && input.filePath.trim().length > 0 ? input.filePath.trim() : ''
+
+    if (!destinationPath) {
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+      const suggestedFileName =
+        typeof input?.suggestedFileName === 'string' && input.suggestedFileName.trim().length > 0
+          ? ensureSqlExtension(input.suggestedFileName.trim())
+          : 'query.sql'
+      const saveOptions = {
+        defaultPath: suggestedFileName,
+        filters: [
+          { name: 'SQL', extensions: ['sql'] },
+          { name: 'Todos os arquivos', extensions: ['*'] },
+        ],
+      }
+      const result = focusedWindow
+        ? await dialog.showSaveDialog(focusedWindow, saveOptions)
+        : await dialog.showSaveDialog(saveOptions)
+
+      if (result.canceled || !result.filePath) {
+        return null
+      }
+
+      destinationPath = ensureSqlExtension(result.filePath)
+    }
+
+    await writeFile(destinationPath, sqlText, 'utf8')
+    return destinationPath
   })
 
   ipcMain.handle(IPC_CHANNELS.listEnvironments, () => wrap(() => dbService.listEnvironments()))

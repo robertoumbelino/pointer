@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { PointerApi } from '../shared/db-types'
-import { IPC_CHANNELS } from './services/ipc'
+import { IPC_CHANNELS } from './services/ipc-channels'
 
 const RENDERER_RUN_SQL_SHORTCUT_CHANNEL = 'pointer:shortcut:run-sql'
 
@@ -8,6 +8,8 @@ const pointerApi: PointerApi = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   copyToClipboard: (text) => ipcRenderer.invoke(IPC_CHANNELS.copyToClipboard, text),
   pickSqliteFile: () => ipcRenderer.invoke(IPC_CHANNELS.pickSqliteFile),
+  openSqlFile: () => ipcRenderer.invoke(IPC_CHANNELS.openSqlFile),
+  saveSqlFile: (input) => ipcRenderer.invoke(IPC_CHANNELS.saveSqlFile, input),
   getAiConfig: () => ipcRenderer.invoke(IPC_CHANNELS.getAiConfig),
   saveAiConfig: (input) => ipcRenderer.invoke(IPC_CHANNELS.saveAiConfig, input),
   removeAiConfig: () => ipcRenderer.invoke(IPC_CHANNELS.removeAiConfig),

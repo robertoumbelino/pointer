@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState, type Dispatch, type MutableRefO
 import CodeMirror from '@uiw/react-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
-import { Bot, ChevronDown, Download, Loader2, Play, SendHorizontal, X } from 'lucide-react'
+import { Bot, ChevronDown, Download, FolderOpen, Loader2, Play, Save, SendHorizontal, X } from 'lucide-react'
 import type { ConnectionSummary } from '../../../../shared/db-types'
 import type { SqlTab } from '../../../entities/workspace/types'
 import { Button } from '../../../components/ui/button'
@@ -16,6 +16,8 @@ type SqlWorkspacePanelProps = {
   activeSqlTab: SqlTab
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
   connections: ConnectionSummary[]
+  loadSqlFileToNewTab: () => Promise<void>
+  saveActiveSqlFile: () => Promise<void>
   runSql: () => Promise<void>
   cancelSqlExecution: () => Promise<void>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
@@ -86,6 +88,8 @@ export function SqlWorkspacePanel({
   activeSqlTab,
   updateSqlTab,
   connections,
+  loadSqlFileToNewTab,
+  saveActiveSqlFile,
   runSql,
   cancelSqlExecution,
   sqlSplitContainerRef,
@@ -257,6 +261,16 @@ export function SqlWorkspacePanel({
               </option>
             ))}
           </select>
+          <ButtonGroup>
+            <Button variant='outline' size='sm' className='h-8 text-[13px]' onClick={() => void loadSqlFileToNewTab()}>
+              <FolderOpen className='mr-1.5 h-3.5 w-3.5' />
+              Carregar
+            </Button>
+            <Button variant='outline' size='sm' className='h-8 text-[13px]' onClick={() => void saveActiveSqlFile()}>
+              <Save className='mr-1.5 h-3.5 w-3.5' />
+              Salvar
+            </Button>
+          </ButtonGroup>
           <ButtonGroup>
             <Button
               size='sm'

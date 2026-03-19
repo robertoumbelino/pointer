@@ -524,6 +524,8 @@ function App(): JSX.Element {
 
   const {
     openNewSqlTab,
+    loadSqlFileToNewTab,
+    saveActiveSqlFile,
     openAiSqlTabWithPrompt,
     openRenameSqlTabDialog,
     handleRenameSqlTab,
@@ -1042,6 +1044,8 @@ function App(): JSX.Element {
             activeSqlTab={activeSqlTab}
             updateSqlTab={updateSqlTab}
             connections={connections}
+            loadSqlFileToNewTab={loadSqlFileToNewTab}
+            saveActiveSqlFile={saveActiveSqlFile}
             runSql={() => runSql()}
             cancelSqlExecution={() => cancelSqlExecution()}
             sqlSplitContainerRef={sqlSplitContainerRef}
