@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.16 - 2026-03-19
+
+### ✨ Novidades
+- Fluxo de SQL ganhou suporte para abrir e salvar arquivos `.sql` direto no workspace, facilitando edição externa e reaproveitamento de scripts sem copiar e colar manualmente.
+
+### 🐛 Correções
+- Ajustada a cobertura de busca de tabelas em memória no Command Palette para retornar resultados de forma mais consistente durante navegação rápida.
+
 ## v0.8.14 - 2026-03-19
 
 ### 🐛 Correções
