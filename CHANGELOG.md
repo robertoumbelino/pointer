@@ -2,6 +2,11 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.8.14 - 2026-03-19
+
+### 🐛 Correções
+- Corrigido o feedback visual de recarga na visualização de tabelas: agora o app exibe um overlay de carregamento cobrindo toda a área visível do grid, inclusive durante rolagem horizontal, e mantém o botão **Atualizar** com indicador de loading durante o refresh.
+
 ## v0.8.13 - 2026-03-18
 
 ### 🐛 Correções
