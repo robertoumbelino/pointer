@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { Dispatch, KeyboardEvent, MutableRefObject, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { AiConfig, TableSchema, TableSearchHit } from '../../../../shared/db-types'
+import { rankTableSearchHits } from '../../../../shared/table-search'
 import type { SidebarTableContextMenuState, TableReloadOverrides } from '../../../entities/workspace/types'
 import { pointerApi } from '../../../shared/api/pointer-api'
 import {
@@ -44,10 +45,7 @@ type OrderedCommandItem =
     }
 
 type UseCommandPaletteActionsParams = {
-  selectedEnvironmentId: string
-  commandHits: TableSearchHit[]
-  setCommandHits: Dispatch<SetStateAction<TableSearchHit[]>>
-  setCatalogHits: Dispatch<SetStateAction<TableSearchHit[]>>
+  catalogHits: TableSearchHit[]
   isCommandOpen: boolean
   setIsCommandOpen: Dispatch<SetStateAction<boolean>>
   commandQuery: string
@@ -85,10 +83,7 @@ type UseCommandPaletteActionsResult = {
 }
 
 export function useCommandPaletteActions({
-  selectedEnvironmentId,
-  commandHits,
-  setCommandHits,
-  setCatalogHits,
+  catalogHits,
   isCommandOpen,
   setIsCommandOpen,
   commandQuery,
@@ -114,7 +109,7 @@ export function useCommandPaletteActions({
   onUseAiPrompt,
   aiConfig,
 }: UseCommandPaletteActionsParams): UseCommandPaletteActionsResult {
-  const commandSearchRequestSeqRef = useRef(0)
+  const commandHits = useMemo(() => rankTableSearchHits(catalogHits, commandQuery, 220), [catalogHits, commandQuery])
 
   const commandActions = useMemo<CommandActionItem[]>(() => {
     const query = commandQuery.trim()
@@ -234,45 +229,6 @@ export function useCommandPaletteActions({
 
     return [...actionItems, ...tableItems]
   }, [commandActions, groupedCommandHits])
-
-  useEffect(() => {
-    if (!isCommandOpen || !selectedEnvironmentId) {
-      return
-    }
-
-    let isActive = true
-    const requestSeq = ++commandSearchRequestSeqRef.current
-    const requestedEnvironmentId = selectedEnvironmentId
-    const trimmedQuery = commandQuery.trim()
-
-    const timeout = setTimeout(() => {
-      void (async () => {
-        try {
-          const hits = await pointerApi.searchTablesInEnvironment(requestedEnvironmentId, trimmedQuery)
-          if (!isActive || requestSeq !== commandSearchRequestSeqRef.current) {
-            return
-          }
-
-          setCommandHits(hits)
-
-          if (!trimmedQuery) {
-            setCatalogHits(hits)
-          }
-        } catch (error) {
-          if (!isActive || requestSeq !== commandSearchRequestSeqRef.current) {
-            return
-          }
-
-          toast.error(getErrorMessage(error))
-        }
-      })()
-    }, 180)
-
-    return () => {
-      isActive = false
-      clearTimeout(timeout)
-    }
-  }, [commandQuery, isCommandOpen, selectedEnvironmentId, setCatalogHits, setCommandHits])
 
   useEffect(() => {
     if (!isCommandOpen || commandScopedTarget) {
