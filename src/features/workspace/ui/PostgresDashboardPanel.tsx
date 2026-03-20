@@ -594,7 +594,7 @@ export function PostgresDashboardPanel({
         </Button>
       </div>
 
-      <div className='min-h-0 flex-1 overflow-auto p-3'>
+      <div className='min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3'>
         {activeDashboardTab.loadError && (
           <div className='mb-3 rounded-lg border border-rose-800/70 bg-rose-950/35 px-3 py-2 text-[12px] text-rose-200'>
             {activeDashboardTab.loadError}
