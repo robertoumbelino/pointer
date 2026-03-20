@@ -114,17 +114,11 @@ export function useWorkbenchFlows({
 
       setConnections(all)
 
-      if (all.length > 0) {
-        setSelectedConnectionId((current) => {
-          if (current && all.some((connection) => connection.id === current)) {
-            return current
-          }
-
-          return all[0].id
-        })
-
-        setWorkTabs((current) =>
-          current.map((tab) => {
+      const availableConnectionIds = new Set(all.map((connection) => connection.id))
+      setWorkTabs((current) =>
+        current
+          .filter((tab) => tab.type !== 'dashboard' || availableConnectionIds.has(tab.connectionId))
+          .map((tab) => {
             if (tab.type !== 'sql') {
               return tab
             }
@@ -133,7 +127,7 @@ export function useWorkbenchFlows({
               return tab
             }
 
-            if (all.some((connection) => connection.id === tab.connectionId)) {
+            if (availableConnectionIds.has(tab.connectionId)) {
               return tab
             }
 
@@ -142,7 +136,16 @@ export function useWorkbenchFlows({
               connectionId: AUTO_SQL_CONNECTION_ID,
             }
           }),
-        )
+      )
+
+      if (all.length > 0) {
+        setSelectedConnectionId((current) => {
+          if (current && all.some((connection) => connection.id === current)) {
+            return current
+          }
+
+          return all[0].id
+        })
       } else {
         setSelectedConnectionId('')
       }

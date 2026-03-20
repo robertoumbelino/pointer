@@ -27,7 +27,9 @@ import {
   valuesEqual,
 } from '../../../shared/lib/workspace-utils'
 import {
+  createDashboardTab,
   createSqlTab,
+  type DashboardTab,
   type EditingCell,
   type RowPendingUpdates,
   type SqlTab,
@@ -70,6 +72,7 @@ type UseWorkspaceActionsParams = {
 
 type UseWorkspaceActionsResult = {
   openNewSqlTab: () => void
+  openConnectionDashboardTab: (connection: ConnectionSummary) => void
   loadSqlFileToNewTab: () => Promise<void>
   saveActiveSqlFile: () => Promise<void>
   openRenameSqlTabDialog: (tab: SqlTab) => void
@@ -79,6 +82,7 @@ type UseWorkspaceActionsResult = {
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
   reorderWorkTabs: (draggedTabId: string, targetTabId: string, position?: 'before' | 'after') => void
   closeTableTab: (tabId: string) => void
+  closeDashboardTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
   closeActiveTab: () => void
   beginInlineEdit: (rowIndex: number, column: string) => void
@@ -749,6 +753,15 @@ export function useWorkspaceActions({
     setEditingCell((current) => (current?.tabId === tabId ? null : current))
   }
 
+  function closeDashboardTab(tabId: string): void {
+    setWorkTabs((current) => current.filter((tab) => tab.id !== tabId))
+
+    if (activeTabId === tabId) {
+      const firstSqlTab = workTabsRef.current.find((tab) => tab.type === 'sql')
+      setActiveTabId(firstSqlTab?.id ?? 'sql:1')
+    }
+  }
+
   async function cancelSqlExecution(targetTabId?: string): Promise<void> {
     const tabId = targetTabId ?? activeTabId
     const sqlTab = getSqlTab(tabId)
@@ -834,6 +847,14 @@ export function useWorkspaceActions({
       return
     }
 
+    const activeSqlTab = getSqlTab(activeId)
+    if (activeSqlTab) {
+      const sqlTabsCount = currentTabs.filter((tab) => tab.type === 'sql').length
+      if (sqlTabsCount <= 1) {
+        return
+      }
+    }
+
     const nextTabs = currentTabs.filter((tab) => tab.id !== activeId)
     if (nextTabs.length === 0) {
       return
@@ -841,7 +862,6 @@ export function useWorkspaceActions({
 
     const fallbackTab = nextTabs[activeIndex] ?? nextTabs[activeIndex - 1] ?? nextTabs[0]
 
-    const activeSqlTab = getSqlTab(activeId)
     if (activeSqlTab?.sqlRunning) {
       void cancelSqlExecution(activeSqlTab.id)
     }
@@ -888,6 +908,23 @@ export function useWorkspaceActions({
 
     setWorkTabs((current) => [...current, createSqlTab(nextId, title)])
     setActiveTabId(nextId)
+  }
+
+  function openConnectionDashboardTab(connection: ConnectionSummary): void {
+    const tabId = `dashboard:${connection.engine}:${connection.id}`
+    const existing = workTabsRef.current.find(
+      (tab): tab is DashboardTab => tab.id === tabId && tab.type === 'dashboard',
+    )
+    if (existing) {
+      setActiveTabId(existing.id)
+      return
+    }
+
+    setWorkTabs((current) => [
+      ...current,
+      createDashboardTab(tabId, connection.engine, connection.id, connection.name),
+    ])
+    setActiveTabId(tabId)
   }
 
   async function loadSqlFileToNewTab(): Promise<void> {
@@ -1944,6 +1981,7 @@ export function useWorkspaceActions({
 
   return {
     openNewSqlTab,
+    openConnectionDashboardTab,
     loadSqlFileToNewTab,
     saveActiveSqlFile,
     openRenameSqlTabDialog,
@@ -1953,6 +1991,7 @@ export function useWorkspaceActions({
     reloadTableTab,
     reorderWorkTabs,
     closeTableTab,
+    closeDashboardTab,
     closeSqlTab,
     closeActiveTab,
     beginInlineEdit,

@@ -1,4 +1,5 @@
 import type {
+  DashboardTab,
   EnvironmentWorkspaceSnapshot,
   PersistedEnvironmentWorkspaceSnapshot,
   PersistedWorkspaceStorage,
@@ -7,7 +8,7 @@ import type {
   TableTab,
   WorkTab,
 } from '../../entities/workspace/types'
-import { createSqlTab } from '../../entities/workspace/types'
+import { createDashboardTab, createSqlTab } from '../../entities/workspace/types'
 import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../constants/app'
 
 export function buildPersistedWorkspaceStorage(
@@ -68,20 +69,31 @@ function serializeWorkTab(tab: WorkTab): PersistedWorkTab {
     }
   }
 
+  if (tab.type === 'table') {
+    return {
+      type: 'table',
+      id: tab.id,
+      title: tab.title,
+      engine: tab.engine,
+      connectionId: tab.connectionId,
+      connectionName: tab.connectionName,
+      table: tab.table,
+      page: tab.page,
+      pageSize: tab.pageSize,
+      sort: tab.sort,
+      filterColumn: tab.filterColumn,
+      filterOperator: tab.filterOperator,
+      filterValue: tab.filterValue,
+    }
+  }
+
   return {
-    type: 'table',
+    type: 'dashboard',
     id: tab.id,
     title: tab.title,
     engine: tab.engine,
     connectionId: tab.connectionId,
     connectionName: tab.connectionName,
-    table: tab.table,
-    page: tab.page,
-    pageSize: tab.pageSize,
-    sort: tab.sort,
-    filterColumn: tab.filterColumn,
-    filterOperator: tab.filterOperator,
-    filterValue: tab.filterValue,
   }
 }
 
@@ -117,36 +129,43 @@ function deserializeEnvironmentWorkspaceSnapshot(
           } as SqlTab
         }
 
+        if (tab.type === 'table') {
+          return {
+            id: tab.id,
+            type: 'table',
+            title: tab.title,
+            engine: tab.engine,
+            connectionId: tab.connectionId,
+            connectionName: tab.connectionName,
+            table: tab.table,
+            schema: null,
+            data: null,
+            page: typeof tab.page === 'number' ? tab.page : 0,
+            pageSize: normalizeTablePageSize(tab.pageSize),
+            sort: tab.sort,
+            filterColumn: tab.filterColumn ?? '',
+            filterOperator: tab.filterOperator ?? 'ilike',
+            filterValue: tab.filterValue ?? '',
+            selectedRowIndexes: [],
+            rowAnchorIndex: null,
+            activeRowIndex: null,
+            activeCell: null,
+            cellAnchor: null,
+            selectedCellRange: null,
+            selectionMode: 'cell',
+            pendingUpdates: {},
+            pendingDeletes: [],
+            insertDraft: null,
+            baseRows: null,
+            loading: false,
+            loadError: null,
+          } as TableTab
+        }
+
         return {
-          id: tab.id,
-          type: 'table',
+          ...createDashboardTab(tab.id, tab.engine, tab.connectionId, tab.connectionName),
           title: tab.title,
-          engine: tab.engine,
-          connectionId: tab.connectionId,
-          connectionName: tab.connectionName,
-          table: tab.table,
-          schema: null,
-          data: null,
-          page: typeof tab.page === 'number' ? tab.page : 0,
-          pageSize: normalizeTablePageSize(tab.pageSize),
-          sort: tab.sort,
-          filterColumn: tab.filterColumn ?? '',
-          filterOperator: tab.filterOperator ?? 'ilike',
-          filterValue: tab.filterValue ?? '',
-          selectedRowIndexes: [],
-          rowAnchorIndex: null,
-          activeRowIndex: null,
-          activeCell: null,
-          cellAnchor: null,
-          selectedCellRange: null,
-          selectionMode: 'cell',
-          pendingUpdates: {},
-          pendingDeletes: [],
-          insertDraft: null,
-          baseRows: null,
-          loading: false,
-          loadError: null,
-        } as TableTab
+        } as DashboardTab
       })
     : []
 

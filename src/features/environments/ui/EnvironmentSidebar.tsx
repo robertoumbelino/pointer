@@ -31,6 +31,7 @@ type EnvironmentSidebarProps = {
   handleUpdateEnvironment: () => Promise<void>
   handleDeleteEnvironment: () => Promise<void>
   onExitWorkspace: () => void
+  openConnectionDashboard: (connection: ConnectionSummary) => void
   openEditConnectionDialog: (connection: ConnectionSummary) => void
   handleDeleteConnection: (connectionId: string) => Promise<void>
   isCreateConnectionOpen: boolean
@@ -90,6 +91,7 @@ export function EnvironmentSidebar({
   handleUpdateEnvironment,
   handleDeleteEnvironment,
   onExitWorkspace,
+  openConnectionDashboard,
   openEditConnectionDialog,
   handleDeleteConnection,
   isCreateConnectionOpen,
@@ -159,6 +161,7 @@ export function EnvironmentSidebar({
 
         <ConnectionsPanel
           connections={connections}
+          openConnectionDashboard={openConnectionDashboard}
           openEditConnectionDialog={openEditConnectionDialog}
           handleDeleteConnection={handleDeleteConnection}
           isCreateConnectionOpen={isCreateConnectionOpen}

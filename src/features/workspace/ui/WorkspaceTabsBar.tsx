@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, DragEvent, MouseEvent, SetStateAction } from 'react'
-import { Bot, Database, Table2, X } from 'lucide-react'
+import { BarChart3, Bot, Database, Table2, X } from 'lucide-react'
 import type { SqlTab, WorkTab } from '../../../entities/workspace/types'
 import { cn } from '../../../lib/utils'
 
@@ -11,6 +11,7 @@ type WorkspaceTabsBarProps = {
   openRenameSqlTabDialog: (tab: SqlTab) => void
   reorderWorkTabs: (draggedTabId: string, targetTabId: string, position?: 'before' | 'after') => void
   closeTableTab: (tabId: string) => void
+  closeDashboardTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
 }
 
@@ -33,6 +34,7 @@ export function WorkspaceTabsBar({
   openRenameSqlTabDialog,
   reorderWorkTabs,
   closeTableTab,
+  closeDashboardTab,
   closeSqlTab,
 }: WorkspaceTabsBarProps): JSX.Element {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
@@ -156,6 +158,10 @@ export function WorkspaceTabsBar({
 
     return items
   }, [draggingTabId, dropInsertionIndex, workTabs])
+  const sqlTabsCount = useMemo(
+    () => workTabs.filter((candidate) => candidate.type === 'sql').length,
+    [workTabs],
+  )
 
   const handleTabClick = (event: MouseEvent<HTMLButtonElement>, tabId: string): void => {
     if (Date.now() < suppressClickUntilRef.current) {
@@ -263,7 +269,8 @@ export function WorkspaceTabsBar({
               const tab = item.tab
               const isDraggingTab = draggingTabId === tab.id
               const shouldCollapseDraggingSlot = isDraggingTab && dropInsertionIndex !== null
-              const sqlTabsCount = workTabs.filter((candidate) => candidate.type === 'sql').length
+              const canClose =
+                tab.type === 'table' || tab.type === 'dashboard' || (tab.type === 'sql' && sqlTabsCount > 1)
 
               return (
                 <button
@@ -290,11 +297,13 @@ export function WorkspaceTabsBar({
                 >
                   {tab.type === 'sql' ? (
                     tab.isAiTab ? <Bot className='h-3.5 w-3.5' /> : <Database className='h-3.5 w-3.5' />
-                  ) : (
+                  ) : tab.type === 'table' ? (
                     <Table2 className='h-3.5 w-3.5' />
+                  ) : (
+                    <BarChart3 className='h-3.5 w-3.5' />
                   )}
                   <span>{tab.title}</span>
-                  {(tab.type === 'table' || (tab.type === 'sql' && sqlTabsCount > 1)) && (
+                  {canClose && (
                     <span
                       role='button'
                       tabIndex={0}
@@ -309,6 +318,8 @@ export function WorkspaceTabsBar({
                         event.stopPropagation()
                         if (tab.type === 'table') {
                           closeTableTab(tab.id)
+                        } else if (tab.type === 'dashboard') {
+                          closeDashboardTab(tab.id)
                         } else {
                           closeSqlTab(tab.id)
                         }
@@ -318,6 +329,8 @@ export function WorkspaceTabsBar({
                           event.preventDefault()
                           if (tab.type === 'table') {
                             closeTableTab(tab.id)
+                          } else if (tab.type === 'dashboard') {
+                            closeDashboardTab(tab.id)
                           } else {
                             closeSqlTab(tab.id)
                           }

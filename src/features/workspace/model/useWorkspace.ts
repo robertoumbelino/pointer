@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { TableSearchHit } from '../../../../shared/db-types'
 import type {
+  DashboardTab,
   EditingCell,
   EnvironmentWorkspaceSnapshot,
   SidebarTableContextMenuState,
@@ -84,6 +85,8 @@ type UseWorkspaceResult = {
   getSqlTab: (tabId: string) => SqlTab | null
   updateTableTab: (tabId: string, updater: (tab: TableTab) => TableTab) => void
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
+  getDashboardTab: (tabId: string) => DashboardTab | null
+  updateDashboardTab: (tabId: string, updater: (tab: DashboardTab) => DashboardTab) => void
 }
 
 export function useWorkspace(): UseWorkspaceResult {
@@ -151,6 +154,11 @@ export function useWorkspace(): UseWorkspaceResult {
     return tab?.type === 'sql' ? tab : null
   }
 
+  function getDashboardTab(tabId: string): DashboardTab | null {
+    const tab = workTabsRef.current.find((candidate) => candidate.id === tabId)
+    return tab?.type === 'dashboard' ? tab : null
+  }
+
   function updateTableTab(tabId: string, updater: (tab: TableTab) => TableTab): void {
     setWorkTabs((current) =>
       current.map((tab) => {
@@ -167,6 +175,18 @@ export function useWorkspace(): UseWorkspaceResult {
     setWorkTabs((current) =>
       current.map((tab) => {
         if (tab.id !== tabId || tab.type !== 'sql') {
+          return tab
+        }
+
+        return updater(tab)
+      }),
+    )
+  }
+
+  function updateDashboardTab(tabId: string, updater: (tab: DashboardTab) => DashboardTab): void {
+    setWorkTabs((current) =>
+      current.map((tab) => {
+        if (tab.id !== tabId || tab.type !== 'dashboard') {
           return tab
         }
 
@@ -233,7 +253,9 @@ export function useWorkspace(): UseWorkspaceResult {
     closeActiveTabRef,
     getTableTab,
     getSqlTab,
+    getDashboardTab,
     updateTableTab,
     updateSqlTab,
+    updateDashboardTab,
   }
 }

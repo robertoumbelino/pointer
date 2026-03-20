@@ -7,6 +7,7 @@ import type {
   TableRef,
 } from '../../../../shared/db-types'
 import type {
+  DashboardTab,
   EditingCell,
   SqlTab,
   TableReloadOverrides,
@@ -17,6 +18,9 @@ import { WorkspaceEmptyState } from './WorkspaceEmptyState'
 import { WorkspaceTabsBar } from './WorkspaceTabsBar'
 import { SqlWorkspacePanel } from './SqlWorkspacePanel'
 import { TableWorkspacePanel } from './TableWorkspacePanel'
+import { PostgresDashboardPanel } from './PostgresDashboardPanel'
+import { ClickHouseDashboardPanel } from './ClickHouseDashboardPanel'
+import { SqliteDashboardPanel } from './SqliteDashboardPanel'
 
 type WorkspaceMainProps = {
   environments: EnvironmentSummary[]
@@ -27,12 +31,15 @@ type WorkspaceMainProps = {
   openRenameSqlTabDialog: (tab: SqlTab) => void
   reorderWorkTabs: (draggedTabId: string, targetTabId: string, position?: 'before' | 'after') => void
   closeTableTab: (tabId: string) => void
+  closeDashboardTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
   activeTableTab: TableTab | null
+  activeDashboardTab: DashboardTab | null
   saveActiveTableChanges: () => Promise<void>
   isSavingTableChanges: boolean
   activeSqlTab: SqlTab | null
   updateSqlTab: (tabId: string, updater: (tab: SqlTab) => SqlTab) => void
+  updateDashboardTab: (tabId: string, updater: (tab: DashboardTab) => DashboardTab) => void
   connections: ConnectionSummary[]
   loadSqlFileToNewTab: () => Promise<void>
   saveActiveSqlFile: () => Promise<void>
@@ -85,12 +92,15 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     openRenameSqlTabDialog,
     reorderWorkTabs,
     closeTableTab,
+    closeDashboardTab,
     closeSqlTab,
     activeTableTab,
+    activeDashboardTab,
     saveActiveTableChanges,
     isSavingTableChanges,
     activeSqlTab,
     updateSqlTab,
+    updateDashboardTab,
     connections,
     loadSqlFileToNewTab,
     saveActiveSqlFile,
@@ -137,6 +147,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
               openRenameSqlTabDialog={openRenameSqlTabDialog}
               reorderWorkTabs={reorderWorkTabs}
               closeTableTab={closeTableTab}
+              closeDashboardTab={closeDashboardTab}
               closeSqlTab={closeSqlTab}
             />
           </div>
@@ -185,6 +196,23 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 exportTableCurrentPageCsv={exportTableCurrentPageCsv}
                 exportTableAllPagesCsv={exportTableAllPagesCsv}
               />
+            ) : activeDashboardTab ? (
+              activeDashboardTab.engine === 'postgres' ? (
+                <PostgresDashboardPanel
+                  activeDashboardTab={activeDashboardTab}
+                  updateDashboardTab={updateDashboardTab}
+                />
+              ) : activeDashboardTab.engine === 'clickhouse' ? (
+                <ClickHouseDashboardPanel
+                  activeDashboardTab={activeDashboardTab}
+                  updateDashboardTab={updateDashboardTab}
+                />
+              ) : (
+                <SqliteDashboardPanel
+                  activeDashboardTab={activeDashboardTab}
+                  updateDashboardTab={updateDashboardTab}
+                />
+              )
             ) : (
               <div className='pointer-card-soft flex h-full items-center justify-center border-dashed text-slate-500'>
                 Aba não encontrada.

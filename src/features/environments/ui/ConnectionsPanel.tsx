@@ -1,5 +1,5 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { Database, Eye, EyeOff, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, Database, Ellipsis, Eye, EyeOff, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { ConnectionInput, ConnectionSummary, DatabaseEngine } from '../../../../shared/db-types'
 import { createConnectionDraft, type ConnectionDraft } from '../../../entities/workspace/types'
 import { SIDEBAR_SECTION_LABEL_CLASS } from '../../../shared/constants/app'
@@ -14,11 +14,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../../../components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../../components/ui/dropdown-menu'
 import { Input } from '../../../components/ui/input'
 import { cn } from '../../../lib/utils'
 
 type ConnectionsPanelProps = {
   connections: ConnectionSummary[]
+  openConnectionDashboard: (connection: ConnectionSummary) => void
   openEditConnectionDialog: (connection: ConnectionSummary) => void
   handleDeleteConnection: (connectionId: string) => Promise<void>
   isCreateConnectionOpen: boolean
@@ -47,6 +54,7 @@ type ConnectionsPanelProps = {
 
 export function ConnectionsPanel({
   connections,
+  openConnectionDashboard,
   openEditConnectionDialog,
   handleDeleteConnection,
   isCreateConnectionOpen,
@@ -102,19 +110,39 @@ export function ConnectionsPanel({
                 variant='ghost'
                 size='icon'
                 className='h-7 w-7 shrink-0'
-                onClick={() => void openEditConnectionDialog(connection)}
+                onClick={() => openConnectionDashboard(connection)}
+                title='Abrir dashboard da conexão'
+                aria-label='Abrir dashboard da conexão'
               >
-                <Pencil className='h-3.5 w-3.5' />
+                <BarChart3 className='h-3.5 w-3.5' />
               </Button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon'
-                className='h-7 w-7 shrink-0'
-                onClick={() => void handleDeleteConnection(connection.id)}
-              >
-                <Trash2 className='h-3.5 w-3.5' />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    className='h-7 w-7 shrink-0'
+                    title='Mais ações da conexão'
+                    aria-label='Mais ações da conexão'
+                  >
+                    <Ellipsis className='h-3.5 w-3.5' />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end' className='w-48'>
+                  <DropdownMenuItem onSelect={() => void openEditConnectionDialog(connection)}>
+                    <Pencil className='h-3.5 w-3.5' />
+                    Editar conexão
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className='text-rose-300 focus:text-rose-100'
+                    onSelect={() => void handleDeleteConnection(connection.id)}
+                  >
+                    <Trash2 className='h-3.5 w-3.5' />
+                    Excluir conexão
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )
         })}

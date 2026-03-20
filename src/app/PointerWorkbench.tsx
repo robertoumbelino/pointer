@@ -196,6 +196,7 @@ function App(): JSX.Element {
     getTableTab,
     updateTableTab,
     updateSqlTab,
+    updateDashboardTab,
   } = useWorkspace()
 
   const {
@@ -326,6 +327,11 @@ function App(): JSX.Element {
   const activeSqlTab = useMemo(() => {
     const tab = workTabs.find((candidate) => candidate.id === activeTabId)
     return tab?.type === 'sql' ? tab : null
+  }, [activeTabId, workTabs])
+
+  const activeDashboardTab = useMemo(() => {
+    const tab = workTabs.find((candidate) => candidate.id === activeTabId)
+    return tab?.type === 'dashboard' ? tab : null
   }, [activeTabId, workTabs])
 
   const sqlCompletions = useMemo<Completion[]>(() => {
@@ -533,6 +539,7 @@ function App(): JSX.Element {
     reloadTableTab,
     reorderWorkTabs,
     closeTableTab,
+    closeDashboardTab,
     closeSqlTab,
     closeActiveTab,
     beginInlineEdit,
@@ -548,6 +555,7 @@ function App(): JSX.Element {
     exportSqlResultSetVisibleCsv,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    openConnectionDashboardTab,
     sendAiPromptToSqlTab,
     setAiDraftOnSqlTab,
     runSql,
@@ -990,6 +998,7 @@ function App(): JSX.Element {
             handleUpdateEnvironment={handleUpdateEnvironmentFlow}
             handleDeleteEnvironment={handleDeleteEnvironmentFlow}
             onExitWorkspace={handleExitWorkspace}
+            openConnectionDashboard={openConnectionDashboardTab}
             openEditConnectionDialog={openEditConnectionDialog}
             handleDeleteConnection={handleDeleteConnectionFlow}
             isCreateConnectionOpen={isCreateConnectionOpen}
@@ -1033,12 +1042,15 @@ function App(): JSX.Element {
             openRenameSqlTabDialog={openRenameSqlTabDialog}
             reorderWorkTabs={reorderWorkTabs}
             closeTableTab={closeTableTab}
+            closeDashboardTab={closeDashboardTab}
             closeSqlTab={closeSqlTab}
             activeTableTab={activeTableTab}
+            activeDashboardTab={activeDashboardTab}
             saveActiveTableChanges={saveActiveTableChanges}
             isSavingTableChanges={isSavingTableChanges}
             activeSqlTab={activeSqlTab}
             updateSqlTab={updateSqlTab}
+            updateDashboardTab={updateDashboardTab}
             connections={connections}
             loadSqlFileToNewTab={loadSqlFileToNewTab}
             saveActiveSqlFile={saveActiveSqlFile}
