@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.9.0 - 2026-03-20
+
+### ✨ Novidades
+- Novo dashboard operacional por conexão para PostgreSQL, ClickHouse e SQLite, com visão consolidada de métricas, tendência histórica e health score para diagnóstico rápido do banco.
+
+### 🐛 Correções
+- Corrigido o overflow horizontal no dashboard para eliminar barra de rolagem lateral indevida e manter a navegação focada apenas no scroll vertical.
+
 ## v0.8.16 - 2026-03-19
 
 ### ✨ Novidades
