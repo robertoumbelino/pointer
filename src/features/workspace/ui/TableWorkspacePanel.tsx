@@ -27,11 +27,12 @@ import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
 import { cn } from '../../../lib/utils'
 import { TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
-import { isBooleanDataType, isJsonLikeDataType } from '../../../shared/lib/workspace-utils'
+import { isArrayDataType, isBooleanDataType, isJsonLikeDataType, parseArrayInputValue } from '../../../shared/lib/workspace-utils'
 
 type JsonEditorCellState = {
   rowIndex: number
   columnName: string
+  dataType: string
   canEdit: boolean
 }
 
@@ -105,9 +106,24 @@ function resolveSelectValue(
   return encodeSelectOptionValue(String(rawValue))
 }
 
-function formatJsonEditorValue(value: unknown): string {
+function formatJsonEditorValue(value: unknown, dataType: string): string {
   if (value === null || value === undefined) {
     return ''
+  }
+
+  if (isArrayDataType(dataType)) {
+    if (Array.isArray(value)) {
+      return JSON.stringify(value, null, 2)
+    }
+
+    if (typeof value === 'string') {
+      const parsedArray = parseArrayInputValue(value)
+      if (parsedArray !== undefined) {
+        return JSON.stringify(parsedArray, null, 2)
+      }
+
+      return value
+    }
   }
 
   if (typeof value === 'string') {
@@ -126,9 +142,24 @@ function formatJsonEditorValue(value: unknown): string {
   }
 }
 
-function formatJsonPreviewValue(value: unknown): string {
+function formatJsonPreviewValue(value: unknown, dataType: string): string {
   if (value === null || value === undefined) {
     return 'NULL'
+  }
+
+  if (isArrayDataType(dataType)) {
+    if (Array.isArray(value)) {
+      return JSON.stringify(value)
+    }
+
+    if (typeof value === 'string') {
+      const parsedArray = parseArrayInputValue(value)
+      if (parsedArray !== undefined) {
+        return JSON.stringify(parsedArray)
+      }
+
+      return value
+    }
   }
 
   if (typeof value === 'string') {
@@ -323,6 +354,23 @@ export function TableWorkspacePanel({
     }
 
     try {
+      if (isArrayDataType(jsonEditorCell.dataType)) {
+        const parsedArray = parseArrayInputValue(trimmed)
+        if (parsedArray === undefined) {
+          toast.error('Array inválido. Use JSON (ex: ["WHATSAPP"]) ou literal Postgres (ex: {WHATSAPP}).')
+          return
+        }
+
+        commitInlineEdit({
+          tabId: activeTableTab.id,
+          rowIndex: jsonEditorCell.rowIndex,
+          column: jsonEditorCell.columnName,
+          value: JSON.stringify(parsedArray),
+        })
+        closeJsonEditor()
+        return
+      }
+
       const normalizedJson = JSON.stringify(JSON.parse(trimmed))
       commitInlineEdit({
         tabId: activeTableTab.id,
@@ -383,14 +431,21 @@ export function TableWorkspacePanel({
     gridContainerRef.current?.focus()
   }
 
-  const openJsonEditorForCell = (rowIndex: number, columnName: string, value: unknown, canEdit: boolean): void => {
+  const openJsonEditorForCell = (
+    rowIndex: number,
+    columnName: string,
+    dataType: string,
+    value: unknown,
+    canEdit: boolean,
+  ): void => {
     cancelInlineEdit()
     setJsonEditorCell({
       rowIndex,
       columnName,
+      dataType,
       canEdit,
     })
-    setJsonEditorValue(formatJsonEditorValue(value))
+    setJsonEditorValue(formatJsonEditorValue(value, dataType))
   }
 
   const normalizeCellPosition = (position: TableCellPosition): TableCellPosition => ({
@@ -599,6 +654,7 @@ export function TableWorkspacePanel({
     rowIndex: number,
     columnIndex: number,
     columnName: string,
+    dataType: string,
     value: unknown,
     canEditCell: boolean,
     isJsonColumn: boolean,
@@ -607,7 +663,7 @@ export function TableWorkspacePanel({
     setSingleCellSelection(position)
 
     if (isJsonColumn) {
-      openJsonEditorForCell(rowIndex, columnName, value, canEditCell)
+      openJsonEditorForCell(rowIndex, columnName, dataType, value, canEditCell)
       return
     }
 
@@ -653,7 +709,7 @@ export function TableWorkspacePanel({
 
       event.preventDefault()
       if (isJsonColumn) {
-        openJsonEditorForCell(targetCell.rowIndex, column.name, row[column.name], canEditCell)
+        openJsonEditorForCell(targetCell.rowIndex, column.name, column.dataType, row[column.name], canEditCell)
         return
       }
 
@@ -1122,6 +1178,7 @@ export function TableWorkspacePanel({
                                     rowIndex,
                                     columnIndex,
                                     column.name,
+                                    column.dataType,
                                     row[column.name],
                                     canEditCell,
                                     isJsonColumn,
@@ -1202,7 +1259,7 @@ export function TableWorkspacePanel({
                                 ) : (
                                   <div className='flex items-center gap-1.5'>
                                     <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
-                                      {isJsonColumn ? formatJsonPreviewValue(cellValue) : formatCell(cellValue)}
+                                      {isJsonColumn ? formatJsonPreviewValue(cellValue, column.dataType) : formatCell(cellValue)}
                                     </span>
                                     {column.foreignKey && (
                                       <button

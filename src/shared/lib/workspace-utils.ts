@@ -4,6 +4,7 @@ import type {
   TableRef,
   TableSchema,
 } from '../../../shared/db-types'
+import { parse as parsePostgresArray } from 'postgres-array'
 import { DEFAULT_ENVIRONMENT_COLOR } from '../constants/app'
 import { pointerApi } from '../api/pointer-api'
 import type { InsertDraftRow } from '../../entities/workspace/types'
@@ -90,6 +91,15 @@ export function normalizeInsertValue(rawValue: unknown, dataType: string): unkno
     if (!Number.isNaN(parsedNumber) && Number.isFinite(parsedNumber)) {
       return parsedNumber
     }
+  }
+
+  if (isArrayDataType(dataType)) {
+    const parsedArray = parseArrayInputValue(trimmed)
+    if (parsedArray !== undefined) {
+      return parsedArray
+    }
+
+    return trimmed
   }
 
   if (isJsonLikeDataType(dataType)) {
@@ -1076,6 +1086,19 @@ export function coerceValueByOriginal(nextValue: string, originalValue: unknown,
     return unwrapQuotedText(trimmedValue)
   }
 
+  if (dataType && isArrayDataType(dataType)) {
+    if (trimmedValue.toLowerCase() === 'null') {
+      return null
+    }
+
+    const parsedArray = parseArrayInputValue(trimmedValue)
+    if (parsedArray !== undefined) {
+      return parsedArray
+    }
+
+    return nextValue
+  }
+
   if (dataType && isJsonLikeDataType(dataType)) {
     if (trimmedValue.toLowerCase() === 'null') {
       return null
@@ -1249,6 +1272,42 @@ function isNumericDataType(dataType: string): boolean {
   return /(int|numeric|decimal|float|double|real|serial)/i.test(dataType)
 }
 
+export function isArrayDataType(dataType: string): boolean {
+  const normalized = dataType.trim()
+  if (!normalized) {
+    return false
+  }
+
+  return /^array$/i.test(normalized) || /\[\]$/i.test(normalized) || /^array\s*\(/i.test(normalized)
+}
+
+export function parseArrayInputValue(value: string): unknown[] | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  try {
+    const parsedJson = JSON.parse(trimmed)
+    if (Array.isArray(parsedJson)) {
+      return parsedJson
+    }
+  } catch {
+    // fallback to Postgres literal parsing
+  }
+
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return undefined
+  }
+
+  try {
+    const parsedArray = parsePostgresArray(trimmed)
+    return Array.isArray(parsedArray) ? parsedArray : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function isJsonLikeDataType(dataType: string): boolean {
-  return /(json|map|array|object)/i.test(dataType)
+  return /(json|map|object)/i.test(dataType) || isArrayDataType(dataType)
 }
