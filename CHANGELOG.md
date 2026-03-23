@@ -2,6 +2,11 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.9.1 - 2026-03-23
+
+### 🐛 Correções
+- Corrigido o fluxo de edição de colunas `ARRAY`/`enum[]` na visualização de tabelas: o editor agora aceita tanto JSON (como `["WHATSAPP"]`) quanto literal PostgreSQL (como `{WHATSAPP}`), com parse e salvamento consistentes.
+
 ## v0.9.0 - 2026-03-20
 
 ### ✨ Novidades
