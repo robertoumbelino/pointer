@@ -9,7 +9,12 @@ import type {
   WorkTab,
 } from '../../entities/workspace/types'
 import { createDashboardTab, createSqlTab } from '../../entities/workspace/types'
-import { PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../constants/app'
+import {
+  PAGE_SIZE,
+  TABLE_COLUMN_WIDTH_MAX,
+  TABLE_COLUMN_WIDTH_MIN,
+  TABLE_PAGE_SIZE_MAX,
+} from '../constants/app'
 
 export function buildPersistedWorkspaceStorage(
   snapshots: Record<string, EnvironmentWorkspaceSnapshot>,
@@ -84,6 +89,7 @@ function serializeWorkTab(tab: WorkTab): PersistedWorkTab {
       filterColumn: tab.filterColumn,
       filterOperator: tab.filterOperator,
       filterValue: tab.filterValue,
+      columnWidths: tab.columnWidths,
     }
   }
 
@@ -103,6 +109,25 @@ function normalizeTablePageSize(value: unknown): number {
   }
 
   return Math.min(TABLE_PAGE_SIZE_MAX, Math.max(1, Math.trunc(value)))
+}
+
+function normalizeTableColumnWidths(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const entries: [string, number][] = []
+
+  for (const [columnName, rawWidth] of Object.entries(value)) {
+    if (!columnName.trim() || typeof rawWidth !== 'number' || !Number.isFinite(rawWidth)) {
+      continue
+    }
+
+    const normalizedWidth = Math.min(TABLE_COLUMN_WIDTH_MAX, Math.max(TABLE_COLUMN_WIDTH_MIN, Math.trunc(rawWidth)))
+    entries.push([columnName, normalizedWidth])
+  }
+
+  return Object.fromEntries(entries)
 }
 
 function deserializeEnvironmentWorkspaceSnapshot(
@@ -153,6 +178,7 @@ function deserializeEnvironmentWorkspaceSnapshot(
             cellAnchor: null,
             selectedCellRange: null,
             selectionMode: 'cell',
+            columnWidths: normalizeTableColumnWidths(tab.columnWidths),
             pendingUpdates: {},
             pendingDeletes: [],
             insertDraft: null,

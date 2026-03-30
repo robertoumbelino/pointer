@@ -75,6 +75,7 @@ export type TableTab = {
   cellAnchor: TableCellPosition | null
   selectedCellRange: TableCellRange | null
   selectionMode: TableSelectionMode
+  columnWidths: Record<string, number>
   pendingUpdates: RowPendingUpdates
   pendingDeletes: number[]
   insertDraft: InsertDraftRow | null
@@ -273,6 +274,7 @@ export type PersistedTableTab = {
   filterColumn: string
   filterOperator: TableFilterOperator
   filterValue: string
+  columnWidths?: Record<string, number>
 }
 
 export type PersistedDashboardTab = {

@@ -632,6 +632,7 @@ export function useWorkspaceActions({
         cellAnchor: null,
         selectedCellRange: null,
         selectionMode: 'cell',
+        columnWidths: {},
         pendingUpdates: {},
         pendingDeletes: [],
         insertDraft: null,

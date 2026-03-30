@@ -26,7 +26,12 @@ import {
 import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
 import { cn } from '../../../lib/utils'
-import { TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
+import {
+  TABLE_COLUMN_WIDTH_DEFAULT,
+  TABLE_COLUMN_WIDTH_MAX,
+  TABLE_COLUMN_WIDTH_MIN,
+  TABLE_PAGE_SIZE_MAX,
+} from '../../../shared/constants/app'
 import { isArrayDataType, isBooleanDataType, isJsonLikeDataType, parseArrayInputValue } from '../../../shared/lib/workspace-utils'
 
 type JsonEditorCellState = {
@@ -34,6 +39,12 @@ type JsonEditorCellState = {
   columnName: string
   dataType: string
   canEdit: boolean
+}
+
+type ColumnResizeState = {
+  columnName: string
+  startX: number
+  startWidth: number
 }
 
 const NULL_SELECT_VALUE = '__pointer_null__'
@@ -259,6 +270,7 @@ export function TableWorkspacePanel({
   const [pageSizeInput, setPageSizeInput] = useState(() => String(activeTableTab.pageSize))
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
+  const [columnResizeState, setColumnResizeState] = useState<ColumnResizeState | null>(null)
   const gridContainerRef = useRef<HTMLDivElement | null>(null)
   const insertRowRef = useRef<HTMLTableRowElement | null>(null)
   const firstInsertFieldRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
@@ -325,6 +337,59 @@ export function TableWorkspacePanel({
       firstInsertFieldRef.current?.focus({ preventScroll: true })
     })
   }, [activeTableTab.id, activeTableTab.insertDraft])
+
+  useEffect(() => {
+    if (!columnResizeState) {
+      return
+    }
+
+    const previousBodyCursor = document.body.style.cursor
+    const previousBodyUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMouseMove = (event: MouseEvent): void => {
+      const deltaX = event.clientX - columnResizeState.startX
+      const nextWidth = Math.min(
+        TABLE_COLUMN_WIDTH_MAX,
+        Math.max(TABLE_COLUMN_WIDTH_MIN, Math.trunc(columnResizeState.startWidth + deltaX)),
+      )
+
+      updateTableTab(activeTableTab.id, (tab) => {
+        const currentRawWidth = tab.columnWidths?.[columnResizeState.columnName]
+        const currentWidth =
+          typeof currentRawWidth === 'number' && Number.isFinite(currentRawWidth)
+            ? Math.min(TABLE_COLUMN_WIDTH_MAX, Math.max(TABLE_COLUMN_WIDTH_MIN, Math.trunc(currentRawWidth)))
+            : TABLE_COLUMN_WIDTH_DEFAULT
+
+        if (currentWidth === nextWidth) {
+          return tab
+        }
+
+        return {
+          ...tab,
+          columnWidths: {
+            ...(tab.columnWidths ?? {}),
+            [columnResizeState.columnName]: nextWidth,
+          },
+        }
+      })
+    }
+
+    const stopColumnResize = (): void => {
+      setColumnResizeState(null)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', stopColumnResize)
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', stopColumnResize)
+      document.body.style.cursor = previousBodyCursor
+      document.body.style.userSelect = previousBodyUserSelect
+    }
+  }, [activeTableTab.id, columnResizeState, updateTableTab])
 
   const closeJsonEditor = (): void => {
     setJsonEditorCell(null)
@@ -429,6 +494,26 @@ export function TableWorkspacePanel({
 
   const focusGrid = (): void => {
     gridContainerRef.current?.focus()
+  }
+
+  const resolveColumnWidth = (columnName: string): number => {
+    const rawWidth = activeTableTab.columnWidths?.[columnName]
+    if (typeof rawWidth !== 'number' || !Number.isFinite(rawWidth)) {
+      return TABLE_COLUMN_WIDTH_DEFAULT
+    }
+
+    return Math.min(TABLE_COLUMN_WIDTH_MAX, Math.max(TABLE_COLUMN_WIDTH_MIN, Math.trunc(rawWidth)))
+  }
+
+  const handleColumnResizeMouseDown = (event: ReactMouseEvent<HTMLButtonElement>, columnName: string): void => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    setColumnResizeState({
+      columnName,
+      startX: event.clientX,
+      startWidth: resolveColumnWidth(columnName),
+    })
   }
 
   const openJsonEditorForCell = (
@@ -1025,62 +1110,88 @@ export function TableWorkspacePanel({
                 onKeyDown={handleGridKeyDown}
                 className='pointer-card-soft h-full overflow-auto outline-none focus-visible:outline-none'
               >
-                <table className='min-w-max border-collapse text-sm'>
+                <table className='min-w-max table-fixed border-collapse text-sm'>
+                  <colgroup>
+                    <col style={{ width: 40 }} />
+                    {columns.map((column) => (
+                      <col key={`width-${column.name}`} style={{ width: resolveColumnWidth(column.name) }} />
+                    ))}
+                  </colgroup>
                   <thead className='sticky top-0 z-10 bg-slate-900'>
                     <tr>
                       <th className='w-10 border-b border-slate-800/80 px-1 py-2 text-center font-semibold text-slate-400'>
                         #
                       </th>
-                      {columns.map((column) => (
-                        <th
-                          key={column.name}
-                          className='border-b border-slate-800/80 px-3 py-2 text-left font-semibold text-slate-300 whitespace-nowrap'
-                        >
-                          <button
-                            type='button'
-                            className='flex items-center gap-1'
-                            onClick={() => {
-                              updateTableTab(activeTableTab.id, (tab) => {
-                                let nextSort: TableSort | undefined
+                      {columns.map((column) => {
+                        const columnWidth = resolveColumnWidth(column.name)
 
-                                if (!tab.sort || tab.sort.column !== column.name) {
+                        return (
+                          <th
+                            key={column.name}
+                            className='group relative overflow-hidden border-b border-slate-800/80 px-3 py-2 text-left font-semibold text-slate-300'
+                            style={{
+                              width: columnWidth,
+                              minWidth: columnWidth,
+                              maxWidth: columnWidth,
+                            }}
+                          >
+                            <button
+                              type='button'
+                              className='flex w-full min-w-0 items-center gap-1 overflow-hidden pr-2 text-left'
+                              onClick={() => {
+                                updateTableTab(activeTableTab.id, (tab) => {
+                                  let nextSort: TableSort | undefined
+
+                                  if (!tab.sort || tab.sort.column !== column.name) {
+                                    nextSort = { column: column.name, direction: 'asc' }
+                                  } else if (tab.sort.direction === 'asc') {
+                                    nextSort = { column: column.name, direction: 'desc' }
+                                  }
+
+                                  return {
+                                    ...tab,
+                                    page: 0,
+                                    sort: nextSort,
+                                  }
+                                })
+
+                                let nextSort: TableSort | undefined
+                                if (!activeTableTab.sort || activeTableTab.sort.column !== column.name) {
                                   nextSort = { column: column.name, direction: 'asc' }
-                                } else if (tab.sort.direction === 'asc') {
+                                } else if (activeTableTab.sort.direction === 'asc') {
                                   nextSort = { column: column.name, direction: 'desc' }
                                 }
 
-                                return {
-                                  ...tab,
+                                void reloadTableTab(activeTableTab.id, {
                                   page: 0,
                                   sort: nextSort,
-                                }
-                              })
-
-                              let nextSort: TableSort | undefined
-                              if (!activeTableTab.sort || activeTableTab.sort.column !== column.name) {
-                                nextSort = { column: column.name, direction: 'asc' }
-                              } else if (activeTableTab.sort.direction === 'asc') {
-                                nextSort = { column: column.name, direction: 'desc' }
-                              }
-
-                              void reloadTableTab(activeTableTab.id, {
-                                page: 0,
-                                sort: nextSort,
-                              })
-                            }}
-                          >
-                            <span>{column.name}</span>
-                            {activeTableTab.loading && activeTableTab.sort?.column === column.name ? (
-                              <RefreshCw className='h-3.5 w-3.5 animate-spin text-slate-300' />
-                            ) : activeTableTab.sort?.column === column.name && (
-                              <span className='text-slate-300'>
-                                {activeTableTab.sort.direction === 'asc' ? '↑' : '↓'}
-                              </span>
-                            )}
-                            {column.isPrimaryKey && <Badge className='ml-1'>PK</Badge>}
-                          </button>
-                        </th>
-                      ))}
+                                })
+                              }}
+                            >
+                              <span className='truncate'>{column.name}</span>
+                              {activeTableTab.loading && activeTableTab.sort?.column === column.name ? (
+                                <RefreshCw className='h-3.5 w-3.5 animate-spin text-slate-300' />
+                              ) : activeTableTab.sort?.column === column.name && (
+                                <span className='text-slate-300'>
+                                  {activeTableTab.sort.direction === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                              {column.isPrimaryKey && <Badge className='ml-1'>PK</Badge>}
+                            </button>
+                            <button
+                              type='button'
+                              aria-label={`Redimensionar coluna ${column.name}`}
+                              className='absolute right-0 top-0 z-10 h-full w-2 cursor-col-resize select-none bg-transparent p-0'
+                              onMouseDown={(event) => handleColumnResizeMouseDown(event, column.name)}
+                            >
+                              <span
+                                aria-hidden='true'
+                                className='pointer-events-none absolute left-1/2 top-1/2 h-4 -translate-x-1/2 -translate-y-1/2 border-l border-slate-600/60 opacity-80 transition-colors group-hover:border-slate-400/70'
+                              />
+                            </button>
+                          </th>
+                        )
+                      })}
                     </tr>
                   </thead>
                   <tbody>
@@ -1138,6 +1249,9 @@ export function TableWorkspacePanel({
                               editingCell.column === column.name
                             const cellValue = row[column.name]
                             const isJsonColumn = isJsonLikeDataType(column.dataType)
+                            const displayCellValue = isJsonColumn
+                              ? formatJsonPreviewValue(cellValue, column.dataType)
+                              : formatCell(cellValue)
                             const isBooleanColumn = isBooleanDataType(column.dataType)
                             const enumValues = column.enumValues ?? []
                             const hasEnumColumnValues = enumValues.length > 0
@@ -1154,12 +1268,13 @@ export function TableWorkspacePanel({
                               activeTableTab.activeCell?.rowIndex === rowIndex &&
                               activeTableTab.activeCell?.columnIndex === columnIndex
                             const isCellSelected = isCellInSelectedRange(rowIndex, columnIndex)
+                            const columnWidth = resolveColumnWidth(column.name)
 
                             return (
                               <td
                                 key={column.name}
                                 className={cn(
-                                  'min-w-[190px] px-3 py-2 text-slate-200 whitespace-nowrap',
+                                  'overflow-hidden px-3 py-2 text-slate-200',
                                   isJsonColumn && 'cursor-pointer',
                                   isPendingDelete
                                     ? 'bg-red-500/20'
@@ -1170,6 +1285,11 @@ export function TableWorkspacePanel({
                                         : '',
                                   isActiveCell && 'shadow-[inset_0_0_0_1px_rgba(148,163,184,0.8)]',
                                 )}
+                                style={{
+                                  width: columnWidth,
+                                  minWidth: columnWidth,
+                                  maxWidth: columnWidth,
+                                }}
                                 onMouseDown={(event) => handleCellMouseDown(event, rowIndex, columnIndex)}
                                 onMouseEnter={(event) => handleCellMouseEnter(event, rowIndex, columnIndex)}
                                 onClick={(event) => handleCellClick(event, rowIndex, columnIndex)}
@@ -1257,9 +1377,12 @@ export function TableWorkspacePanel({
                                     />
                                   )
                                 ) : (
-                                  <div className='flex items-center gap-1.5'>
-                                    <span className={cn(isJsonColumn && 'font-mono text-[12px]')}>
-                                      {isJsonColumn ? formatJsonPreviewValue(cellValue, column.dataType) : formatCell(cellValue)}
+                                  <div className='flex min-w-0 items-center gap-1.5'>
+                                    <span
+                                      className={cn('min-w-0 flex-1 truncate', isJsonColumn && 'font-mono text-[12px]')}
+                                      title={displayCellValue}
+                                    >
+                                      {displayCellValue}
                                     </span>
                                     {column.foreignKey && (
                                       <button
@@ -1317,9 +1440,18 @@ export function TableWorkspacePanel({
                               : []
                           const hasSelectValues = selectValues.length > 0
                           const allowUnsetBooleanInsert = isBooleanColumn && !column.nullable
+                          const columnWidth = resolveColumnWidth(column.name)
 
                           return (
-                            <td key={`insert-${column.name}`} className='min-w-[190px] bg-emerald-500/10 px-2 py-1.5'>
+                            <td
+                              key={`insert-${column.name}`}
+                              className='overflow-hidden bg-emerald-500/10 px-2 py-1.5'
+                              style={{
+                                width: columnWidth,
+                                minWidth: columnWidth,
+                                maxWidth: columnWidth,
+                              }}
+                            >
                               {hasSelectValues ? (
                                 <select
                                   ref={
