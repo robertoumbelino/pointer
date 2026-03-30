@@ -9,7 +9,7 @@ import { Button } from '../../../components/ui/button'
 import { ButtonGroup } from '../../../components/ui/button-group'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
 import { Textarea } from '../../../components/ui/textarea'
-import { AUTO_SQL_CONNECTION_ID } from '../../../shared/constants/app'
+import { AUTO_SQL_CONNECTION_ID, SQL_RESULT_RENDER_MAX_ROWS } from '../../../shared/constants/app'
 import { extractFromJoinTableReferenceAtCursor } from '../../../shared/lib/workspace-utils'
 
 type SqlWorkspacePanelProps = {
@@ -389,7 +389,8 @@ export function SqlWorkspacePanel({
                         return left.originalIndex - right.originalIndex
                       })
                       .map(({ row }) => row)
-                    const visibleRows = sortedRows.slice(0, 300)
+                    const visibleRows = sortedRows.slice(0, SQL_RESULT_RENDER_MAX_ROWS)
+                    const hasTruncatedRows = sortedRows.length > SQL_RESULT_RENDER_MAX_ROWS
                     const resultSetSchemaSignature = resultSet.fields.join('|')
 
                     return (
@@ -432,6 +433,11 @@ export function SqlWorkspacePanel({
                             </DropdownMenu>
                           </div>
                         </div>
+                        {hasTruncatedRows && (
+                          <div className='border-b border-slate-800/80 px-3 py-1.5 text-[11px] text-amber-300/90'>
+                            Mostrando {visibleRows.length} de {sortedRows.length} linhas
+                          </div>
+                        )}
                         <div className='overflow-auto'>
                           <table className='w-full min-w-max text-xs'>
                             <thead className='bg-slate-900'>

@@ -1,5 +1,6 @@
 export const PAGE_SIZE = 100
 export const TABLE_PAGE_SIZE_MAX = 500
+export const SQL_RESULT_RENDER_MAX_ROWS = 50_000
 export const AUTO_SQL_CONNECTION_ID = '__auto__'
 export const DEFAULT_SQL = 'SELECT NOW() AS current_time;\n\n\n\n\n\n\n\n\n'
 export const DEFAULT_ENVIRONMENT_COLOR = '#0EA5E9'
