@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.9.4 - 2026-03-30
+
+### ✨ Novidades
+- A visualização de tabela agora permite copiar o SQL de `INSERT` diretamente pelo clique direito no número da linha, já preenchido com os valores daquele registro.
+
+### ♻️ Melhorias
+- Esta release foi classificada como `patch` por se tratar de melhoria incremental de UX no fluxo de tabela.
+
 ## v0.9.3 - 2026-03-30
 
 ### ✨ Novidades
