@@ -2,6 +2,18 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.9.3 - 2026-03-30
+
+### ✨ Novidades
+- A visualização de tabela agora permite redimensionar colunas por arraste direto no cabeçalho, com larguras persistidas por tabela para manter o layout do jeito que você organizou.
+- Adicionado um guia visual sutil entre colunas para facilitar o ponto de clique do resize sem poluir a interface.
+
+### 🐛 Correções
+- Aumentado o limite de renderização de resultados SQL para até 50.000 linhas na grade, com aviso de truncamento quando houver recorte visual.
+
+### ♻️ Melhorias
+- Conteúdos longos em células agora mantêm a tabela estável com truncamento por reticências e tooltip com valor completo no hover.
+
 ## v0.9.1 - 2026-03-23
 
 ### 🐛 Correções
