@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type SetStateAction,
 } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Link2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Link2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ColumnForeignKeyRef, TableFilterOperator, TableSort } from '../../../../shared/db-types'
 import type { EditingCell, TableCellPosition, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
@@ -45,6 +45,12 @@ type ColumnResizeState = {
   columnName: string
   startX: number
   startWidth: number
+}
+
+type RowContextMenuState = {
+  rowIndex: number
+  x: number
+  y: number
 }
 
 const NULL_SELECT_VALUE = '__pointer_null__'
@@ -227,6 +233,7 @@ type TableWorkspacePanelProps = {
   closeTableTab: (tabId: string) => void
   handleToggleInsertDraftRow: () => void
   handleDeleteRow: () => void
+  copyInsertSqlFromTableRow: (tabId: string, rowIndex: number) => Promise<void>
   updateTableTab: (tabId: string, updater: (tab: TableTab) => TableTab) => void
   beginInlineEdit: (rowIndex: number, column: string) => void
   editingCell: EditingCell | null
@@ -251,6 +258,7 @@ export function TableWorkspacePanel({
   closeTableTab,
   handleToggleInsertDraftRow,
   handleDeleteRow,
+  copyInsertSqlFromTableRow,
   updateTableTab,
   beginInlineEdit,
   editingCell,
@@ -271,6 +279,7 @@ export function TableWorkspacePanel({
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
   const [columnResizeState, setColumnResizeState] = useState<ColumnResizeState | null>(null)
+  const [rowContextMenu, setRowContextMenu] = useState<RowContextMenuState | null>(null)
   const gridContainerRef = useRef<HTMLDivElement | null>(null)
   const insertRowRef = useRef<HTMLTableRowElement | null>(null)
   const firstInsertFieldRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
@@ -291,6 +300,10 @@ export function TableWorkspacePanel({
   useEffect(() => {
     setPageSizeInput(String(activeTableTab.pageSize))
   }, [activeTableTab.id, activeTableTab.pageSize])
+
+  useEffect(() => {
+    setRowContextMenu(null)
+  }, [activeTableTab.id])
 
   useEffect(() => {
     const handleMouseUp = (): void => {
@@ -628,6 +641,31 @@ export function TableWorkspacePanel({
         selectedCellRange: null,
       }
     })
+  }
+
+  const handleRowSelectorContextMenu = (event: ReactMouseEvent<HTMLButtonElement>, rowIndex: number): void => {
+    if (rowCount === 0) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const normalizedRow = clamp(rowIndex, 0, rowCount - 1)
+    setRowContextMenu({
+      rowIndex: normalizedRow,
+      x: event.clientX,
+      y: event.clientY,
+    })
+  }
+
+  const handleCopyInsertSqlFromContextRow = async (): Promise<void> => {
+    if (!rowContextMenu) {
+      return
+    }
+
+    await copyInsertSqlFromTableRow(activeTableTab.id, rowContextMenu.rowIndex)
+    setRowContextMenu(null)
   }
 
   const handleCellMouseDown = (
@@ -1231,6 +1269,7 @@ export function TableWorkspacePanel({
                             <button
                               type='button'
                               onClick={(event) => handleRowSelectorClick(event, rowIndex)}
+                              onContextMenu={(event) => handleRowSelectorContextMenu(event, rowIndex)}
                               className={cn(
                                 'h-6 w-full rounded text-[10px] font-medium text-slate-200 transition-colors border border-transparent',
                                 isRowSelected
@@ -1626,6 +1665,45 @@ export function TableWorkspacePanel({
         </div>
         </div>
       )}
+
+      <DropdownMenu
+        open={Boolean(rowContextMenu)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRowContextMenu(null)
+          }
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            type='button'
+            aria-hidden
+            tabIndex={-1}
+            className='fixed h-0 w-0 opacity-0 pointer-events-none'
+            style={{
+              left: rowContextMenu?.x ?? -9999,
+              top: rowContextMenu?.y ?? -9999,
+            }}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align='start'
+          side='right'
+          sideOffset={8}
+          className='w-[220px]'
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              void handleCopyInsertSqlFromContextRow()
+            }}
+          >
+            <Copy className='h-3.5 w-3.5 text-slate-400' />
+            Copiar SQL de Insert
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog
         open={isExportDialogOpen}

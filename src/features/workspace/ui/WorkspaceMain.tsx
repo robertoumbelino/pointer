@@ -53,6 +53,7 @@ type WorkspaceMainProps = {
   navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
   handleToggleInsertDraftRow: () => void
   handleDeleteRow: () => void
+  copyInsertSqlFromTableRow: (tabId: string, rowIndex: number) => Promise<void>
   updateTableTab: (tabId: string, updater: (tab: TableTab) => TableTab) => void
   beginInlineEdit: (rowIndex: number, column: string) => void
   editingCell: EditingCell | null
@@ -114,6 +115,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     navigateToForeignKey,
     handleToggleInsertDraftRow,
     handleDeleteRow,
+    copyInsertSqlFromTableRow,
     updateTableTab,
     beginInlineEdit,
     editingCell,
@@ -182,6 +184,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 closeTableTab={closeTableTab}
                 handleToggleInsertDraftRow={handleToggleInsertDraftRow}
                 handleDeleteRow={handleDeleteRow}
+                copyInsertSqlFromTableRow={copyInsertSqlFromTableRow}
                 updateTableTab={updateTableTab}
                 beginInlineEdit={beginInlineEdit}
                 editingCell={editingCell}

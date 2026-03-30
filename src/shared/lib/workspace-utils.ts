@@ -186,6 +186,62 @@ export function buildInsertTemplateSql(engine: DatabaseEngine, schema: TableSche
   return `INSERT INTO ${quoteSqlIdentifier(engine, schema.table.schema)}.${quoteSqlIdentifier(engine, schema.table.name)} (\n  ${columns.join(',\n  ')}\n)\nVALUES (\n  ${placeholders.join(',\n  ')}\n);`
 }
 
+function quoteSqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+function formatSqlInsertLiteral(value: unknown): string {
+  if (value === null || value === undefined) {
+    return 'NULL'
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : 'NULL'
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString()
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'TRUE' : 'FALSE'
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    if (Number.isNaN(timestamp)) {
+      return 'NULL'
+    }
+
+    return quoteSqlStringLiteral(value.toISOString())
+  }
+
+  if (typeof value === 'string') {
+    return quoteSqlStringLiteral(value)
+  }
+
+  if (typeof value === 'object') {
+    try {
+      return quoteSqlStringLiteral(JSON.stringify(value))
+    } catch {
+      return quoteSqlStringLiteral(String(value))
+    }
+  }
+
+  return quoteSqlStringLiteral(String(value))
+}
+
+export function buildInsertSqlFromRow(
+  engine: DatabaseEngine,
+  schema: TableSchema,
+  row: Record<string, unknown>,
+): string {
+  const columns = schema.columns.map((column) => quoteSqlIdentifier(engine, column.name))
+  const values = schema.columns.map((column) => formatSqlInsertLiteral(row[column.name]))
+
+  return `INSERT INTO ${quoteSqlIdentifier(engine, schema.table.schema)}.${quoteSqlIdentifier(engine, schema.table.name)} (\n  ${columns.join(',\n  ')}\n)\nVALUES (\n  ${values.join(',\n  ')}\n);`
+}
+
 export function quoteSqlIdentifier(engine: DatabaseEngine, identifier: string): string {
   if (engine === 'clickhouse') {
     return '`' + identifier.replace(/`/g, '``') + '`'

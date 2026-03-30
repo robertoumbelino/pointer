@@ -15,6 +15,7 @@ import { AUTO_SQL_CONNECTION_ID, PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../..
 import { buildCsvContent } from '../../../shared/lib/csv'
 import {
   buildClickHouseUnknownTableFallbackSql,
+  buildInsertSqlFromRow,
   buildInsertPayload,
   cloneRows,
   coerceValueByOriginal,
@@ -93,6 +94,7 @@ type UseWorkspaceActionsResult = {
   handleToggleInsertDraftRow: () => void
   updateInsertDraftValue: (columnName: string, value: string | null) => void
   handleDeleteRow: () => void
+  copyInsertSqlFromTableRow: (tabId: string, rowIndex: number) => Promise<void>
   copyTableSelection: () => Promise<void>
   pasteIntoTableSelection: (rawClipboardText: string) => void
   exportSqlResultSetVisibleCsv: (params: {
@@ -1415,6 +1417,34 @@ export function useWorkspaceActions({
     }
   }
 
+  async function copyInsertSqlFromTableRow(tabId: string, rowIndex: number): Promise<void> {
+    const tab = getTableTab(tabId)
+    if (!tab?.schema || !tab.data) {
+      toast.info('Carregue a tabela antes de copiar SQL de insert.')
+      return
+    }
+
+    const normalizedRowIndex = Math.trunc(rowIndex)
+    if (!Number.isInteger(normalizedRowIndex) || normalizedRowIndex < 0 || normalizedRowIndex >= tab.data.rows.length) {
+      toast.error('Linha inválida para copiar SQL de insert.')
+      return
+    }
+
+    const row = tab.data.rows[normalizedRowIndex]
+    if (!row) {
+      toast.error('Linha não encontrada para copiar SQL de insert.')
+      return
+    }
+
+    try {
+      const sql = buildInsertSqlFromRow(tab.engine, tab.schema, row)
+      await pointerApi.copyToClipboard(sql)
+      toast.success('SQL de insert copiado.')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   async function copyTableSelection(): Promise<void> {
     const tab = getTableTab(activeTabId)
     if (!tab?.data || !tab.schema) {
@@ -2003,6 +2033,7 @@ export function useWorkspaceActions({
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
+    copyInsertSqlFromTableRow,
     copyTableSelection,
     pasteIntoTableSelection,
     exportSqlResultSetVisibleCsv,

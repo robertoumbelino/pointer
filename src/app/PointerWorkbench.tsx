@@ -550,6 +550,7 @@ function App(): JSX.Element {
     handleToggleInsertDraftRow,
     updateInsertDraftValue,
     handleDeleteRow,
+    copyInsertSqlFromTableRow,
     copyTableSelection,
     pasteIntoTableSelection,
     exportSqlResultSetVisibleCsv,
@@ -1064,6 +1065,7 @@ function App(): JSX.Element {
             navigateToForeignKey={navigateToForeignKey}
             handleToggleInsertDraftRow={handleToggleInsertDraftRow}
             handleDeleteRow={handleDeleteRow}
+            copyInsertSqlFromTableRow={copyInsertSqlFromTableRow}
             updateTableTab={updateTableTab}
             beginInlineEdit={beginInlineEdit}
             editingCell={editingCell}
