@@ -29,6 +29,7 @@ import {
 } from '../../../shared/lib/workspace-utils'
 import {
   createDashboardTab,
+  createTableDashboardTab,
   createSqlTab,
   type DashboardTab,
   type EditingCell,
@@ -74,6 +75,7 @@ type UseWorkspaceActionsParams = {
 type UseWorkspaceActionsResult = {
   openNewSqlTab: () => void
   openConnectionDashboardTab: (connection: ConnectionSummary) => void
+  openTableDashboardTab: (hit: TableSearchHit) => void
   loadSqlFileToNewTab: () => Promise<void>
   saveActiveSqlFile: () => Promise<void>
   openRenameSqlTabDialog: (tab: SqlTab) => void
@@ -926,6 +928,23 @@ export function useWorkspaceActions({
     setWorkTabs((current) => [
       ...current,
       createDashboardTab(tabId, connection.engine, connection.id, connection.name),
+    ])
+    setActiveTabId(tabId)
+  }
+
+  function openTableDashboardTab(hit: TableSearchHit): void {
+    const tabId = `dashboard:table:${hit.engine}:${hit.connectionId}:${hit.table.fqName}`
+    const existing = workTabsRef.current.find(
+      (tab): tab is DashboardTab => tab.id === tabId && tab.type === 'dashboard',
+    )
+    if (existing) {
+      setActiveTabId(existing.id)
+      return
+    }
+
+    setWorkTabs((current) => [
+      ...current,
+      createTableDashboardTab(tabId, hit.engine, hit.connectionId, hit.connectionName, hit.table),
     ])
     setActiveTabId(tabId)
   }
@@ -2013,6 +2032,7 @@ export function useWorkspaceActions({
   return {
     openNewSqlTab,
     openConnectionDashboardTab,
+    openTableDashboardTab,
     loadSqlFileToNewTab,
     saveActiveSqlFile,
     openRenameSqlTabDialog,

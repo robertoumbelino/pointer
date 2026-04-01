@@ -8,7 +8,7 @@ import type {
   TableTab,
   WorkTab,
 } from '../../entities/workspace/types'
-import { createDashboardTab, createSqlTab } from '../../entities/workspace/types'
+import { createDashboardTab, createSqlTab, createTableDashboardTab } from '../../entities/workspace/types'
 import {
   PAGE_SIZE,
   TABLE_COLUMN_WIDTH_MAX,
@@ -100,6 +100,8 @@ function serializeWorkTab(tab: WorkTab): PersistedWorkTab {
     engine: tab.engine,
     connectionId: tab.connectionId,
     connectionName: tab.connectionName,
+    scope: tab.scope,
+    table: tab.scope === 'table' ? tab.table : undefined,
   }
 }
 
@@ -188,8 +190,13 @@ function deserializeEnvironmentWorkspaceSnapshot(
           } as TableTab
         }
 
+        const restoredDashboard =
+          tab.scope === 'table' && tab.table
+            ? createTableDashboardTab(tab.id, tab.engine, tab.connectionId, tab.connectionName, tab.table)
+            : createDashboardTab(tab.id, tab.engine, tab.connectionId, tab.connectionName)
+
         return {
-          ...createDashboardTab(tab.id, tab.engine, tab.connectionId, tab.connectionName),
+          ...restoredDashboard,
           title: tab.title,
         } as DashboardTab
       })

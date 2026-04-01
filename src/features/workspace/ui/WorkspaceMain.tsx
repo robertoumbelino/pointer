@@ -4,6 +4,7 @@ import type {
   ConnectionSummary,
   DatabaseEngine,
   EnvironmentSummary,
+  TableSearchHit,
   TableRef,
 } from '../../../../shared/db-types'
 import type {
@@ -21,6 +22,9 @@ import { TableWorkspacePanel } from './TableWorkspacePanel'
 import { PostgresDashboardPanel } from './PostgresDashboardPanel'
 import { ClickHouseDashboardPanel } from './ClickHouseDashboardPanel'
 import { SqliteDashboardPanel } from './SqliteDashboardPanel'
+import { PostgresTableDashboardPanel } from './PostgresTableDashboardPanel'
+import { ClickHouseTableDashboardPanel } from './ClickHouseTableDashboardPanel'
+import { SqliteTableDashboardPanel } from './SqliteTableDashboardPanel'
 
 type WorkspaceMainProps = {
   environments: EnvironmentSummary[]
@@ -33,6 +37,7 @@ type WorkspaceMainProps = {
   closeTableTab: (tabId: string) => void
   closeDashboardTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
+  openTableDashboard: (hit: TableSearchHit) => void
   activeTableTab: TableTab | null
   activeDashboardTab: DashboardTab | null
   saveActiveTableChanges: () => Promise<void>
@@ -95,6 +100,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     closeTableTab,
     closeDashboardTab,
     closeSqlTab,
+    openTableDashboard,
     activeTableTab,
     activeDashboardTab,
     saveActiveTableChanges,
@@ -177,6 +183,14 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
             ) : activeTableTab ? (
               <TableWorkspacePanel
                 activeTableTab={activeTableTab}
+                openTableDashboard={() =>
+                  openTableDashboard({
+                    connectionId: activeTableTab.connectionId,
+                    connectionName: activeTableTab.connectionName,
+                    engine: activeTableTab.engine,
+                    table: activeTableTab.table,
+                  })
+                }
                 saveActiveTableChanges={saveActiveTableChanges}
                 isSavingTableChanges={isSavingTableChanges}
                 reloadTableTab={reloadTableTab}
@@ -200,21 +214,40 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 exportTableAllPagesCsv={exportTableAllPagesCsv}
               />
             ) : activeDashboardTab ? (
-              activeDashboardTab.engine === 'postgres' ? (
-                <PostgresDashboardPanel
-                  activeDashboardTab={activeDashboardTab}
-                  updateDashboardTab={updateDashboardTab}
-                />
-              ) : activeDashboardTab.engine === 'clickhouse' ? (
-                <ClickHouseDashboardPanel
-                  activeDashboardTab={activeDashboardTab}
-                  updateDashboardTab={updateDashboardTab}
-                />
+              activeDashboardTab.scope === 'connection' ? (
+                activeDashboardTab.engine === 'postgres' ? (
+                  <PostgresDashboardPanel
+                    activeDashboardTab={activeDashboardTab}
+                    updateDashboardTab={updateDashboardTab}
+                  />
+                ) : activeDashboardTab.engine === 'clickhouse' ? (
+                  <ClickHouseDashboardPanel
+                    activeDashboardTab={activeDashboardTab}
+                    updateDashboardTab={updateDashboardTab}
+                  />
+                ) : (
+                  <SqliteDashboardPanel
+                    activeDashboardTab={activeDashboardTab}
+                    updateDashboardTab={updateDashboardTab}
+                  />
+                )
               ) : (
-                <SqliteDashboardPanel
-                  activeDashboardTab={activeDashboardTab}
-                  updateDashboardTab={updateDashboardTab}
-                />
+                activeDashboardTab.engine === 'postgres' ? (
+                  <PostgresTableDashboardPanel
+                    activeDashboardTab={activeDashboardTab}
+                    updateDashboardTab={updateDashboardTab}
+                  />
+                ) : activeDashboardTab.engine === 'clickhouse' ? (
+                  <ClickHouseTableDashboardPanel
+                    activeDashboardTab={activeDashboardTab}
+                    updateDashboardTab={updateDashboardTab}
+                  />
+                ) : (
+                  <SqliteTableDashboardPanel
+                    activeDashboardTab={activeDashboardTab}
+                    updateDashboardTab={updateDashboardTab}
+                  />
+                )
               )
             ) : (
               <div className='pointer-card-soft flex h-full items-center justify-center border-dashed text-slate-500'>

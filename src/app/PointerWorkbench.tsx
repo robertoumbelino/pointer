@@ -557,6 +557,7 @@ function App(): JSX.Element {
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
     openConnectionDashboardTab,
+    openTableDashboardTab,
     sendAiPromptToSqlTab,
     setAiDraftOnSqlTab,
     runSql,
@@ -669,6 +670,14 @@ function App(): JSX.Element {
       })
     },
     [openTableStructureSheetByTarget, setTableContextMenu],
+  )
+
+  const handleOpenTableDashboard = useCallback(
+    (hit: TableSearchHit): void => {
+      setTableContextMenu(null)
+      openTableDashboardTab(hit)
+    },
+    [openTableDashboardTab, setTableContextMenu],
   )
 
   const handleRequestSqlTableStructure = useCallback(
@@ -1045,6 +1054,7 @@ function App(): JSX.Element {
             closeTableTab={closeTableTab}
             closeDashboardTab={closeDashboardTab}
             closeSqlTab={closeSqlTab}
+            openTableDashboard={openTableDashboardTab}
             activeTableTab={activeTableTab}
             activeDashboardTab={activeDashboardTab}
             saveActiveTableChanges={saveActiveTableChanges}
@@ -1090,6 +1100,7 @@ function App(): JSX.Element {
       <TableContextMenu
         tableContextMenu={tableContextMenu}
         setTableContextMenu={setTableContextMenu}
+        onOpenDashboard={handleOpenTableDashboard}
         onViewStructure={handleOpenTableStructure}
         onCopyStructureSql={handleCopyTableStructureSql}
         onCopyInsertSql={handleCopyInsertTemplateSql}

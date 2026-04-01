@@ -181,6 +181,7 @@ export type SqliteDashboardMetrics = {
 type DashboardTabBase = {
   id: string
   type: 'dashboard'
+  scope: 'connection' | 'table'
   title: string
   engine: DatabaseEngine
   connectionId: string
@@ -190,7 +191,12 @@ type DashboardTabBase = {
   lastUpdatedAt: string | null
 }
 
+type ConnectionDashboardTabBase = DashboardTabBase & {
+  scope: 'connection'
+}
+
 export type PostgresDashboardTab = DashboardTabBase & {
+  scope: 'connection'
   engine: 'postgres'
   metrics: PostgresDashboardMetrics | null
   history: PostgresDashboardSeriesPoint[]
@@ -199,6 +205,7 @@ export type PostgresDashboardTab = DashboardTabBase & {
 }
 
 export type ClickHouseDashboardTab = DashboardTabBase & {
+  scope: 'connection'
   engine: 'clickhouse'
   metrics: ClickHouseDashboardMetrics | null
   history: ClickHouseDashboardSeriesPoint[]
@@ -209,6 +216,7 @@ export type ClickHouseDashboardTab = DashboardTabBase & {
 }
 
 export type SqliteDashboardTab = DashboardTabBase & {
+  scope: 'connection'
   engine: 'sqlite'
   metrics: SqliteDashboardMetrics | null
   history: SqliteDashboardSeriesPoint[]
@@ -216,7 +224,142 @@ export type SqliteDashboardTab = DashboardTabBase & {
   lastCounters: null
 }
 
-export type DashboardTab = PostgresDashboardTab | ClickHouseDashboardTab | SqliteDashboardTab
+export type PostgresTableDashboardCounters = {
+  collectedAt: string
+  seqScan: number
+  idxScan: number
+}
+
+export type PostgresTableDashboardIndexPoint = {
+  name: string
+  definition: string
+  isPrimary: boolean
+  isUnique: boolean
+  sizeBytes: number
+  scans: number
+  tuplesRead: number
+  tuplesFetch: number
+}
+
+export type PostgresTableDashboardMetrics = {
+  collectedAt: string
+  tableSizeBytes: number
+  indexesSizeBytes: number
+  totalSizeBytes: number
+  estimatedRows: number
+  deadRows: number
+  deadRatio: number | null
+  seqScan: number
+  idxScan: number
+  indexUsageRatio: number | null
+  seqScansPerMinute: number | null
+  idxScansPerMinute: number | null
+  lastVacuum: string | null
+  lastAutovacuum: string | null
+  lastAnalyze: string | null
+  lastAutoanalyze: string | null
+}
+
+export type PostgresTableDashboardSeriesPoint = {
+  timeLabel: string
+  seqScansPerMinute: number
+  idxScansPerMinute: number
+  indexUsageRatio: number | null
+}
+
+export type ClickHouseTableDashboardIndexPoint = {
+  name: string
+  type: string
+  expression: string
+  granularity: string
+  kind: 'skipping' | 'key'
+}
+
+export type ClickHouseTableDashboardMetrics = {
+  collectedAt: string
+  tableEngine: string
+  totalRows: number
+  totalBytes: number
+  compressedBytes: number
+  uncompressedBytes: number
+  activeParts: number
+  activeBytes: number
+  primaryKey: string
+  sortingKey: string
+  partitionKey: string
+  readQueries1h: number | null
+  readRows1h: number | null
+  readBytes1h: number | null
+  indexWarning: string | null
+  scanWarning: string | null
+}
+
+export type ClickHouseTableDashboardSeriesPoint = {
+  timeLabel: string
+  queries: number
+  readRows: number
+  readBytes: number
+}
+
+export type SqliteTableDashboardIndexPoint = {
+  name: string
+  sql: string | null
+  isUnique: boolean
+}
+
+export type SqliteTableDashboardMetrics = {
+  collectedAt: string
+  databaseSizeBytes: number
+  freelistBytes: number
+  tableSizeBytes: number | null
+  tableSizeWarning: string | null
+  indexCount: number
+  rowCount: number | null
+  pageCount: number
+  pageSize: number
+  freelistCount: number
+  scanSummary: string
+  scanDetails: string[]
+}
+
+export type SqliteTableDashboardSeriesPoint = {
+  timeLabel: string
+  tableSizeBytes: number | null
+  rowCount: number | null
+}
+
+type TableDashboardTabBase = DashboardTabBase & {
+  scope: 'table'
+  table: TableRef
+}
+
+export type PostgresTableDashboardTab = TableDashboardTabBase & {
+  engine: 'postgres'
+  metrics: PostgresTableDashboardMetrics | null
+  indexes: PostgresTableDashboardIndexPoint[]
+  history: PostgresTableDashboardSeriesPoint[]
+  lastCounters: PostgresTableDashboardCounters | null
+}
+
+export type ClickHouseTableDashboardTab = TableDashboardTabBase & {
+  engine: 'clickhouse'
+  metrics: ClickHouseTableDashboardMetrics | null
+  indexes: ClickHouseTableDashboardIndexPoint[]
+  history: ClickHouseTableDashboardSeriesPoint[]
+  lastCounters: null
+}
+
+export type SqliteTableDashboardTab = TableDashboardTabBase & {
+  engine: 'sqlite'
+  metrics: SqliteTableDashboardMetrics | null
+  indexes: SqliteTableDashboardIndexPoint[]
+  history: SqliteTableDashboardSeriesPoint[]
+  lastCounters: null
+}
+
+export type ConnectionDashboardTab = PostgresDashboardTab | ClickHouseDashboardTab | SqliteDashboardTab
+export type TableDashboardTab = PostgresTableDashboardTab | ClickHouseTableDashboardTab | SqliteTableDashboardTab
+export type DashboardTab = ConnectionDashboardTab | TableDashboardTab
 
 export type WorkTab = SqlTab | TableTab | DashboardTab
 
@@ -284,6 +427,8 @@ export type PersistedDashboardTab = {
   engine: DatabaseEngine
   connectionId: string
   connectionName: string
+  scope?: 'connection' | 'table'
+  table?: TableRef
 }
 
 export type PersistedWorkTab = PersistedSqlTab | PersistedTableTab | PersistedDashboardTab
@@ -334,9 +479,10 @@ export function createDashboardTab(
   connectionId: string,
   connectionName: string,
 ): DashboardTab {
-  const baseTab: DashboardTabBase = {
+  const baseTab: ConnectionDashboardTabBase = {
     id,
     type: 'dashboard',
+    scope: 'connection',
     title: `Dashboard ${connectionName}`,
     engine,
     connectionId,
@@ -386,6 +532,67 @@ export function createPostgresDashboardTab(
   connectionName: string,
 ): DashboardTab {
   return createDashboardTab(id, 'postgres', connectionId, connectionName)
+}
+
+function formatTableDashboardTitle(table: TableRef): string {
+  if (table.schema === 'public' || table.schema === 'default') {
+    return table.name
+  }
+
+  return `${table.schema}.${table.name}`
+}
+
+export function createTableDashboardTab(
+  id: string,
+  engine: DatabaseEngine,
+  connectionId: string,
+  connectionName: string,
+  table: TableRef,
+): TableDashboardTab {
+  const baseTab: TableDashboardTabBase = {
+    id,
+    type: 'dashboard',
+    scope: 'table',
+    title: formatTableDashboardTitle(table),
+    engine,
+    connectionId,
+    connectionName,
+    table,
+    loading: false,
+    loadError: null,
+    lastUpdatedAt: null,
+  }
+
+  if (engine === 'clickhouse') {
+    return {
+      ...baseTab,
+      engine,
+      metrics: null,
+      indexes: [],
+      history: [],
+      lastCounters: null,
+    }
+  }
+
+  if (engine === 'sqlite') {
+    return {
+      ...baseTab,
+      engine,
+      metrics: null,
+      indexes: [],
+      history: [],
+      lastCounters: null,
+    }
+  }
+
+  return {
+    ...baseTab,
+    engine: 'postgres',
+    metrics: null,
+    indexes: [],
+    history: [],
+    lastCounters: null,
+  }
 }
 
 export function createConnectionDraft(environmentId: string): ConnectionDraft {

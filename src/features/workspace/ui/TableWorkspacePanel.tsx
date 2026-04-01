@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type SetStateAction,
 } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Link2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Link2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ColumnForeignKeyRef, TableFilterOperator, TableSort } from '../../../../shared/db-types'
 import type { EditingCell, TableCellPosition, TableReloadOverrides, TableTab } from '../../../entities/workspace/types'
@@ -226,6 +226,7 @@ function isInteractiveCellTarget(target: EventTarget | null): boolean {
 
 type TableWorkspacePanelProps = {
   activeTableTab: TableTab
+  openTableDashboard: () => void
   saveActiveTableChanges: () => Promise<void>
   isSavingTableChanges: boolean
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
@@ -251,6 +252,7 @@ type TableWorkspacePanelProps = {
 
 export function TableWorkspacePanel({
   activeTableTab,
+  openTableDashboard,
   saveActiveTableChanges,
   isSavingTableChanges,
   reloadTableTab,
@@ -982,6 +984,17 @@ export function TableWorkspacePanel({
           </h2>
         </div>
         <div className='flex flex-wrap items-center gap-2'>
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            className='h-8 w-8'
+            onClick={openTableDashboard}
+            title='Abrir dashboard da tabela'
+            aria-label='Abrir dashboard da tabela'
+          >
+            <BarChart3 className='h-3.5 w-3.5' />
+          </Button>
           {!hasLoadError && (
             <div className='flex items-center gap-2'>
               <select

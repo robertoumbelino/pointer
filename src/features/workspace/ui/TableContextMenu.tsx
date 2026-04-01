@@ -1,4 +1,4 @@
-import { Copy, Eye, FileCode2, Table2 } from 'lucide-react'
+import { BarChart3, Copy, Eye, FileCode2, Table2 } from 'lucide-react'
 import type { TableSearchHit } from '../../../../shared/db-types'
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ type TableContextMenuState = {
 type TableContextMenuProps = {
   tableContextMenu: TableContextMenuState | null
   setTableContextMenu: (value: TableContextMenuState | null) => void
+  onOpenDashboard: (hit: TableSearchHit) => void
   onViewStructure: (hit: TableSearchHit) => Promise<void>
   onCopyStructureSql: (hit: TableSearchHit) => Promise<void>
   onCopyInsertSql: (hit: TableSearchHit) => Promise<void>
@@ -26,6 +27,7 @@ type TableContextMenuProps = {
 export function TableContextMenu({
   tableContextMenu,
   setTableContextMenu,
+  onOpenDashboard,
   onViewStructure,
   onCopyStructureSql,
   onCopyInsertSql,
@@ -63,6 +65,19 @@ export function TableContextMenu({
           TABELA
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            if (!tableContextMenu) {
+              return
+            }
+
+            onOpenDashboard(tableContextMenu.hit)
+          }}
+        >
+          <BarChart3 className='h-3.5 w-3.5 text-slate-400' />
+          Abrir dashboard da tabela
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={(event) => {
             event.preventDefault()
