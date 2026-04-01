@@ -2,6 +2,13 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.10.0 - 2026-04-01
+
+### ✨ Novidades
+- Novo dashboard por tabela para PostgreSQL, ClickHouse e SQLite, com abertura em nova aba usando o nome da tabela e acesso direto pelo clique direito na listagem ou pelo ícone no topo da visão de tabela.
+- O painel agora destaca informações operacionais por tabela como armazenamento, indicadores de scan e listagem de índices, com adaptação automática por engine.
+- A experiência visual dos cards de métricas foi refinada para manter alinhamento consistente e leitura mais limpa em títulos e valores, inclusive em nomes longos de engine.
+
 ## v0.9.4 - 2026-03-30
 
 ### ✨ Novidades
