@@ -2,6 +2,11 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.10.1 - 2026-04-08
+
+### 🐛 Correções
+- Corrigido o `Cmd/Ctrl+C` na visualização de tabelas para colunas `json/jsonb` em seleção de célula única: agora o valor é copiado como JSON válido já formatado (indentação de 2 espaços), sem escape duplicado.
+
 ## v0.10.0 - 2026-04-01
 
 ### ✨ Novidades
