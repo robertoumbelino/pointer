@@ -24,6 +24,7 @@ import {
   formatDraftInputValue,
   formatTableLabel,
   getErrorMessage,
+  isJsonLikeDataType,
   getSqlStatementAtCursor,
   valuesEqual,
 } from '../../../shared/lib/workspace-utils'
@@ -232,7 +233,9 @@ function normalizeIdentifier(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function formatClipboardValue(value: unknown): string {
+function formatClipboardValue(value: unknown, dataType?: string, options?: { prettyJson?: boolean }): string {
+  const prettyJson = options?.prettyJson === true
+
   if (value === null || value === undefined) {
     return ''
   }
@@ -248,6 +251,29 @@ function formatClipboardValue(value: unknown): string {
       const seconds = String(value.getSeconds()).padStart(2, '0')
       const millis = String(value.getMilliseconds()).padStart(3, '0')
       return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`
+    }
+  }
+
+  if (dataType && isJsonLikeDataType(dataType)) {
+    const indentation = prettyJson ? 2 : undefined
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) {
+        return value
+      }
+
+      try {
+        return JSON.stringify(JSON.parse(trimmed), null, indentation)
+      } catch {
+        return value
+      }
+    }
+
+    try {
+      return JSON.stringify(value, null, indentation)
+    } catch {
+      return String(value)
     }
   }
 
@@ -1477,6 +1503,7 @@ export function useWorkspaceActions({
     }
 
     let matrix: string[][] = []
+    let directCopyValue: string | null = null
 
     if (tab.selectedCellRange) {
       const startRow = Math.max(0, Math.min(tab.selectedCellRange.start.rowIndex, rowCount - 1))
@@ -1488,20 +1515,32 @@ export function useWorkspaceActions({
       const minCol = Math.min(startCol, endCol)
       const maxCol = Math.max(startCol, endCol)
 
-      for (let rowIndex = minRow; rowIndex <= maxRow; rowIndex += 1) {
-        const row = tab.data.rows[rowIndex]
-        if (!row) {
-          continue
+      if (minRow === maxRow && minCol === maxCol) {
+        const row = tab.data.rows[minRow]
+        const column = tab.schema.columns[minCol]
+        if (row && column) {
+          if (isJsonLikeDataType(column.dataType)) {
+            directCopyValue = formatClipboardValue(row[column.name], column.dataType, { prettyJson: true })
+          } else {
+            matrix = [[formatClipboardValue(row[column.name], column.dataType)]]
+          }
         }
-        const line: string[] = []
-        for (let columnIndex = minCol; columnIndex <= maxCol; columnIndex += 1) {
-          const columnName = tab.schema.columns[columnIndex]?.name
-          if (!columnName) {
+      } else {
+        for (let rowIndex = minRow; rowIndex <= maxRow; rowIndex += 1) {
+          const row = tab.data.rows[rowIndex]
+          if (!row) {
             continue
           }
-          line.push(formatClipboardValue(row[columnName]))
+          const line: string[] = []
+          for (let columnIndex = minCol; columnIndex <= maxCol; columnIndex += 1) {
+            const column = tab.schema.columns[columnIndex]
+            if (!column) {
+              continue
+            }
+            line.push(formatClipboardValue(row[column.name], column.dataType))
+          }
+          matrix.push(line)
         }
-        matrix.push(line)
       }
     } else if (tab.selectedRowIndexes.length > 0) {
       const selectedRows = Array.from(new Set(tab.selectedRowIndexes))
@@ -1510,16 +1549,30 @@ export function useWorkspaceActions({
 
       matrix = selectedRows.map((rowIndex) => {
         const row = tab.data?.rows[rowIndex] ?? {}
-        return tab.schema?.columns.map((column) => formatClipboardValue(row[column.name])) ?? []
+        return tab.schema?.columns.map((column) => formatClipboardValue(row[column.name], column.dataType)) ?? []
       })
     } else if (tab.activeCell) {
       const rowIndex = tab.activeCell.rowIndex
       const columnIndex = tab.activeCell.columnIndex
       const row = tab.data.rows[rowIndex]
-      const columnName = tab.schema.columns[columnIndex]?.name
-      if (row && columnName) {
-        matrix = [[formatClipboardValue(row[columnName])]]
+      const column = tab.schema.columns[columnIndex]
+      if (row && column) {
+        if (isJsonLikeDataType(column.dataType)) {
+          directCopyValue = formatClipboardValue(row[column.name], column.dataType, { prettyJson: true })
+        } else {
+          matrix = [[formatClipboardValue(row[column.name], column.dataType)]]
+        }
       }
+    }
+
+    if (directCopyValue !== null) {
+      try {
+        await pointerApi.copyToClipboard(directCopyValue)
+        toast.success('Seleção copiada.')
+      } catch (error) {
+        toast.error(getErrorMessage(error))
+      }
+      return
     }
 
     if (matrix.length === 0 || matrix.every((line) => line.length === 0)) {
