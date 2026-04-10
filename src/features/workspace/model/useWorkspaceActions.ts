@@ -233,6 +233,47 @@ function normalizeIdentifier(value: string): string {
   return value.trim().toLowerCase()
 }
 
+function looksLikeJsonObjectOrArray(value: string): boolean {
+  return (
+    (value.startsWith('{') && value.endsWith('}')) ||
+    (value.startsWith('[') && value.endsWith(']'))
+  )
+}
+
+function parseClipboardNestedJson(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed || !looksLikeJsonObjectOrArray(trimmed)) {
+      return value
+    }
+
+    try {
+      return parseClipboardNestedJson(JSON.parse(trimmed))
+    } catch {
+      return value
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => parseClipboardNestedJson(item))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        key,
+        parseClipboardNestedJson(nestedValue),
+      ]),
+    )
+  }
+
+  return value
+}
+
+function isClipboardJsonLikeDataType(dataType: string): boolean {
+  return isJsonLikeDataType(dataType) || /\bnested\s*\(/i.test(dataType)
+}
+
 function formatClipboardValue(value: unknown, dataType?: string, options?: { prettyJson?: boolean }): string {
   const prettyJson = options?.prettyJson === true
 
@@ -254,26 +295,18 @@ function formatClipboardValue(value: unknown, dataType?: string, options?: { pre
     }
   }
 
-  if (dataType && isJsonLikeDataType(dataType)) {
+  if (dataType && isClipboardJsonLikeDataType(dataType)) {
     const indentation = prettyJson ? 2 : undefined
+    const normalizedJsonValue = parseClipboardNestedJson(value)
 
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (!trimmed) {
-        return value
-      }
-
-      try {
-        return JSON.stringify(JSON.parse(trimmed), null, indentation)
-      } catch {
-        return value
-      }
+    if (typeof normalizedJsonValue === 'string') {
+      return normalizedJsonValue
     }
 
     try {
-      return JSON.stringify(value, null, indentation)
+      return JSON.stringify(normalizedJsonValue, null, indentation)
     } catch {
-      return String(value)
+      return String(normalizedJsonValue)
     }
   }
 
@@ -1519,7 +1552,7 @@ export function useWorkspaceActions({
         const row = tab.data.rows[minRow]
         const column = tab.schema.columns[minCol]
         if (row && column) {
-          if (isJsonLikeDataType(column.dataType)) {
+          if (isClipboardJsonLikeDataType(column.dataType)) {
             directCopyValue = formatClipboardValue(row[column.name], column.dataType, { prettyJson: true })
           } else {
             matrix = [[formatClipboardValue(row[column.name], column.dataType)]]
@@ -1557,7 +1590,7 @@ export function useWorkspaceActions({
       const row = tab.data.rows[rowIndex]
       const column = tab.schema.columns[columnIndex]
       if (row && column) {
-        if (isJsonLikeDataType(column.dataType)) {
+        if (isClipboardJsonLikeDataType(column.dataType)) {
           directCopyValue = formatClipboardValue(row[column.name], column.dataType, { prettyJson: true })
         } else {
           matrix = [[formatClipboardValue(row[column.name], column.dataType)]]
