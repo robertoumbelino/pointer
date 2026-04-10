@@ -2,6 +2,11 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.10.2 - 2026-04-10
+
+### 🐛 Correções
+- Corrigido o copy de colunas `Nested(...)` no grid de tabelas: o Pointer agora normaliza JSON aninhado durante a cópia, removendo escapes extras (como barras) quando o conteúdo interno é JSON válido.
+
 ## v0.10.1 - 2026-04-08
 
 ### 🐛 Correções
