@@ -163,6 +163,19 @@ export function WorkspaceTabsBar({
     [workTabs],
   )
 
+  const closeTab = useCallback(
+    (tab: WorkTab): void => {
+      if (tab.type === 'table') {
+        closeTableTab(tab.id)
+      } else if (tab.type === 'dashboard') {
+        closeDashboardTab(tab.id)
+      } else {
+        closeSqlTab(tab.id)
+      }
+    },
+    [closeDashboardTab, closeSqlTab, closeTableTab],
+  )
+
   const handleTabClick = (event: MouseEvent<HTMLButtonElement>, tabId: string): void => {
     if (Date.now() < suppressClickUntilRef.current) {
       event.preventDefault()
@@ -170,6 +183,16 @@ export function WorkspaceTabsBar({
     }
 
     setActiveTabId(tabId)
+  }
+
+  const handleTabAuxClick = (event: MouseEvent<HTMLButtonElement>, tab: WorkTab, canClose: boolean): void => {
+    if (event.button !== 1 || !canClose) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    closeTab(tab)
   }
 
   const handleDragStart = (event: DragEvent<HTMLButtonElement>, tabId: string): void => {
@@ -287,6 +310,7 @@ export function WorkspaceTabsBar({
                     shouldCollapseDraggingSlot && 'pointer-events-none w-0 min-w-0 overflow-hidden border-transparent px-0 opacity-0',
                   )}
                   onClick={(event) => handleTabClick(event, tab.id)}
+                  onAuxClick={(event) => handleTabAuxClick(event, tab, canClose)}
                   onDragStart={(event) => handleDragStart(event, tab.id)}
                   onDragEnd={clearDragStateDeferred}
                   onDoubleClick={() => {
@@ -316,24 +340,12 @@ export function WorkspaceTabsBar({
                       }}
                       onClick={(event) => {
                         event.stopPropagation()
-                        if (tab.type === 'table') {
-                          closeTableTab(tab.id)
-                        } else if (tab.type === 'dashboard') {
-                          closeDashboardTab(tab.id)
-                        } else {
-                          closeSqlTab(tab.id)
-                        }
+                        closeTab(tab)
                       }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
-                          if (tab.type === 'table') {
-                            closeTableTab(tab.id)
-                          } else if (tab.type === 'dashboard') {
-                            closeDashboardTab(tab.id)
-                          } else {
-                            closeSqlTab(tab.id)
-                          }
+                          closeTab(tab)
                         }
                       }}
                     >
