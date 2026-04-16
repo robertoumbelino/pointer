@@ -2,6 +2,15 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.10.4 - 2026-04-16
+
+### ✨ Novidades
+- A visualização de tabelas ganhou o operador de filtro `is not null`, facilitando análises rápidas de registros com valores preenchidos sem precisar escrever SQL manual.
+- Agora é possível fechar abas diretamente com clique do botão do meio do mouse na barra de abas, seguindo o comportamento esperado de navegação por abas.
+
+### ♻️ Melhorias
+- Esta release foi classificada como `patch` por consolidar melhorias incrementais de usabilidade no workspace e na exploração de tabelas.
+
 ## v0.10.2 - 2026-04-10
 
 ### 🐛 Correções
