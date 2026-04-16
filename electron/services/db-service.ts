@@ -2503,6 +2503,11 @@ function buildPostgresWhereClause(filters: TableFilter[], availableColumns: stri
       continue
     }
 
+    if (filter.operator === 'is_not_null') {
+      parts.push(`${quotePostgresIdentifier(filter.column)} IS NOT NULL`)
+      continue
+    }
+
     if (filter.operator === 'eq') {
       values.push(filter.value)
       parts.push(`CAST(${quotePostgresIdentifier(filter.column)} AS TEXT) = $${values.length}`)
@@ -2551,6 +2556,11 @@ function buildClickHouseWhereClause(
 
   for (const filter of filters) {
     if (!availableColumns.includes(filter.column)) {
+      continue
+    }
+
+    if (filter.operator === 'is_not_null') {
+      parts.push(`${quoteClickHouseIdentifier(filter.column)} IS NOT NULL`)
       continue
     }
 
@@ -2604,6 +2614,11 @@ function buildSqliteWhereClause(filters: TableFilter[], availableColumns: string
 
   for (const filter of filters) {
     if (!availableColumns.includes(filter.column)) {
+      continue
+    }
+
+    if (filter.operator === 'is_not_null') {
+      parts.push(`${quoteSqliteIdentifier(filter.column)} IS NOT NULL`)
       continue
     }
 

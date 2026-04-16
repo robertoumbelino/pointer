@@ -7,6 +7,7 @@ import type {
   ConnectionSummary,
   SqlExecutionResult,
   TableFilter,
+  TableFilterOperator,
   TableSearchHit,
 } from '../../../../shared/db-types'
 import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../../../shared/db-types'
@@ -207,15 +208,31 @@ function triggerCsvDownload(filename: string, csvContent: string): void {
 }
 
 function buildTableFilters(tab: TableTab): TableFilter[] {
-  if (!tab.filterColumn || !tab.filterValue) {
+  return buildSingleTableFilter(tab.filterColumn, tab.filterOperator, tab.filterValue)
+}
+
+function shouldApplyTableFilter(filterColumn: string, filterOperator: TableFilterOperator, filterValue: string): boolean {
+  if (!filterColumn) {
+    return false
+  }
+
+  if (filterOperator === 'is_not_null') {
+    return true
+  }
+
+  return Boolean(filterValue)
+}
+
+function buildSingleTableFilter(filterColumn: string, filterOperator: TableFilterOperator, filterValue: string): TableFilter[] {
+  if (!shouldApplyTableFilter(filterColumn, filterOperator, filterValue)) {
     return []
   }
 
   return [
     {
-      column: tab.filterColumn,
-      operator: tab.filterOperator,
-      value: tab.filterValue,
+      column: filterColumn,
+      operator: filterOperator,
+      value: filterOperator === 'is_not_null' ? '' : filterValue,
     },
   ]
 }
@@ -506,7 +523,8 @@ export function useWorkspaceActions({
         const nextFilterColumn = initialLoad?.filterColumn ?? ''
         const nextFilterOperator = initialLoad?.filterOperator ?? 'ilike'
         const nextFilterValue = initialLoad?.filterValue ?? ''
-        const needsSchemaBeforeRead = Boolean(nextFilterValue && !nextFilterColumn)
+        const hasPendingFilter = nextFilterOperator === 'is_not_null' || Boolean(nextFilterValue)
+        const needsSchemaBeforeRead = Boolean(hasPendingFilter && !nextFilterColumn)
         const schemaPromise = pointerApi.describeTable(hit.connectionId, hit.table)
 
         let schema: Awaited<ReturnType<typeof pointerApi.describeTable>>
@@ -516,10 +534,7 @@ export function useWorkspaceActions({
         if (needsSchemaBeforeRead) {
           schema = await schemaPromise
           resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
-          const filters =
-            resolvedFilterColumn && nextFilterValue
-              ? [{ column: resolvedFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
-              : []
+          const filters = buildSingleTableFilter(resolvedFilterColumn, nextFilterOperator, nextFilterValue)
 
           data = await pointerApi.readTable(hit.connectionId, hit.table, {
             page: nextPage,
@@ -528,10 +543,7 @@ export function useWorkspaceActions({
             filters,
           })
         } else {
-          const filters =
-            nextFilterColumn && nextFilterValue
-              ? [{ column: nextFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
-              : []
+          const filters = buildSingleTableFilter(nextFilterColumn, nextFilterOperator, nextFilterValue)
 
           const [resolvedSchema, resolvedData] = await Promise.all([
             schemaPromise,
@@ -763,10 +775,7 @@ export function useWorkspaceActions({
     updateTableTab(tabId, (current) => ({ ...current, loading: true, loadError: null }))
 
     try {
-      const filters =
-        nextFilterColumn && nextFilterValue
-          ? [{ column: nextFilterColumn, operator: nextFilterOperator, value: nextFilterValue }]
-          : []
+      const filters = buildSingleTableFilter(nextFilterColumn, nextFilterOperator, nextFilterValue)
 
       const result = await pointerApi.readTable(tab.connectionId, tab.table, {
         page: nextPage,

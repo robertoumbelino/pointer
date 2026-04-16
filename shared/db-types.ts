@@ -81,7 +81,7 @@ export interface TableSort {
   direction: SortDirection
 }
 
-export type TableFilterOperator = 'eq' | 'ilike' | 'in'
+export type TableFilterOperator = 'eq' | 'ilike' | 'in' | 'is_not_null'
 
 export interface TableFilter {
   column: string
