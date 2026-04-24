@@ -28,7 +28,7 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-lg border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-xl duration-200',
+        'fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-lg border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-xl outline-none duration-200',
         className,
       )}
       {...props}
