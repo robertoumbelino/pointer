@@ -2,6 +2,19 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.11.0 - 2026-04-24
+
+### ✨ Novidades
+- Resultados de SQL e páginas de tabela agora podem ser exportados também em JSON, facilitando integração com scripts, revisão de payloads e compartilhamento de dados estruturados sem depender de CSV.
+
+### 🐛 Correções
+- Corrigido o tratamento de colunas `ARRAY` do PostgreSQL ao copiar SQL de `INSERT`: arrays vazios e valores como `["WHATSAPP"]` agora são convertidos para literais válidos do Postgres.
+- O modo Auto do SQL agora reconhece tabelas em comandos `INSERT INTO` e `UPDATE`, usando a mesma inferência de conexão já esperada em consultas com `FROM`.
+- Ajustado o foco visual de diálogos para evitar contorno indesejado ao abrir modais.
+
+### ♻️ Melhorias
+- Esta release foi classificada como `minor` por adicionar exportação JSON como nova capacidade visível no workspace.
+
 ## v0.10.4 - 2026-04-16
 
 ### ✨ Novidades
