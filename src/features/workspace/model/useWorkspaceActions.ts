@@ -2146,7 +2146,7 @@ export function useWorkspaceActions({
 
     const tableReference = extractFirstFromTableReference(sqlToExecute)
     if (!tableReference) {
-      toast.error('No modo Auto, informe uma query com FROM tabela para inferir a conexão.')
+      toast.error('No modo Auto, informe uma query com tabela para inferir a conexão.')
       return null
     }
 

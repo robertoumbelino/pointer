@@ -190,6 +190,28 @@ function quoteSqlStringLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
+function formatPostgresArrayElement(value: unknown): string {
+  if (value === null || value === undefined) {
+    return 'NULL'
+  }
+
+  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function formatPostgresArraySqlLiteral(value: unknown): string | null {
+  const arrayValue = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? parseArrayInputValue(value)
+      : undefined
+
+  if (!arrayValue) {
+    return null
+  }
+
+  return quoteSqlStringLiteral(`{${arrayValue.map(formatPostgresArrayElement).join(',')}}`)
+}
+
 function formatSqlInsertLiteral(value: unknown): string {
   if (value === null || value === undefined) {
     return 'NULL'
@@ -231,13 +253,24 @@ function formatSqlInsertLiteral(value: unknown): string {
   return quoteSqlStringLiteral(String(value))
 }
 
+function formatSqlInsertLiteralForColumn(engine: DatabaseEngine, column: TableSchema['columns'][number], value: unknown): string {
+  if (engine === 'postgres' && isArrayDataType(column.dataType)) {
+    const arrayLiteral = formatPostgresArraySqlLiteral(value)
+    if (arrayLiteral !== null) {
+      return arrayLiteral
+    }
+  }
+
+  return formatSqlInsertLiteral(value)
+}
+
 export function buildInsertSqlFromRow(
   engine: DatabaseEngine,
   schema: TableSchema,
   row: Record<string, unknown>,
 ): string {
   const columns = schema.columns.map((column) => quoteSqlIdentifier(engine, column.name))
-  const values = schema.columns.map((column) => formatSqlInsertLiteral(row[column.name]))
+  const values = schema.columns.map((column) => formatSqlInsertLiteralForColumn(engine, column, row[column.name]))
 
   return `INSERT INTO ${quoteSqlIdentifier(engine, schema.table.schema)}.${quoteSqlIdentifier(engine, schema.table.name)} (\n  ${columns.join(',\n  ')}\n)\nVALUES (\n  ${values.join(',\n  ')}\n);`
 }
@@ -731,7 +764,7 @@ export type SqlFromTableReference = {
   fqName: string
 }
 
-type SqlTableReferenceKeyword = 'from' | 'join'
+type SqlTableReferenceKeyword = 'from' | 'join' | 'into' | 'update'
 
 type SqlFromTableReferenceRange = {
   reference: SqlFromTableReference
@@ -843,6 +876,7 @@ function readTableReferenceAfterKeyword(
   source: string,
   keywordStart: number,
   keywordLength: number,
+  options?: { allowFollowingParenthesis?: boolean },
 ): { reference: SqlFromTableReference | null; nextIndex: number; start: number; end: number } {
   let cursor = skipWhitespace(source, keywordStart + keywordLength)
   if (cursor >= source.length) {
@@ -875,7 +909,7 @@ function readTableReferenceAfterKeyword(
   }
 
   cursor = skipWhitespace(source, firstPart.nextIndex)
-  if (source[cursor] === '(') {
+  if (!options?.allowFollowingParenthesis && source[cursor] === '(') {
     return {
       reference: null,
       nextIndex: cursor + 1,
@@ -1023,7 +1057,9 @@ function collectSqlTableReferences(
         continue
       }
 
-      const parsed = readTableReferenceAfterKeyword(source, index, keyword.length)
+      const parsed = readTableReferenceAfterKeyword(source, index, keyword.length, {
+        allowFollowingParenthesis: keyword === 'into',
+      })
       if (parsed.reference) {
         results.push({
           reference: parsed.reference,
@@ -1040,10 +1076,35 @@ function collectSqlTableReferences(
   return results
 }
 
+function firstSqlStatementKeyword(sqlText: string): string {
+  return sqlText
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--.*$/gm, ' ')
+    .trim()
+    .split(/\s+/)[0]
+    ?.toUpperCase() ?? ''
+}
+
 export function extractFirstFromTableReference(sqlText: string): SqlFromTableReference | null {
-  const firstFrom = collectSqlTableReferences(sqlText, ['from'])[0]
-  if (firstFrom) {
-    return firstFrom.reference
+  const firstKeyword = firstSqlStatementKeyword(sqlText)
+
+  if (firstKeyword === 'INSERT') {
+    const firstInsertTarget = collectSqlTableReferences(sqlText, ['into'])[0]
+    if (firstInsertTarget) {
+      return firstInsertTarget.reference
+    }
+  }
+
+  if (firstKeyword === 'UPDATE') {
+    const firstUpdateTarget = collectSqlTableReferences(sqlText, ['update'])[0]
+    if (firstUpdateTarget) {
+      return firstUpdateTarget.reference
+    }
+  }
+
+  const firstFromSource = collectSqlTableReferences(sqlText, ['from'])[0]
+  if (firstFromSource) {
+    return firstFromSource.reference
   }
 
   return null

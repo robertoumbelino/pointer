@@ -5,6 +5,7 @@ import BetterSqlite3 from 'better-sqlite3'
 import Store from 'electron-store'
 import keytar from 'keytar'
 import { Client as PgClient, Pool, type PoolClient, type QueryResult, types as pgTypes } from 'pg'
+import { parse as parsePostgresArray } from 'postgres-array'
 import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../shared/db-types'
 import type {
   ColumnDef,
@@ -2450,7 +2451,15 @@ function hasTableReadModifiers(input: TableReadInput): boolean {
 
 function normalizePostgresColumnValue(value: unknown, column?: ColumnDef): unknown {
   const normalized = normalizeValue(value)
-  if (!column || !isPostgresJsonColumn(column) || normalized === null || normalized === undefined) {
+  if (!column || normalized === null || normalized === undefined) {
+    return normalized
+  }
+
+  if (isPostgresArrayColumn(column)) {
+    return normalizePostgresArrayColumnValue(normalized, column)
+  }
+
+  if (!isPostgresJsonColumn(column)) {
     return normalized
   }
 
@@ -2472,6 +2481,55 @@ function normalizePostgresColumnValue(value: unknown, column?: ColumnDef): unkno
   } catch {
     throw new Error(`Valor inválido para coluna JSON "${column.name}".`)
   }
+}
+
+function normalizePostgresArrayColumnValue(value: unknown, column: ColumnDef): unknown {
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return null
+  }
+
+  const parsedArray = parsePostgresArrayInputValue(trimmed)
+  if (parsedArray !== undefined) {
+    return parsedArray
+  }
+
+  throw new Error(`Valor inválido para coluna ARRAY "${column.name}".`)
+}
+
+function parsePostgresArrayInputValue(value: string): unknown[] | undefined {
+  try {
+    const parsedJson = JSON.parse(value)
+    if (Array.isArray(parsedJson)) {
+      return parsedJson
+    }
+  } catch {
+    // fallback to Postgres literal parsing
+  }
+
+  if (!value.startsWith('{') || !value.endsWith('}')) {
+    return undefined
+  }
+
+  try {
+    const parsedArray = parsePostgresArray(value)
+    return Array.isArray(parsedArray) ? parsedArray : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function isPostgresArrayColumn(column: ColumnDef): boolean {
+  const normalized = column.dataType.trim()
+  return /^array$/i.test(normalized) || /\[\]$/i.test(normalized) || /^array\s*\(/i.test(normalized)
 }
 
 function isPostgresJsonColumn(column: ColumnDef): boolean {
