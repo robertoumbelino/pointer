@@ -14,6 +14,7 @@ import { SQL_EXECUTION_CANCELED_MESSAGE } from '../../../../shared/db-types'
 import { pointerApi } from '../../../shared/api/pointer-api'
 import { AUTO_SQL_CONNECTION_ID, PAGE_SIZE, TABLE_PAGE_SIZE_MAX } from '../../../shared/constants/app'
 import { buildCsvContent } from '../../../shared/lib/csv'
+import { buildJsonContent } from '../../../shared/lib/json'
 import {
   buildClickHouseUnknownTableFallbackSql,
   buildInsertSqlFromRow,
@@ -106,9 +107,19 @@ type UseWorkspaceActionsResult = {
     resultSetIndex: number
     fields: string[]
     rows: Record<string, unknown>[]
+    selectedColumns: string[]
   }) => void
-  exportTableCurrentPageCsv: (tabId: string) => void
-  exportTableAllPagesCsv: (tabId: string) => Promise<void>
+  exportSqlResultSetVisibleJson: (params: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+    selectedColumns: string[]
+  }) => void
+  exportTableCurrentPageCsv: (tabId: string, selectedColumns: string[]) => void
+  exportTableAllPagesCsv: (tabId: string, selectedColumns: string[]) => Promise<void>
+  exportTableCurrentPageJson: (tabId: string, selectedColumns: string[]) => void
+  exportTableAllPagesJson: (tabId: string, selectedColumns: string[]) => Promise<void>
   openAiSqlTabWithPrompt: (prompt: string) => Promise<void>
   sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
   setAiDraftOnSqlTab: (tabId: string, value: string) => void
@@ -196,6 +207,19 @@ const CANCEL_UNLOCK_TIMEOUT_MS = 6_000
 
 function triggerCsvDownload(filename: string, csvContent: string): void {
   const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8' })
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+}
+
+function triggerJsonDownload(filename: string, jsonContent: string): void {
+  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8' })
   const objectUrl = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = objectUrl
@@ -1781,16 +1805,23 @@ export function useWorkspaceActions({
     toast.info('Nenhuma célula válida para colar na seleção atual.')
   }
 
+  function resolveExportColumns(allColumns: string[], selectedColumns: string[]): string[] {
+    const selectedColumnSet = new Set(selectedColumns)
+    return allColumns.filter((column) => selectedColumnSet.has(column))
+  }
+
   function exportSqlResultSetVisibleCsv({
     tabId,
     resultSetIndex,
     fields,
     rows,
+    selectedColumns,
   }: {
     tabId: string
     resultSetIndex: number
     fields: string[]
     rows: Record<string, unknown>[]
+    selectedColumns: string[]
   }): void {
     const sqlTab = getSqlTab(tabId)
     if (!sqlTab) {
@@ -1798,7 +1829,13 @@ export function useWorkspaceActions({
     }
 
     try {
-      const csvContent = buildCsvContent(fields, rows)
+      const columns = resolveExportColumns(fields, selectedColumns)
+      if (columns.length === 0) {
+        toast.info('Selecione ao menos uma coluna para exportar.')
+        return
+      }
+
+      const csvContent = buildCsvContent(columns, rows)
       const tabPart = sanitizeFilenamePart(sqlTab.title) || 'sql'
       const filename = `pointer-sql-${tabPart}-resultset-${resultSetIndex + 1}-${buildTimestamp()}.csv`
       triggerCsvDownload(filename, csvContent)
@@ -1808,7 +1845,42 @@ export function useWorkspaceActions({
     }
   }
 
-  function exportTableCurrentPageCsv(tabId: string): void {
+  function exportSqlResultSetVisibleJson({
+    tabId,
+    resultSetIndex,
+    fields,
+    rows,
+    selectedColumns,
+  }: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+    selectedColumns: string[]
+  }): void {
+    const sqlTab = getSqlTab(tabId)
+    if (!sqlTab) {
+      return
+    }
+
+    try {
+      const columns = resolveExportColumns(fields, selectedColumns)
+      if (columns.length === 0) {
+        toast.info('Selecione ao menos uma coluna para exportar.')
+        return
+      }
+
+      const jsonContent = buildJsonContent(columns, rows)
+      const tabPart = sanitizeFilenamePart(sqlTab.title) || 'sql'
+      const filename = `pointer-sql-${tabPart}-resultset-${resultSetIndex + 1}-${buildTimestamp()}.json`
+      triggerJsonDownload(filename, jsonContent)
+      toast.success(`JSON exportado (${rows.length} linha(s)).`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  function exportTableCurrentPageCsv(tabId: string, selectedColumns: string[]): void {
     const tab = getTableTab(tabId)
     if (!tab?.schema || !tab.data) {
       toast.info('Carregue a tabela antes de exportar.')
@@ -1816,7 +1888,15 @@ export function useWorkspaceActions({
     }
 
     try {
-      const columns = tab.schema.columns.map((column) => column.name)
+      const columns = resolveExportColumns(
+        tab.schema.columns.map((column) => column.name),
+        selectedColumns,
+      )
+      if (columns.length === 0) {
+        toast.info('Selecione ao menos uma coluna para exportar.')
+        return
+      }
+
       const rows = tab.baseRows ?? tab.data.rows
       const csvContent = buildCsvContent(columns, rows)
       const tablePart = sanitizeFilenamePart(formatTableLabel(tab.table)) || 'table'
@@ -1828,14 +1908,50 @@ export function useWorkspaceActions({
     }
   }
 
-  async function exportTableAllPagesCsv(tabId: string): Promise<void> {
+  function exportTableCurrentPageJson(tabId: string, selectedColumns: string[]): void {
+    const tab = getTableTab(tabId)
+    if (!tab?.schema || !tab.data) {
+      toast.info('Carregue a tabela antes de exportar.')
+      return
+    }
+
+    try {
+      const columns = resolveExportColumns(
+        tab.schema.columns.map((column) => column.name),
+        selectedColumns,
+      )
+      if (columns.length === 0) {
+        toast.info('Selecione ao menos uma coluna para exportar.')
+        return
+      }
+
+      const rows = tab.baseRows ?? tab.data.rows
+      const jsonContent = buildJsonContent(columns, rows)
+      const tablePart = sanitizeFilenamePart(formatTableLabel(tab.table)) || 'table'
+      const filename = `pointer-table-${tablePart}-page-${tab.page + 1}-${buildTimestamp()}.json`
+      triggerJsonDownload(filename, jsonContent)
+      toast.success(`Página atual exportada (${rows.length} linha(s)).`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function exportTableAllPagesCsv(tabId: string, selectedColumns: string[]): Promise<void> {
     const tab = getTableTab(tabId)
     if (!tab?.schema) {
       toast.info('Carregue a tabela antes de exportar.')
       return
     }
 
-    const columns = tab.schema.columns.map((column) => column.name)
+    const columns = resolveExportColumns(
+      tab.schema.columns.map((column) => column.name),
+      selectedColumns,
+    )
+    if (columns.length === 0) {
+      toast.info('Selecione ao menos uma coluna para exportar.')
+      return
+    }
+
     const filters = buildTableFilters(tab)
     const pageSize = normalizeRequestedPageSize(tab.pageSize)
 
@@ -1871,6 +1987,63 @@ export function useWorkspaceActions({
       const filename = `pointer-table-${tablePart}-all-pages-${buildTimestamp()}.csv`
       triggerCsvDownload(filename, csvContent)
       toast.success(`CSV exportado com ${rowCount} linha(s) em ${pageCount} página(s).`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      throw error
+    }
+  }
+
+  async function exportTableAllPagesJson(tabId: string, selectedColumns: string[]): Promise<void> {
+    const tab = getTableTab(tabId)
+    if (!tab?.schema) {
+      toast.info('Carregue a tabela antes de exportar.')
+      return
+    }
+
+    const columns = resolveExportColumns(
+      tab.schema.columns.map((column) => column.name),
+      selectedColumns,
+    )
+    if (columns.length === 0) {
+      toast.info('Selecione ao menos uma coluna para exportar.')
+      return
+    }
+
+    const filters = buildTableFilters(tab)
+    const pageSize = normalizeRequestedPageSize(tab.pageSize)
+
+    let page = 0
+    let pageCount = 0
+    let rowCount = 0
+    const rows: Record<string, unknown>[] = []
+    let hasMorePages = true
+
+    toast.info('Exportando todas as páginas em JSON...')
+
+    try {
+      while (hasMorePages) {
+        const result = await pointerApi.readTable(tab.connectionId, tab.table, {
+          page,
+          pageSize,
+          sort: tab.sort,
+          filters,
+        })
+
+        rows.push(...result.rows)
+        rowCount += result.rows.length
+        pageCount += 1
+
+        hasMorePages = result.rows.length === result.pageSize
+        if (hasMorePages) {
+          page += 1
+        }
+      }
+
+      const jsonContent = buildJsonContent(columns, rows)
+      const tablePart = sanitizeFilenamePart(formatTableLabel(tab.table)) || 'table'
+      const filename = `pointer-table-${tablePart}-all-pages-${buildTimestamp()}.json`
+      triggerJsonDownload(filename, jsonContent)
+      toast.success(`JSON exportado com ${rowCount} linha(s) em ${pageCount} página(s).`)
     } catch (error) {
       toast.error(getErrorMessage(error))
       throw error
@@ -2152,8 +2325,11 @@ export function useWorkspaceActions({
     copyTableSelection,
     pasteIntoTableSelection,
     exportSqlResultSetVisibleCsv,
+    exportSqlResultSetVisibleJson,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    exportTableCurrentPageJson,
+    exportTableAllPagesJson,
     openAiSqlTabWithPrompt,
     sendAiPromptToSqlTab,
     setAiDraftOnSqlTab,

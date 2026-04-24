@@ -75,9 +75,19 @@ type WorkspaceMainProps = {
     resultSetIndex: number
     fields: string[]
     rows: Record<string, unknown>[]
+    selectedColumns: string[]
   }) => void
-  exportTableCurrentPageCsv: (tabId: string) => void
-  exportTableAllPagesCsv: (tabId: string) => Promise<void>
+  exportSqlResultSetVisibleJson: (params: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+    selectedColumns: string[]
+  }) => void
+  exportTableCurrentPageCsv: (tabId: string, selectedColumns: string[]) => void
+  exportTableAllPagesCsv: (tabId: string, selectedColumns: string[]) => Promise<void>
+  exportTableCurrentPageJson: (tabId: string, selectedColumns: string[]) => void
+  exportTableAllPagesJson: (tabId: string, selectedColumns: string[]) => Promise<void>
   sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
   setAiDraftOnSqlTab: (tabId: string, value: string) => void
   onRequestSqlTableStructure: (params: {
@@ -134,8 +144,11 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     formatTableLabel,
     engineLabel,
     exportSqlResultSetVisibleCsv,
+    exportSqlResultSetVisibleJson,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    exportTableCurrentPageJson,
+    exportTableAllPagesJson,
     sendAiPromptToSqlTab,
     setAiDraftOnSqlTab,
     onRequestSqlTableStructure,
@@ -176,6 +189,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 setResizingSqlTabId={setResizingSqlTabId}
                 formatCell={formatCell}
                 exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
+                exportSqlResultSetVisibleJson={exportSqlResultSetVisibleJson}
                 sendAiPromptToSqlTab={sendAiPromptToSqlTab}
                 setAiDraftOnSqlTab={setAiDraftOnSqlTab}
                 onRequestSqlTableStructure={onRequestSqlTableStructure}
@@ -212,6 +226,8 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 engineLabel={engineLabel}
                 exportTableCurrentPageCsv={exportTableCurrentPageCsv}
                 exportTableAllPagesCsv={exportTableAllPagesCsv}
+                exportTableCurrentPageJson={exportTableCurrentPageJson}
+                exportTableAllPagesJson={exportTableAllPagesJson}
               />
             ) : activeDashboardTab ? (
               activeDashboardTab.scope === 'connection' ? (

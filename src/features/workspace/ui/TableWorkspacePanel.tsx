@@ -33,6 +33,7 @@ import {
   TABLE_PAGE_SIZE_MAX,
 } from '../../../shared/constants/app'
 import { isArrayDataType, isBooleanDataType, isJsonLikeDataType, parseArrayInputValue } from '../../../shared/lib/workspace-utils'
+import { CsvExportDialog } from './CsvExportDialog'
 
 type JsonEditorCellState = {
   rowIndex: number
@@ -246,8 +247,10 @@ type TableWorkspacePanelProps = {
   formatCell: (value: unknown) => string
   formatTableLabel: (table: TableTab['table']) => string
   engineLabel: (engine: TableTab['engine']) => string
-  exportTableCurrentPageCsv: (tabId: string) => void
-  exportTableAllPagesCsv: (tabId: string) => Promise<void>
+  exportTableCurrentPageCsv: (tabId: string, selectedColumns: string[]) => void
+  exportTableAllPagesCsv: (tabId: string, selectedColumns: string[]) => Promise<void>
+  exportTableCurrentPageJson: (tabId: string, selectedColumns: string[]) => void
+  exportTableAllPagesJson: (tabId: string, selectedColumns: string[]) => Promise<void>
 }
 
 export function TableWorkspacePanel({
@@ -274,11 +277,14 @@ export function TableWorkspacePanel({
   engineLabel,
   exportTableCurrentPageCsv,
   exportTableAllPagesCsv,
+  exportTableCurrentPageJson,
+  exportTableAllPagesJson,
 }: TableWorkspacePanelProps): JSX.Element {
   const [jsonEditorCell, setJsonEditorCell] = useState<JsonEditorCellState | null>(null)
   const [jsonEditorValue, setJsonEditorValue] = useState('')
   const [pageSizeInput, setPageSizeInput] = useState(() => String(activeTableTab.pageSize))
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv')
   const [isExportingAllPages, setIsExportingAllPages] = useState(false)
   const [columnResizeState, setColumnResizeState] = useState<ColumnResizeState | null>(null)
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenuState | null>(null)
@@ -296,6 +302,7 @@ export function TableWorkspacePanel({
   const columns = useMemo(() => activeTableTab.schema?.columns ?? [], [activeTableTab.schema?.columns])
   const rowCount = activeTableTab.data?.rows.length ?? 0
   const columnCount = columns.length
+  const exportColumns = useMemo(() => columns.map((column) => column.name), [columns])
   const selectedRowsSet = useMemo(() => new Set(activeTableTab.selectedRowIndexes), [activeTableTab.selectedRowIndexes])
   const hasSelectedRows = activeTableTab.selectedRowIndexes.length > 0
 
@@ -491,16 +498,24 @@ export function TableWorkspacePanel({
     })
   }
 
-  const handleExportCurrentPage = (): void => {
-    exportTableCurrentPageCsv(activeTableTab.id)
+  const handleExportCurrentPage = (selectedColumns: string[]): void => {
+    if (exportFormat === 'json') {
+      exportTableCurrentPageJson(activeTableTab.id, selectedColumns)
+    } else {
+      exportTableCurrentPageCsv(activeTableTab.id, selectedColumns)
+    }
     setIsExportDialogOpen(false)
   }
 
-  const handleExportAllPages = async (): Promise<void> => {
+  const handleExportAllPages = async (selectedColumns: string[]): Promise<void> => {
     setIsExportingAllPages(true)
 
     try {
-      await exportTableAllPagesCsv(activeTableTab.id)
+      if (exportFormat === 'json') {
+        await exportTableAllPagesJson(activeTableTab.id, selectedColumns)
+      } else {
+        await exportTableAllPagesCsv(activeTableTab.id, selectedColumns)
+      }
       setIsExportDialogOpen(false)
     } finally {
       setIsExportingAllPages(false)
@@ -1634,15 +1649,22 @@ export function TableWorkspacePanel({
               <DropdownMenuItem
                 onSelect={(event) => {
                   event.preventDefault()
+                  setExportFormat('csv')
                   setIsExportDialogOpen(true)
                 }}
               >
                 <Download className='h-3.5 w-3.5 text-slate-400' />
                 Exportar CSV
               </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <span className='h-3.5 w-3.5 text-center text-slate-500'>•</span>
-                Exportar JSON (em breve)
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setExportFormat('json')
+                  setIsExportDialogOpen(true)
+                }}
+              >
+                <Download className='h-3.5 w-3.5 text-slate-400' />
+                Exportar JSON
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1725,24 +1747,18 @@ export function TableWorkspacePanel({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog
+      <CsvExportDialog
         open={isExportDialogOpen}
-        onOpenChange={(open) => {
-          if (!isExportingAllPages) {
-            setIsExportDialogOpen(open)
-          }
-        }}
-      >
-        <DialogContent className='max-w-md space-y-3'>
-          <DialogHeader>
-            <DialogTitle>Exportar tabela em CSV</DialogTitle>
-            <DialogDescription>
-              Escolha se deseja exportar apenas a página atual ou percorrer todas as páginas com os filtros e ordenação
-              atuais.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className='flex-col gap-2'>
+        title={`Exportar tabela em ${exportFormat === 'json' ? 'JSON' : 'CSV'}`}
+        description={`Escolha as colunas e exporte apenas a página atual ou todas as páginas em ${
+          exportFormat === 'json' ? 'JSON' : 'CSV'
+        } com os filtros e ordenação atuais.`}
+        formatLabel={exportFormat === 'json' ? 'JSON' : 'CSV'}
+        columns={exportColumns}
+        isBusy={isExportingAllPages}
+        onOpenChange={setIsExportDialogOpen}
+        renderFooter={({ selectedColumns, noColumnsSelected }) => (
+          <>
             <Button
               variant='ghost'
               onClick={() => setIsExportDialogOpen(false)}
@@ -1753,18 +1769,22 @@ export function TableWorkspacePanel({
             </Button>
             <Button
               variant='outline'
-              onClick={handleExportCurrentPage}
-              disabled={isExportingAllPages}
+              onClick={() => handleExportCurrentPage(selectedColumns)}
+              disabled={isExportingAllPages || noColumnsSelected}
               className='w-full'
             >
               Exportar página atual
             </Button>
-            <Button onClick={() => void handleExportAllPages()} disabled={isExportingAllPages} className='w-full'>
+            <Button
+              onClick={() => void handleExportAllPages(selectedColumns)}
+              disabled={isExportingAllPages || noColumnsSelected}
+              className='w-full'
+            >
               {isExportingAllPages ? 'Exportando...' : 'Exportar todas as páginas'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        )}
+      />
 
       <Dialog
         open={Boolean(jsonEditorCell)}

@@ -554,8 +554,11 @@ function App(): JSX.Element {
     copyTableSelection,
     pasteIntoTableSelection,
     exportSqlResultSetVisibleCsv,
+    exportSqlResultSetVisibleJson,
     exportTableCurrentPageCsv,
     exportTableAllPagesCsv,
+    exportTableCurrentPageJson,
+    exportTableAllPagesJson,
     openConnectionDashboardTab,
     openTableDashboardTab,
     sendAiPromptToSqlTab,
@@ -1088,8 +1091,11 @@ function App(): JSX.Element {
             formatTableLabel={formatTableLabel}
             engineLabel={engineLabel}
             exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}
+            exportSqlResultSetVisibleJson={exportSqlResultSetVisibleJson}
             exportTableCurrentPageCsv={exportTableCurrentPageCsv}
             exportTableAllPagesCsv={exportTableAllPagesCsv}
+            exportTableCurrentPageJson={exportTableCurrentPageJson}
+            exportTableAllPagesJson={exportTableAllPagesJson}
             sendAiPromptToSqlTab={sendAiPromptToSqlTab}
             setAiDraftOnSqlTab={setAiDraftOnSqlTab}
             onRequestSqlTableStructure={handleRequestSqlTableStructure}

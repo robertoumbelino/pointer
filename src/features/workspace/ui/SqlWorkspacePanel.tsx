@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Textarea } from '../../../components/ui/textarea'
 import { AUTO_SQL_CONNECTION_ID, SQL_RESULT_RENDER_MAX_ROWS } from '../../../shared/constants/app'
 import { extractFromJoinTableReferenceAtCursor } from '../../../shared/lib/workspace-utils'
+import { CsvExportDialog } from './CsvExportDialog'
 
 type SqlWorkspacePanelProps = {
   activeSqlTab: SqlTab
@@ -30,6 +31,14 @@ type SqlWorkspacePanelProps = {
     resultSetIndex: number
     fields: string[]
     rows: Record<string, unknown>[]
+    selectedColumns: string[]
+  }) => void
+  exportSqlResultSetVisibleJson: (params: {
+    tabId: string
+    resultSetIndex: number
+    fields: string[]
+    rows: Record<string, unknown>[]
+    selectedColumns: string[]
   }) => void
   sendAiPromptToSqlTab: (tabId: string, prompt: string) => Promise<void>
   setAiDraftOnSqlTab: (tabId: string, value: string) => void
@@ -44,6 +53,15 @@ type SqlWorkspacePanelProps = {
 type ResultSetSortState = {
   field: string
   clickCount: number
+}
+
+type SqlExportFormat = 'csv' | 'json'
+
+type SqlExportState = {
+  format: SqlExportFormat
+  resultSetIndex: number
+  fields: string[]
+  rows: Record<string, unknown>[]
 }
 
 function nextSortState(current: ResultSetSortState | undefined, field: string): ResultSetSortState {
@@ -98,11 +116,13 @@ export function SqlWorkspacePanel({
   setResizingSqlTabId,
   formatCell,
   exportSqlResultSetVisibleCsv,
+  exportSqlResultSetVisibleJson,
   sendAiPromptToSqlTab,
   setAiDraftOnSqlTab,
   onRequestSqlTableStructure,
 }: SqlWorkspacePanelProps): JSX.Element {
   const [resultSetSortByKey, setResultSetSortByKey] = useState<Record<string, ResultSetSortState>>({})
+  const [exportState, setExportState] = useState<SqlExportState | null>(null)
   const isMacPlatform = navigator.platform.includes('Mac')
   const hoverPointerRef = useRef(false)
   const lastMousePositionRef = useRef<{ x: number; y: number } | null>(null)
@@ -414,8 +434,8 @@ export function SqlWorkspacePanel({
                                 <DropdownMenuItem
                                   onSelect={(event) => {
                                     event.preventDefault()
-                                    exportSqlResultSetVisibleCsv({
-                                      tabId: activeSqlTab.id,
+                                    setExportState({
+                                      format: 'csv',
                                       resultSetIndex: index,
                                       fields: resultSet.fields,
                                       rows: visibleRows,
@@ -425,9 +445,19 @@ export function SqlWorkspacePanel({
                                   <Download className='h-3.5 w-3.5 text-slate-400' />
                                   Exportar CSV (visível)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem disabled>
-                                  <span className='h-3.5 w-3.5 text-center text-slate-500'>•</span>
-                                  Exportar JSON (em breve)
+                                <DropdownMenuItem
+                                  onSelect={(event) => {
+                                    event.preventDefault()
+                                    setExportState({
+                                      format: 'json',
+                                      resultSetIndex: index,
+                                      fields: resultSet.fields,
+                                      rows: visibleRows,
+                                    })
+                                  }}
+                                >
+                                  <Download className='h-3.5 w-3.5 text-slate-400' />
+                                  Exportar JSON (visível)
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -570,6 +600,50 @@ export function SqlWorkspacePanel({
             </div>
           </aside>
         )}
+        <CsvExportDialog
+          open={Boolean(exportState)}
+          title={`Exportar resultado em ${exportState?.format === 'json' ? 'JSON' : 'CSV'}`}
+          description={`Escolha as colunas que devem entrar no ${
+            exportState?.format === 'json' ? 'JSON' : 'CSV'
+          } do resultado visível.`}
+          formatLabel={exportState?.format === 'json' ? 'JSON' : 'CSV'}
+          columns={exportState?.fields ?? []}
+          onOpenChange={(open) => {
+            if (!open) {
+              setExportState(null)
+            }
+          }}
+          renderFooter={({ selectedColumns, noColumnsSelected }) => (
+            <>
+              <Button variant='ghost' onClick={() => setExportState(null)} className='w-full'>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!exportState) {
+                    return
+                  }
+
+                  const exportResultSet =
+                    exportState.format === 'json' ? exportSqlResultSetVisibleJson : exportSqlResultSetVisibleCsv
+
+                  exportResultSet({
+                    tabId: activeSqlTab.id,
+                    resultSetIndex: exportState.resultSetIndex,
+                    fields: exportState.fields,
+                    rows: exportState.rows,
+                    selectedColumns,
+                  })
+                  setExportState(null)
+                }}
+                disabled={noColumnsSelected}
+                className='w-full'
+              >
+                Exportar {exportState?.format === 'json' ? 'JSON' : 'CSV'} visível
+              </Button>
+            </>
+          )}
+        />
       </div>
     </div>
   )
