@@ -2,6 +2,17 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.12.0 - 2026-05-26
+
+### ✨ Novidades
+- O Command Palette agora tem a ação **Documentação SQL**, abrindo um sheet lateral com exemplos prontos de filtros PostgreSQL para colunas `json/jsonb`, incluindo campos aninhados, conversões de tipo, operadores de contenção e buscas em arrays de objetos com `ILIKE`.
+
+### 🐛 Correções
+- Corrigido o fechamento tardio do modal de confirmação de SQL de risco, deixando a resposta da interface mais imediata após confirmar ou cancelar a execução.
+
+### ♻️ Melhorias
+- Esta release foi classificada como `minor` por adicionar uma nova referência de documentação SQL acessível direto pelo `Cmd+K`.
+
 ## v0.11.0 - 2026-04-24
 
 ### ✨ Novidades
