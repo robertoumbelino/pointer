@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.12.1 - 2026-05-26
+
+### 🐛 Correções
+- Ajustado o alinhamento visual do ícone com os textos da marca na sidebar de ambientes, deixando o cabeçalho mais equilibrado.
+
+### ♻️ Melhorias
+- Esta release foi classificada como `patch` por corrigir um detalhe visual localizado na navegação de ambientes.
+
 ## v0.12.0 - 2026-05-26
 
 ### ✨ Novidades
