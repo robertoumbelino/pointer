@@ -22,6 +22,7 @@ export type CommandActionId =
   | 'use-ai'
   | 'configure-ai'
   | 'remove-ai'
+  | 'open-sql-documentation'
   | 'open-changelog'
   | 'check-app-update'
   | 'exit-workspace'
@@ -63,6 +64,7 @@ type UseCommandPaletteActionsParams = {
   commandColumnInputRef: MutableRefObject<HTMLSelectElement | null>
   setTableContextMenu: Dispatch<SetStateAction<SidebarTableContextMenuState | null>>
   openTableTab: (hit: TableSearchHit, initialLoad?: TableReloadOverrides) => Promise<void>
+  openSqlDocumentation: () => void
   openChangelog: () => void
   checkForAppUpdate: (showToastWhenCurrent?: boolean) => Promise<void>
   onExitWorkspace: () => void
@@ -101,6 +103,7 @@ export function useCommandPaletteActions({
   commandColumnInputRef,
   setTableContextMenu,
   openTableTab,
+  openSqlDocumentation,
   openChangelog,
   checkForAppUpdate,
   onExitWorkspace,
@@ -115,17 +118,47 @@ export function useCommandPaletteActions({
     const query = commandQuery.trim()
     const normalizedQuery = query.toLowerCase()
     const hasTableMatches = commandHits.length > 0
-    const shouldShowConfigureAiAction = !commandScopedTarget && (!hasTableMatches || query.length === 0)
-    const canShowUseAiAction = !commandScopedTarget && query.length > 0 && !hasTableMatches
-    const configureAction: Omit<CommandActionItem, 'displayIndex'> = {
+    const configureAction: Omit<CommandActionItem, 'displayIndex'> & { keywords: string[] } = {
       id: 'configure-ai',
       label: aiConfig?.hasApiKey ? 'Alterar modelo IA' : 'Configurar IA',
       description: aiConfig?.hasApiKey
         ? 'Trocar provider/modelo sem alterar a chave salva'
         : 'Adicionar chave do AI Gateway',
+      keywords: ['ia', 'ai', 'modelo', 'provider', 'chave', 'configurar', 'alterar'],
     }
 
-    const actions: Array<Omit<CommandActionItem, 'displayIndex'> & { keywords: string[] }> = [
+    const actions: Array<Omit<CommandActionItem, 'displayIndex'> & { keywords: string[] }> = []
+
+    if (!commandScopedTarget) {
+      actions.push(configureAction)
+      if (aiConfig?.hasApiKey) {
+        actions.push({
+          id: 'remove-ai',
+          label: 'Remover IA',
+          description: 'Apagar chave salva do AI Gateway neste app',
+          keywords: ['ia', 'ai', 'remover', 'apagar', 'chave'],
+        })
+      }
+    }
+
+    actions.push(
+      {
+        id: 'open-sql-documentation',
+        label: 'Documentação SQL',
+        description: 'Exemplos de filtros PostgreSQL JSON/JSONB',
+        keywords: [
+          'sql',
+          'json',
+          'jsonb',
+          'postgres',
+          'postgresql',
+          'where',
+          'documentacao',
+          'documentação',
+          'ilike',
+          'array',
+        ],
+      },
       {
         id: 'open-changelog',
         label: 'Abrir changelog',
@@ -144,7 +177,7 @@ export function useCommandPaletteActions({
         description: 'Voltar para a home de ambientes',
         keywords: ['sair', 'home', 'voltar', 'ambientes'],
       },
-    ]
+    )
 
     const filtered = normalizedQuery
       ? actions.filter((action) => {
@@ -154,6 +187,7 @@ export function useCommandPaletteActions({
       : actions
 
     const aiActions: Array<Omit<CommandActionItem, 'displayIndex'>> = []
+    const canShowUseAiAction = !commandScopedTarget && query.length > 0 && !hasTableMatches && filtered.length === 0
     if (canShowUseAiAction) {
       aiActions.push({
         id: 'use-ai',
@@ -164,18 +198,7 @@ export function useCommandPaletteActions({
       })
     }
 
-    if (shouldShowConfigureAiAction) {
-      aiActions.push(configureAction)
-      if (aiConfig?.hasApiKey) {
-        aiActions.push({
-          id: 'remove-ai',
-          label: 'Remover IA',
-          description: 'Apagar chave salva do AI Gateway neste app',
-        })
-      }
-    }
-
-    return [...aiActions, ...filtered].map((action, displayIndex) => ({
+    return [...filtered, ...aiActions].map((action, displayIndex) => ({
       id: action.id,
       label: action.label,
       description: action.description,
@@ -300,6 +323,11 @@ export function useCommandPaletteActions({
 
       if (actionId === 'open-changelog') {
         openChangelog()
+        return
+      }
+
+      if (actionId === 'open-sql-documentation') {
+        openSqlDocumentation()
         return
       }
 

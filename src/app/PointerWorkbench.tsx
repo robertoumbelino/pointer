@@ -17,6 +17,7 @@ import { useCommandPaletteActions } from '../features/command-palette/model/useC
 import { AiConfigDialog, type AiConfigDialogMode } from '../features/command-palette/ui/AiConfigDialog'
 import { TableCommandDialog } from '../features/command-palette/ui/TableCommandDialog'
 import { useConnections } from '../features/connections/model/useConnections'
+import { SqlDocumentationSheet } from '../features/documentation/ui/SqlDocumentationSheet'
 import { useEnvironments } from '../features/environments/model/useEnvironments'
 import { useEnvironmentSwitcherActions } from '../features/environments/model/useEnvironmentSwitcherActions'
 import { EnvironmentCreateDialog } from '../features/environments/ui/EnvironmentCreateDialog'
@@ -223,6 +224,7 @@ function App(): JSX.Element {
   const [aiApiKeyDraft, setAiApiKeyDraft] = useState('')
   const [isAiConfigSaving, setIsAiConfigSaving] = useState(false)
   const [pendingAiPrompt, setPendingAiPrompt] = useState('')
+  const [isSqlDocumentationOpen, setIsSqlDocumentationOpen] = useState(false)
   const [isTableStructureSheetOpen, setIsTableStructureSheetOpen] = useState(false)
   const [isTableStructureLoading, setIsTableStructureLoading] = useState(false)
   const [tableStructureError, setTableStructureError] = useState<string | null>(null)
@@ -882,6 +884,7 @@ function App(): JSX.Element {
     commandColumnInputRef,
     setTableContextMenu,
     openTableTab,
+    openSqlDocumentation: () => setIsSqlDocumentationOpen(true),
     openChangelog,
     checkForAppUpdate,
     onExitWorkspace: handleExitWorkspace,
@@ -1129,6 +1132,8 @@ function App(): JSX.Element {
         appVersion={appVersion}
         entries={changelogEntries}
       />
+
+      <SqlDocumentationSheet isOpen={isSqlDocumentationOpen} onClose={() => setIsSqlDocumentationOpen(false)} />
 
       <SqlTabRenameDialog
         isOpen={isRenameSqlTabOpen}

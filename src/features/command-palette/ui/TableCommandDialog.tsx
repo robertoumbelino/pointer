@@ -1,4 +1,4 @@
-import { Bot, Diff, LogOut, RefreshCw, Settings2, Table2, Trash2 } from 'lucide-react'
+import { BookOpen, Bot, Diff, LogOut, RefreshCw, Settings2, Table2, Trash2 } from 'lucide-react'
 import type { KeyboardEvent, MutableRefObject, SetStateAction } from 'react'
 import type { TableSchema, TableSearchHit } from '../../../../shared/db-types'
 import { Button } from '../../../components/ui/button'
@@ -175,6 +175,7 @@ export function TableCommandDialog({
                     {action.id === 'use-ai' ? <Bot className='h-4 w-4' /> : null}
                     {action.id === 'configure-ai' ? <Settings2 className='h-4 w-4' /> : null}
                     {action.id === 'remove-ai' ? <Trash2 className='h-4 w-4' /> : null}
+                    {action.id === 'open-sql-documentation' ? <BookOpen className='h-4 w-4' /> : null}
                     {action.id === 'open-changelog' ? <Diff className='h-4 w-4' /> : null}
                     {action.id === 'check-app-update' ? <RefreshCw className='h-4 w-4' /> : null}
                     {action.id === 'exit-workspace' ? <LogOut className='h-4 w-4' /> : null}
