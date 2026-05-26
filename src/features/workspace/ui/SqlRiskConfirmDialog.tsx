@@ -30,14 +30,21 @@ export function SqlRiskConfirmDialog({
   setPendingSqlExecution,
   onForceRunSql,
 }: SqlRiskConfirmDialogProps): JSX.Element {
+  const closeDialog = (): void => {
+    onOpenChange(false)
+    setPendingSqlExecution(null)
+  }
+
   return (
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        onOpenChange(open)
-        if (!open) {
-          setPendingSqlExecution(null)
+        if (open) {
+          onOpenChange(true)
+          return
         }
+
+        closeDialog()
       }}
     >
       <DialogContent>
@@ -49,21 +56,20 @@ export function SqlRiskConfirmDialog({
           <DialogDescription>Essa query pode alterar dados. Confirme para executar.</DialogDescription>
         </DialogHeader>
         <DialogFooter className='pt-2'>
-          <Button variant='secondary' onClick={() => onOpenChange(false)}>
+          <Button variant='secondary' onClick={closeDialog}>
             Cancelar
           </Button>
           <Button
             variant='destructive'
             onClick={() => {
-              if (!pendingSqlExecution) {
+              const execution = pendingSqlExecution
+
+              if (!execution) {
                 return
               }
 
-              void onForceRunSql(
-                pendingSqlExecution.tabId,
-                pendingSqlExecution.sql,
-                pendingSqlExecution.connectionId,
-              )
+              closeDialog()
+              void onForceRunSql(execution.tabId, execution.sql, execution.connectionId)
             }}
           >
             Executar mesmo assim
