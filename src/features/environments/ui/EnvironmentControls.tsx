@@ -82,9 +82,9 @@ export function EnvironmentControls({
           <div className='flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-md border border-slate-700 bg-slate-800/70'>
             <span className='h-2.5 w-2.5 rounded-full bg-slate-100' />
           </div>
-          <div>
-            <p className='text-[19px] leading-none font-semibold tracking-tight'>Pointer</p>
-            <p className='text-[12px] text-slate-500'>Ambientes e Bancos</p>
+          <div className='flex h-9 min-w-0 flex-col justify-center'>
+            <p className='text-[19px] font-semibold leading-none tracking-tight'>Pointer</p>
+            <p className='text-[12px] leading-4 text-slate-500'>Ambientes e Bancos</p>
           </div>
         </div>
         <Badge variant='secondary'>{connectionsCount}</Badge>
