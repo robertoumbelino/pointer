@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.12.2 - 2026-05-27
+
+### ✨ Novidades
+- Adicionado o atalho `Cmd/Ctrl+Shift+T` para reabrir a última aba SQL fechada, com histórico de até três abas por ambiente durante a sessão.
+
+### ♻️ Melhorias
+- Esta release foi classificada como `patch` por entregar uma melhoria incremental de usabilidade no fluxo de abas SQL.
+
 ## v0.12.1 - 2026-05-26
 
 ### 🐛 Correções
