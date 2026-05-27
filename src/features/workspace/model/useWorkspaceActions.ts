@@ -34,6 +34,7 @@ import {
   createDashboardTab,
   createTableDashboardTab,
   createSqlTab,
+  type ClosedSqlTabHistoryEntry,
   type DashboardTab,
   type EditingCell,
   type RowPendingUpdates,
@@ -67,6 +68,7 @@ type UseWorkspaceActionsParams = {
   sqlTabCounterRef: MutableRefObject<number>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
+  closedSqlTabsByEnvironmentRef: MutableRefObject<Record<string, ClosedSqlTabHistoryEntry[]>>
   workTabsRef: MutableRefObject<WorkTab[]>
   getTableTab: (tabId: string) => TableTab | null
   getSqlTab: (tabId: string) => SqlTab | null
@@ -91,6 +93,7 @@ type UseWorkspaceActionsResult = {
   closeDashboardTab: (tabId: string) => void
   closeSqlTab: (tabId: string) => void
   closeActiveTab: () => void
+  restoreClosedSqlTab: () => void
   beginInlineEdit: (rowIndex: number, column: string) => void
   commitInlineEdit: (override?: EditingCell) => void
   cancelInlineEdit: () => void
@@ -500,6 +503,7 @@ export function useWorkspaceActions({
   sqlTabCounterRef,
   sqlSplitContainerRef,
   sqlExecutionByTabRef,
+  closedSqlTabsByEnvironmentRef,
   workTabsRef,
   getTableTab,
   getSqlTab,
@@ -512,6 +516,7 @@ export function useWorkspaceActions({
   const sqlCancelRequestByTabRef = useRef<Record<string, string>>({})
   const sqlCancelUnlockTimerByTabRef = useRef<Record<string, number>>({})
   const autoConnectionFailureNotifiedRef = useRef<Set<string>>(new Set())
+  const closedSqlHistoryKey = selectedEnvironmentId || '__no_environment__'
 
   useEffect(() => {
     const activeConnectionIds = new Set(connections.map((connection) => connection.id))
@@ -530,6 +535,52 @@ export function useWorkspaceActions({
     }
     delete sqlCancelRequestByTabRef.current[tabId]
   }, [])
+
+  function pushClosedSqlTab(tab: SqlTab, index: number): void {
+    const normalizedTab: SqlTab = {
+      ...tab,
+      sqlRunning: false,
+      sqlCanceling: false,
+    }
+    const currentHistory = closedSqlTabsByEnvironmentRef.current[closedSqlHistoryKey] ?? []
+    closedSqlTabsByEnvironmentRef.current[closedSqlHistoryKey] = [
+      ...currentHistory.filter((entry) => entry.tab.id !== normalizedTab.id),
+      { tab: normalizedTab, index },
+    ].slice(-3)
+  }
+
+  function restoreClosedSqlTab(): void {
+    const currentHistory = closedSqlTabsByEnvironmentRef.current[closedSqlHistoryKey] ?? []
+    const entry = currentHistory[currentHistory.length - 1]
+    if (!entry) {
+      return
+    }
+
+    closedSqlTabsByEnvironmentRef.current[closedSqlHistoryKey] = currentHistory.slice(0, -1)
+    const existingTabIds = new Set(workTabsRef.current.map((tab) => tab.id))
+    let restoredTab = entry.tab
+    if (existingTabIds.has(restoredTab.id)) {
+      let nextId = `sql:${sqlTabCounterRef.current}`
+      while (existingTabIds.has(nextId)) {
+        sqlTabCounterRef.current += 1
+        nextId = `sql:${sqlTabCounterRef.current}`
+      }
+
+      restoredTab = {
+        ...restoredTab,
+        id: nextId,
+      }
+      sqlTabCounterRef.current += 1
+    }
+
+    const boundedIndex = Math.max(0, Math.min(workTabsRef.current.length, entry.index))
+    setWorkTabs((current) => [
+      ...current.slice(0, boundedIndex),
+      restoredTab,
+      ...current.slice(boundedIndex),
+    ])
+    setActiveTabId(restoredTab.id)
+  }
 
   const initializeTableTab = useCallback(
     async (tabId: string, hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> => {
@@ -918,7 +969,15 @@ export function useWorkspaceActions({
       return
     }
 
-    if (getSqlTab(tabId)?.sqlRunning) {
+    const closingTab = getSqlTab(tabId)
+    if (!closingTab) {
+      return
+    }
+
+    const closingIndex = workTabsRef.current.findIndex((tab) => tab.id === tabId)
+    pushClosedSqlTab(closingTab, closingIndex >= 0 ? closingIndex : workTabsRef.current.length)
+
+    if (closingTab.sqlRunning) {
       void cancelSqlExecution(tabId)
     }
     delete sqlExecutionByTabRef.current[tabId]
@@ -958,6 +1017,10 @@ export function useWorkspaceActions({
     }
 
     const fallbackTab = nextTabs[activeIndex] ?? nextTabs[activeIndex - 1] ?? nextTabs[0]
+
+    if (activeSqlTab) {
+      pushClosedSqlTab(activeSqlTab, activeIndex)
+    }
 
     if (activeSqlTab?.sqlRunning) {
       void cancelSqlExecution(activeSqlTab.id)
@@ -2313,6 +2376,7 @@ export function useWorkspaceActions({
     closeDashboardTab,
     closeSqlTab,
     closeActiveTab,
+    restoreClosedSqlTab,
     beginInlineEdit,
     commitInlineEdit,
     cancelInlineEdit,

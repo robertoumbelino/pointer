@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { TableSearchHit } from '../../../../shared/db-types'
 import type {
   DashboardTab,
+  ClosedSqlTabHistoryEntry,
   EditingCell,
   EnvironmentWorkspaceSnapshot,
   SidebarTableContextMenuState,
@@ -69,6 +70,7 @@ type UseWorkspaceResult = {
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
   sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
+  closedSqlTabsByEnvironmentRef: MutableRefObject<Record<string, ClosedSqlTabHistoryEntry[]>>
   environmentWorkspaceRef: MutableRefObject<Record<string, EnvironmentWorkspaceSnapshot>>
   previousEnvironmentIdRef: MutableRefObject<string>
   preferredEnvironmentIdRef: MutableRefObject<string>
@@ -81,6 +83,7 @@ type UseWorkspaceResult = {
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
   reloadTableTabRef: MutableRefObject<((tabId: string) => Promise<void>) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
+  restoreClosedSqlTabRef: MutableRefObject<(() => void) | undefined>
   getTableTab: (tabId: string) => TableTab | null
   getSqlTab: (tabId: string) => SqlTab | null
   updateTableTab: (tabId: string, updater: (tab: TableTab) => TableTab) => void
@@ -122,6 +125,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const sqlSplitContainerRef = useRef<HTMLDivElement | null>(null)
   const sqlCursorByTabRef = useRef<Record<string, number>>({})
   const sqlExecutionByTabRef = useRef<Record<string, string>>({})
+  const closedSqlTabsByEnvironmentRef = useRef<Record<string, ClosedSqlTabHistoryEntry[]>>({})
   const environmentWorkspaceRef = useRef<Record<string, EnvironmentWorkspaceSnapshot>>({})
   const previousEnvironmentIdRef = useRef<string>('')
   const preferredEnvironmentIdRef = useRef<string>('')
@@ -143,6 +147,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const openNewSqlTabRef = useRef<() => void>()
   const reloadTableTabRef = useRef<(tabId: string) => Promise<void>>()
   const closeActiveTabRef = useRef<() => void>()
+  const restoreClosedSqlTabRef = useRef<() => void>()
 
   function getTableTab(tabId: string): TableTab | null {
     const tab = workTabsRef.current.find((candidate) => candidate.id === tabId)
@@ -239,6 +244,7 @@ export function useWorkspace(): UseWorkspaceResult {
     sqlSplitContainerRef,
     sqlCursorByTabRef,
     sqlExecutionByTabRef,
+    closedSqlTabsByEnvironmentRef,
     environmentWorkspaceRef,
     previousEnvironmentIdRef,
     preferredEnvironmentIdRef,
@@ -251,6 +257,7 @@ export function useWorkspace(): UseWorkspaceResult {
     openNewSqlTabRef,
     reloadTableTabRef,
     closeActiveTabRef,
+    restoreClosedSqlTabRef,
     getTableTab,
     getSqlTab,
     getDashboardTab,

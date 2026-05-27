@@ -392,6 +392,11 @@ export type EnvironmentWorkspaceSnapshot = {
   selectedSchema: string
 }
 
+export type ClosedSqlTabHistoryEntry = {
+  tab: SqlTab
+  index: number
+}
+
 export type PersistedSqlTab = {
   type: 'sql'
   id: string

@@ -17,6 +17,7 @@ type UseWorkspaceShortcutsParams = {
   openNewSqlTabRef: MutableRefObject<(() => void) | undefined>
   reloadTableTabRef: MutableRefObject<((tabId: string) => Promise<void>) | undefined>
   closeActiveTabRef: MutableRefObject<(() => void) | undefined>
+  restoreClosedSqlTabRef: MutableRefObject<(() => void) | undefined>
   activeTabIdRef: MutableRefObject<string>
   workTabsRef: MutableRefObject<WorkTab[]>
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
@@ -38,6 +39,7 @@ export function useWorkspaceShortcuts({
   openNewSqlTabRef,
   reloadTableTabRef,
   closeActiveTabRef,
+  restoreClosedSqlTabRef,
   activeTabIdRef,
   workTabsRef,
   sqlCursorByTabRef,
@@ -181,6 +183,13 @@ export function useWorkspaceShortcuts({
         return
       }
 
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 't') {
+        event.preventDefault()
+        event.stopPropagation()
+        restoreClosedSqlTabRef.current?.()
+        return
+      }
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 't') {
         event.preventDefault()
         openNewSqlTabRef.current?.()
@@ -255,6 +264,7 @@ export function useWorkspaceShortcuts({
     setIsCommandOpen,
     setIsEnvironmentCommandOpen,
     sqlCursorByTabRef,
+    restoreClosedSqlTabRef,
     toggleSelectedRowDeleteRef,
     workTabsRef,
   ])

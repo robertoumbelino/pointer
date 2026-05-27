@@ -182,6 +182,7 @@ function App(): JSX.Element {
     sqlSplitContainerRef,
     sqlCursorByTabRef,
     sqlExecutionByTabRef,
+    closedSqlTabsByEnvironmentRef,
     environmentWorkspaceRef,
     previousEnvironmentIdRef,
     preferredEnvironmentIdRef,
@@ -194,6 +195,7 @@ function App(): JSX.Element {
     openNewSqlTabRef,
     reloadTableTabRef,
     closeActiveTabRef,
+    restoreClosedSqlTabRef,
     getTableTab,
     updateTableTab,
     updateSqlTab,
@@ -544,6 +546,7 @@ function App(): JSX.Element {
     closeDashboardTab,
     closeSqlTab,
     closeActiveTab,
+    restoreClosedSqlTab,
     beginInlineEdit,
     commitInlineEdit,
     cancelInlineEdit,
@@ -589,6 +592,7 @@ function App(): JSX.Element {
     sqlTabCounterRef,
     sqlSplitContainerRef,
     sqlExecutionByTabRef,
+    closedSqlTabsByEnvironmentRef,
     workTabsRef,
     getTableTab,
     getSqlTab: (tabId) => {
@@ -930,6 +934,7 @@ function App(): JSX.Element {
   openNewSqlTabRef.current = openNewSqlTab
   reloadTableTabRef.current = reloadTableTab
   closeActiveTabRef.current = closeActiveTab
+  restoreClosedSqlTabRef.current = restoreClosedSqlTab
 
   useWorkspaceShortcuts({
     isWorkspaceActive: currentView === 'workspace',
@@ -946,6 +951,7 @@ function App(): JSX.Element {
     openNewSqlTabRef,
     reloadTableTabRef,
     closeActiveTabRef,
+    restoreClosedSqlTabRef,
     activeTabIdRef,
     workTabsRef,
     sqlCursorByTabRef,
