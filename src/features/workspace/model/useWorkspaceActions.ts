@@ -208,6 +208,14 @@ function isSqlExecutionCanceledError(error: unknown): boolean {
 
 const CANCEL_UNLOCK_TIMEOUT_MS = 6_000
 
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve())
+    })
+  })
+}
+
 function triggerCsvDownload(filename: string, csvContent: string): void {
   const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8' })
   const objectUrl = URL.createObjectURL(blob)
@@ -513,6 +521,8 @@ export function useWorkspaceActions({
 }: UseWorkspaceActionsParams): UseWorkspaceActionsResult {
   const [isSavingTableChanges, setIsSavingTableChanges] = useState(false)
   const isSavingTableChangesRef = useRef(false)
+  const tableLoadSequenceRef = useRef(0)
+  const tableLoadRequestByTabRef = useRef<Record<string, number>>({})
   const sqlCancelRequestByTabRef = useRef<Record<string, string>>({})
   const sqlCancelUnlockTimerByTabRef = useRef<Record<string, number>>({})
   const autoConnectionFailureNotifiedRef = useRef<Set<string>>(new Set())
@@ -535,6 +545,16 @@ export function useWorkspaceActions({
     }
     delete sqlCancelRequestByTabRef.current[tabId]
   }, [])
+
+  function beginTableLoad(tabId: string): number {
+    tableLoadSequenceRef.current += 1
+    tableLoadRequestByTabRef.current[tabId] = tableLoadSequenceRef.current
+    return tableLoadSequenceRef.current
+  }
+
+  function isLatestTableLoad(tabId: string, requestId: number): boolean {
+    return tableLoadRequestByTabRef.current[tabId] === requestId
+  }
 
   function pushClosedSqlTab(tab: SqlTab, index: number): void {
     const normalizedTab: SqlTab = {
@@ -584,6 +604,8 @@ export function useWorkspaceActions({
 
   const initializeTableTab = useCallback(
     async (tabId: string, hit: TableSearchHit, initialLoad?: TableReloadOverrides): Promise<void> => {
+      const requestId = beginTableLoad(tabId)
+
       setWorkTabs((current) =>
         current.map((tab) =>
           tab.id === tabId && tab.type === 'table' ? { ...tab, loading: true, loadError: null } : tab,
@@ -598,42 +620,13 @@ export function useWorkspaceActions({
         const nextFilterColumn = initialLoad?.filterColumn ?? ''
         const nextFilterOperator = initialLoad?.filterOperator ?? 'ilike'
         const nextFilterValue = initialLoad?.filterValue ?? ''
-        const hasPendingFilter = nextFilterOperator === 'is_not_null' || Boolean(nextFilterValue)
-        const needsSchemaBeforeRead = Boolean(hasPendingFilter && !nextFilterColumn)
-        const schemaPromise = pointerApi.describeTable(hit.connectionId, hit.table)
+        const schema = await pointerApi.listTableColumns(hit.connectionId, hit.table)
 
-        let schema: Awaited<ReturnType<typeof pointerApi.describeTable>>
-        let resolvedFilterColumn = nextFilterColumn
-        let data: Awaited<ReturnType<typeof pointerApi.readTable>>
-
-        if (needsSchemaBeforeRead) {
-          schema = await schemaPromise
-          resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
-          const filters = buildSingleTableFilter(resolvedFilterColumn, nextFilterOperator, nextFilterValue)
-
-          data = await pointerApi.readTable(hit.connectionId, hit.table, {
-            page: nextPage,
-            pageSize: nextPageSize,
-            sort: nextSort,
-            filters,
-          })
-        } else {
-          const filters = buildSingleTableFilter(nextFilterColumn, nextFilterOperator, nextFilterValue)
-
-          const [resolvedSchema, resolvedData] = await Promise.all([
-            schemaPromise,
-            pointerApi.readTable(hit.connectionId, hit.table, {
-              page: nextPage,
-              pageSize: nextPageSize,
-              sort: nextSort,
-              filters,
-            }),
-          ])
-
-          schema = resolvedSchema
-          data = resolvedData
-          resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
+        if (!isLatestTableLoad(tabId, requestId)) {
+          return
         }
+
+        const resolvedFilterColumn = nextFilterColumn || schema.columns[0]?.name || ''
 
         setWorkTabs((current) =>
           current.map((tab) => {
@@ -644,13 +637,70 @@ export function useWorkspaceActions({
             return {
               ...tab,
               schema,
-              data,
               page: nextPage,
-              pageSize: data.pageSize,
+              pageSize: nextPageSize,
               sort: nextSort,
               filterColumn: resolvedFilterColumn,
               filterOperator: nextFilterOperator,
               filterValue: nextFilterValue,
+              loading: true,
+              loadError: null,
+            }
+          }),
+        )
+
+        await waitForNextPaint()
+
+        if (!isLatestTableLoad(tabId, requestId)) {
+          return
+        }
+
+        void pointerApi
+          .describeTable(hit.connectionId, hit.table)
+          .then((fullSchema) => {
+            const currentTab = getTableTab(tabId)
+            if (
+              !currentTab ||
+              currentTab.connectionId !== hit.connectionId ||
+              currentTab.table.fqName !== hit.table.fqName
+            ) {
+              return
+            }
+
+            updateTableTab(tabId, (current) => ({
+              ...current,
+              schema: fullSchema,
+            }))
+          })
+          .catch((error: unknown) => {
+            if (!isLatestTableLoad(tabId, requestId)) {
+              return
+            }
+
+            toast.error(getErrorMessage(error))
+          })
+
+        const filters = buildSingleTableFilter(resolvedFilterColumn, nextFilterOperator, nextFilterValue)
+        const data = await pointerApi.readTable(hit.connectionId, hit.table, {
+          page: nextPage,
+          pageSize: nextPageSize,
+          sort: nextSort,
+          filters,
+        })
+
+        if (!isLatestTableLoad(tabId, requestId)) {
+          return
+        }
+
+        setWorkTabs((current) =>
+          current.map((tab) => {
+            if (tab.id !== tabId || tab.type !== 'table') {
+              return tab
+            }
+
+            return {
+              ...tab,
+              data,
               selectedRowIndexes: [],
               rowAnchorIndex: null,
               activeRowIndex: null,
@@ -662,12 +712,17 @@ export function useWorkspaceActions({
               pendingDeletes: [],
               insertDraft: null,
               baseRows: cloneRows(data.rows),
+              pageSize: data.pageSize,
               loading: false,
               loadError: null,
             }
           }),
         )
       } catch (error) {
+        if (!isLatestTableLoad(tabId, requestId)) {
+          return
+        }
+
         const message = getErrorMessage(error)
         setWorkTabs((current) =>
           current.map((tab) =>
@@ -677,7 +732,7 @@ export function useWorkspaceActions({
         toast.error(message)
       }
     },
-    [getTableTab, setWorkTabs],
+    [getTableTab, setWorkTabs, updateTableTab],
   )
 
   useEffect(() => {
@@ -846,8 +901,19 @@ export function useWorkspaceActions({
     const nextFilterColumn = overrides?.filterColumn ?? tab.filterColumn
     const nextFilterOperator = overrides?.filterOperator ?? tab.filterOperator
     const nextFilterValue = overrides?.filterValue ?? tab.filterValue
+    const requestId = beginTableLoad(tabId)
 
-    updateTableTab(tabId, (current) => ({ ...current, loading: true, loadError: null }))
+    updateTableTab(tabId, (current) => ({
+      ...current,
+      page: nextPage,
+      pageSize: nextPageSize,
+      sort: nextSort,
+      filterColumn: nextFilterColumn,
+      filterOperator: nextFilterOperator,
+      filterValue: nextFilterValue,
+      loading: true,
+      loadError: null,
+    }))
 
     try {
       const filters = buildSingleTableFilter(nextFilterColumn, nextFilterOperator, nextFilterValue)
@@ -859,13 +925,12 @@ export function useWorkspaceActions({
         filters,
       })
 
+      if (!isLatestTableLoad(tabId, requestId)) {
+        return
+      }
+
       updateTableTab(tabId, (current) => ({
         ...current,
-        page: nextPage,
-        sort: nextSort,
-        filterColumn: nextFilterColumn,
-        filterOperator: nextFilterOperator,
-        filterValue: nextFilterValue,
         data: result,
         selectedRowIndexes: [],
         rowAnchorIndex: null,
@@ -884,6 +949,10 @@ export function useWorkspaceActions({
       }))
       setEditingCell(null)
     } catch (error) {
+      if (!isLatestTableLoad(tabId, requestId)) {
+        return
+      }
+
       const message = getErrorMessage(error)
       updateTableTab(tabId, (current) => ({ ...current, loading: false, loadError: message }))
       toast.error(message)
@@ -891,6 +960,7 @@ export function useWorkspaceActions({
   }
 
   function closeTableTab(tabId: string): void {
+    delete tableLoadRequestByTabRef.current[tabId]
     setWorkTabs((current) => current.filter((tab) => tab.id !== tabId))
 
     if (activeTabId === tabId) {

@@ -144,6 +144,10 @@ export function registerIpc(dbService: DbService, updaterService: UpdaterService
     wrap(() => dbService.searchTablesInEnvironment(environmentId, query)),
   )
 
+  ipcMain.handle(IPC_CHANNELS.listTableColumns, (_, connectionId: string, table: TableRef) =>
+    wrap(() => dbService.listTableColumns(connectionId, table)),
+  )
+
   ipcMain.handle(IPC_CHANNELS.describeTable, (_, connectionId: string, table: TableRef) =>
     wrap(() => dbService.describeTable(connectionId, table)),
   )

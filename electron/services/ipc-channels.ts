@@ -17,6 +17,7 @@ export const IPC_CHANNELS = {
   searchTables: 'pointer:tables:search',
   searchTablesInEnvironment: 'pointer:tables:search-in-environment',
 
+  listTableColumns: 'pointer:tables:list-columns',
   describeTable: 'pointer:tables:describe',
   readTable: 'pointer:tables:read',
   insertRow: 'pointer:rows:insert',

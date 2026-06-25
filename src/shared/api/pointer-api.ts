@@ -33,6 +33,7 @@ export const pointerApi: PointerApi = {
   searchTables: (connectionId, query) => api().searchTables(connectionId, query),
   searchTablesInEnvironment: (environmentId, query) => api().searchTablesInEnvironment(environmentId, query),
 
+  listTableColumns: (connectionId, table) => api().listTableColumns(connectionId, table),
   describeTable: (connectionId, table) => api().describeTable(connectionId, table),
   readTable: (connectionId, table, input) => api().readTable(connectionId, table, input),
   insertRow: (connectionId, table, row) => api().insertRow(connectionId, table, row),

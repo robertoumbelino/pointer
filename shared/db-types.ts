@@ -209,6 +209,7 @@ export interface PointerApi {
   searchTables: (connectionId: string, query: string) => Promise<TableRef[]>
   searchTablesInEnvironment: (environmentId: string, query: string) => Promise<TableSearchHit[]>
 
+  listTableColumns: (connectionId: string, table: TableRef) => Promise<TableSchema>
   describeTable: (connectionId: string, table: TableRef) => Promise<TableSchema>
   readTable: (connectionId: string, table: TableRef, input: TableReadInput) => Promise<TableReadResult>
   insertRow: (connectionId: string, table: TableRef, row: Record<string, unknown>) => Promise<Record<string, unknown>>

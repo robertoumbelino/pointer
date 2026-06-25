@@ -36,6 +36,7 @@ const pointerApi: PointerApi = {
   searchTablesInEnvironment: (environmentId, query) =>
     ipcRenderer.invoke(IPC_CHANNELS.searchTablesInEnvironment, environmentId, query),
 
+  listTableColumns: (connectionId, table) => ipcRenderer.invoke(IPC_CHANNELS.listTableColumns, connectionId, table),
   describeTable: (connectionId, table) => ipcRenderer.invoke(IPC_CHANNELS.describeTable, connectionId, table),
   readTable: (connectionId, table, input) => ipcRenderer.invoke(IPC_CHANNELS.readTable, connectionId, table, input),
   insertRow: (connectionId, table, row) => ipcRenderer.invoke(IPC_CHANNELS.insertRow, connectionId, table, row),

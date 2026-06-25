@@ -298,7 +298,9 @@ export function TableWorkspacePanel({
   const hasLoadError = Boolean(activeTableTab.loadError)
   const isInitialTableLoading = activeTableTab.loading && !activeTableTab.data
   const isBackgroundTableReload = activeTableTab.loading && Boolean(activeTableTab.data) && !hasLoadError
+  const hasTableSchema = Boolean(activeTableTab.schema)
   const isTableActionDisabled = activeTableTab.loading || isSavingTableChanges
+  const isTableFilterDisabled = !hasTableSchema || isSavingTableChanges
   const columns = useMemo(() => activeTableTab.schema?.columns ?? [], [activeTableTab.schema?.columns])
   const rowCount = activeTableTab.data?.rows.length ?? 0
   const columnCount = columns.length
@@ -1015,7 +1017,7 @@ export function TableWorkspacePanel({
               <select
                 className='h-8 rounded-md border border-slate-700 bg-slate-900 px-2.5 text-[13px] outline-none ring-slate-300/45 focus:ring-2'
                 value={activeTableTab.filterColumn}
-                disabled={isTableActionDisabled}
+                disabled={isTableFilterDisabled}
                 onChange={(event) =>
                   updateTableTab(activeTableTab.id, (tab) => ({
                     ...tab,
@@ -1033,7 +1035,7 @@ export function TableWorkspacePanel({
               <select
                 className='h-8 w-[112px] rounded-md border border-slate-700 bg-slate-900 px-2.5 pr-8 text-[13px] outline-none ring-slate-300/45 focus:ring-2'
                 value={activeTableTab.filterOperator}
-                disabled={isTableActionDisabled}
+                disabled={isTableFilterDisabled}
                 onChange={(event) =>
                   updateTableTab(activeTableTab.id, (tab) => ({
                     ...tab,
@@ -1057,7 +1059,7 @@ export function TableWorkspacePanel({
                       : 'Filtrar por valor'
                 }
                 value={activeTableTab.filterValue}
-                disabled={isTableActionDisabled || activeTableTab.filterOperator === 'is_not_null'}
+                disabled={isTableFilterDisabled || activeTableTab.filterOperator === 'is_not_null'}
                 onChange={(event) =>
                   updateTableTab(activeTableTab.id, (tab) => ({
                     ...tab,
@@ -1066,7 +1068,7 @@ export function TableWorkspacePanel({
                   }))
                 }
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !isTableActionDisabled) {
+                  if (event.key === 'Enter' && !isTableFilterDisabled) {
                     void reloadTableTab(activeTableTab.id, {
                       page: 0,
                       filterColumn: activeTableTab.filterColumn,
@@ -1080,7 +1082,7 @@ export function TableWorkspacePanel({
                 variant='outline'
                 size='sm'
                 className='h-8 text-[13px]'
-                disabled={isTableActionDisabled}
+                disabled={isTableFilterDisabled}
                 onClick={() =>
                   void reloadTableTab(activeTableTab.id, {
                     page: 0,
@@ -1172,7 +1174,7 @@ export function TableWorkspacePanel({
         ) : isInitialTableLoading ? (
           <div className='pointer-card-soft flex h-full items-center justify-center gap-2 text-sm text-slate-400'>
             <RefreshCw className='h-4 w-4 animate-spin text-slate-300' />
-            <span>Carregando estrutura e dados da tabela...</span>
+            <span>{activeTableTab.schema ? 'Carregando registros da tabela...' : 'Carregando estrutura da tabela...'}</span>
           </div>
         ) : (
           <>
@@ -1682,7 +1684,7 @@ export function TableWorkspacePanel({
                 void reloadTableTab(activeTableTab.id, { page: nextPage })
               }
             }}
-            disabled={activeTableTab.page === 0}
+            disabled={activeTableTab.loading || activeTableTab.page === 0}
           >
             <ChevronLeft className='h-4 w-4' />
           </Button>
@@ -1700,7 +1702,7 @@ export function TableWorkspacePanel({
                 void reloadTableTab(activeTableTab.id, { page: nextPage })
               }
             }}
-            disabled={(activeTableTab.data?.rows.length ?? 0) < effectivePageSize}
+            disabled={activeTableTab.loading || (activeTableTab.data?.rows.length ?? 0) < effectivePageSize}
           >
             <ChevronRight className='h-4 w-4' />
           </Button>

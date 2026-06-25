@@ -547,6 +547,20 @@ export class DbService {
     return this.describeClickHouseTable(connection, table)
   }
 
+  async listTableColumns(connectionId: string, table: TableRef): Promise<TableSchema> {
+    const connection = this.getConnectionOrThrow(connectionId)
+
+    if (connection.engine === 'postgres') {
+      return this.listPostgresTableColumns(connection, table)
+    }
+
+    if (connection.engine === 'sqlite') {
+      return this.listSqliteTableColumns(connection, table)
+    }
+
+    return this.listClickHouseTableColumns(connection, table)
+  }
+
   async readTable(connectionId: string, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
     const connection = this.getConnectionOrThrow(connectionId)
 
@@ -1856,6 +1870,40 @@ export class DbService {
     }
   }
 
+  private async listPostgresTableColumns(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
+    const pool = await this.getPostgresPool(connection)
+
+    const columnsResult = await pool.query<{
+      column_name: string
+      data_type: string
+      is_nullable: 'YES' | 'NO'
+      column_default: string | null
+      udt_name: string
+    }>(
+      `
+      SELECT column_name, data_type, is_nullable, column_default, udt_name
+      FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2
+      ORDER BY ordinal_position ASC
+      `,
+      [table.schema, table.name],
+    )
+
+    return {
+      table,
+      columns: columnsResult.rows.map((row) => ({
+        name: row.column_name,
+        dataType: row.data_type === 'USER-DEFINED' ? row.udt_name : row.data_type,
+        nullable: row.is_nullable === 'YES',
+        defaultValue: row.column_default,
+        isPrimaryKey: false,
+      })),
+      primaryKey: [],
+      engine: 'postgres',
+      supportsRowEdit: false,
+    }
+  }
+
   private async describeClickHouseTable(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
     const client = await this.getClickHouseClient(connection)
 
@@ -1903,6 +1951,53 @@ export class DbService {
     return {
       table,
       columns,
+      primaryKey,
+      engine: 'clickhouse',
+      supportsRowEdit: false,
+    }
+  }
+
+  private async listClickHouseTableColumns(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
+    const client = await this.getClickHouseClient(connection)
+
+    const result = await client.query({
+      query: `
+        SELECT
+          name,
+          type,
+          default_expression,
+          is_in_primary_key
+        FROM system.columns
+        WHERE database = {schema:String}
+          AND table = {table:String}
+        ORDER BY position ASC
+      `,
+      query_params: {
+        schema: table.schema,
+        table: table.name,
+      },
+      format: 'JSONEachRow',
+    })
+
+    const rows = await result.json<{
+      name: string
+      type: string
+      default_expression: string | null
+      is_in_primary_key: number
+    }>()
+    const primaryKey = rows.filter((row) => row.is_in_primary_key === 1).map((row) => row.name)
+    const primaryKeySet = new Set(primaryKey)
+
+    return {
+      table,
+      columns: rows.map((row) => ({
+        name: row.name,
+        dataType: row.type,
+        enumValues: extractClickHouseEnumValues(row.type),
+        nullable: row.type.startsWith('Nullable('),
+        defaultValue: row.default_expression,
+        isPrimaryKey: primaryKeySet.has(row.name),
+      })),
       primaryKey,
       engine: 'clickhouse',
       supportsRowEdit: false,
@@ -1992,6 +2087,46 @@ export class DbService {
     }
   }
 
+  private async listSqliteTableColumns(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
+    const db = await this.getSqliteDb(connection)
+    const schemaName = quoteSqliteIdentifier(table.schema)
+
+    const rows = db
+      .prepare(
+        `
+        SELECT name, type, "notnull" AS not_null, dflt_value AS default_value, pk
+        FROM ${schemaName}.pragma_table_info(${escapeSqlLiteral(table.name)})
+        ORDER BY cid ASC
+        `,
+      )
+      .all() as Array<{
+      name: string
+      type: string
+      not_null: number
+      default_value: string | null
+      pk: number
+    }>
+    const primaryKey = rows
+      .filter((row) => row.pk > 0)
+      .sort((a, b) => a.pk - b.pk)
+      .map((row) => row.name)
+    const primaryKeySet = new Set(primaryKey)
+
+    return {
+      table,
+      columns: rows.map((row) => ({
+        name: row.name,
+        dataType: row.type || 'TEXT',
+        nullable: row.not_null === 0,
+        defaultValue: row.default_value,
+        isPrimaryKey: primaryKeySet.has(row.name),
+      })),
+      primaryKey,
+      engine: 'sqlite',
+      supportsRowEdit: primaryKey.length > 0,
+    }
+  }
+
   private async readPostgresTable(connection: ConnectionSummary, table: TableRef, input: TableReadInput): Promise<TableReadResult> {
     const pool = await this.getPostgresPool(connection)
     const offset = Math.max(input.page, 0) * Math.max(input.pageSize, 1)
@@ -2017,7 +2152,7 @@ export class DbService {
       }
     }
 
-    const schema = await this.describePostgresTable(connection, table)
+    const schema = await this.listPostgresTableColumns(connection, table)
     const filters = input.filters ?? []
     const where = buildPostgresWhereClause(filters, schema.columns.map((column) => column.name))
     const sort = this.buildPostgresSort(schema.columns.map((column) => column.name), input.sort)
@@ -2074,7 +2209,7 @@ export class DbService {
       }
     }
 
-    const schema = await this.describeClickHouseTable(connection, table)
+    const schema = await this.listClickHouseTableColumns(connection, table)
     const filters = input.filters ?? []
     const where = buildClickHouseWhereClause(filters, schema.columns.map((column) => column.name))
     const sort = this.buildClickHouseSort(schema.columns.map((column) => column.name), input.sort)
@@ -2132,7 +2267,7 @@ export class DbService {
       }
     }
 
-    const schema = await this.describeSqliteTable(connection, table)
+    const schema = await this.listSqliteTableColumns(connection, table)
     const filters = input.filters ?? []
     const where = buildSqliteWhereClause(filters, schema.columns.map((column) => column.name))
     const sort = this.buildSqliteSort(schema.columns.map((column) => column.name), input.sort)
