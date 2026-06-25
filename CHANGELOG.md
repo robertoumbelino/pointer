@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.12.3 - 2026-06-25
+
+### 🐛 Correções
+- Corrigido o carregamento das colunas no filtro da visualização de tabela: agora o seletor de colunas aparece rapidamente ao abrir a tabela, sem precisar esperar a consulta dos registros terminar.
+
+### ♻️ Melhorias
+- O carregamento da estrutura de tabela ficou mais leve para filtros, mantendo os detalhes completos da tabela em segundo plano para edição e inspeção.
+
 ## v0.12.2 - 2026-05-27
 
 ### ✨ Novidades
