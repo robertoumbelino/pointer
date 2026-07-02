@@ -26,6 +26,11 @@ export type PendingAutoSqlConnectionResolution = {
   candidateConnectionIds: string[]
 }
 
+export type SqlSelectionRange = {
+  from: number
+  to: number
+}
+
 type UseWorkspaceResult = {
   selectedSchema: string
   setSelectedSchema: Dispatch<SetStateAction<string>>
@@ -69,6 +74,7 @@ type UseWorkspaceResult = {
   sqlTabCounterRef: MutableRefObject<number>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
+  sqlSelectionByTabRef: MutableRefObject<Record<string, SqlSelectionRange | undefined>>
   sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
   closedSqlTabsByEnvironmentRef: MutableRefObject<Record<string, ClosedSqlTabHistoryEntry[]>>
   environmentWorkspaceRef: MutableRefObject<Record<string, EnvironmentWorkspaceSnapshot>>
@@ -124,6 +130,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const sqlTabCounterRef = useRef<number>(2)
   const sqlSplitContainerRef = useRef<HTMLDivElement | null>(null)
   const sqlCursorByTabRef = useRef<Record<string, number>>({})
+  const sqlSelectionByTabRef = useRef<Record<string, SqlSelectionRange | undefined>>({})
   const sqlExecutionByTabRef = useRef<Record<string, string>>({})
   const closedSqlTabsByEnvironmentRef = useRef<Record<string, ClosedSqlTabHistoryEntry[]>>({})
   const environmentWorkspaceRef = useRef<Record<string, EnvironmentWorkspaceSnapshot>>({})
@@ -243,6 +250,7 @@ export function useWorkspace(): UseWorkspaceResult {
     sqlTabCounterRef,
     sqlSplitContainerRef,
     sqlCursorByTabRef,
+    sqlSelectionByTabRef,
     sqlExecutionByTabRef,
     closedSqlTabsByEnvironmentRef,
     environmentWorkspaceRef,

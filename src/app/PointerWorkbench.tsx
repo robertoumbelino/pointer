@@ -181,6 +181,7 @@ function App(): JSX.Element {
     sqlTabCounterRef,
     sqlSplitContainerRef,
     sqlCursorByTabRef,
+    sqlSelectionByTabRef,
     sqlExecutionByTabRef,
     closedSqlTabsByEnvironmentRef,
     environmentWorkspaceRef,
@@ -270,6 +271,10 @@ function App(): JSX.Element {
   useEffect(() => {
     structureTablesByConnectionRef.current = {}
   }, [connections])
+
+  useEffect(() => {
+    sqlSelectionByTabRef.current = {}
+  }, [selectedEnvironmentId, sqlSelectionByTabRef])
 
   useEffect(() => {
     if (currentView === 'workspace') {
@@ -591,6 +596,7 @@ function App(): JSX.Element {
     setPendingAutoSqlConnectionResolution,
     sqlTabCounterRef,
     sqlSplitContainerRef,
+    sqlSelectionByTabRef,
     sqlExecutionByTabRef,
     closedSqlTabsByEnvironmentRef,
     workTabsRef,
@@ -1082,6 +1088,7 @@ function App(): JSX.Element {
             sqlSplitContainerRef={sqlSplitContainerRef}
             sqlEditorExtensions={sqlEditorExtensions}
             sqlCursorByTabRef={sqlCursorByTabRef}
+            sqlSelectionByTabRef={sqlSelectionByTabRef}
             setResizingSqlTabId={setResizingSqlTabId}
             reloadTableTab={reloadTableTab}
             navigateToForeignKey={navigateToForeignKey}

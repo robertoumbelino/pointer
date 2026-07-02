@@ -43,6 +43,7 @@ import {
   type TableTab,
   type WorkTab,
 } from '../../../entities/workspace/types'
+import type { SqlSelectionRange } from './useWorkspace'
 
 type UseWorkspaceActionsParams = {
   activeTabId: string
@@ -67,6 +68,7 @@ type UseWorkspaceActionsParams = {
   >
   sqlTabCounterRef: MutableRefObject<number>
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
+  sqlSelectionByTabRef: MutableRefObject<Record<string, SqlSelectionRange | undefined>>
   sqlExecutionByTabRef: MutableRefObject<Record<string, string>>
   closedSqlTabsByEnvironmentRef: MutableRefObject<Record<string, ClosedSqlTabHistoryEntry[]>>
   workTabsRef: MutableRefObject<WorkTab[]>
@@ -191,6 +193,16 @@ function buildSqlExecutionId(): string {
   }
 
   return `sql-exec-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function getSelectedSqlText(sqlText: string, selection: SqlSelectionRange | undefined): string | null {
+  if (!selection) {
+    return null
+  }
+
+  const start = Math.max(0, Math.min(selection.from, selection.to, sqlText.length))
+  const end = Math.max(0, Math.min(Math.max(selection.from, selection.to), sqlText.length))
+  return sqlText.slice(start, end)
 }
 
 function buildAiMessage(role: 'user' | 'assistant', content: string): { id: string; role: 'user' | 'assistant'; content: string; createdAt: string } {
@@ -510,6 +522,7 @@ export function useWorkspaceActions({
   setPendingAutoSqlConnectionResolution,
   sqlTabCounterRef,
   sqlSplitContainerRef,
+  sqlSelectionByTabRef,
   sqlExecutionByTabRef,
   closedSqlTabsByEnvironmentRef,
   workTabsRef,
@@ -2342,12 +2355,15 @@ export function useWorkspaceActions({
     const executionId = buildSqlExecutionId()
 
     try {
+      const selectedSql = getSelectedSqlText(sqlTab.sqlText, sqlSelectionByTabRef.current[sqlTab.id])
+      const hasExplicitSql = typeof explicitSql === 'string'
+      const hasSelectedSql = selectedSql !== null
       const scopedSql =
-        typeof cursorOffset === 'number'
+        !hasExplicitSql && !hasSelectedSql && typeof cursorOffset === 'number'
           ? getSqlStatementAtCursor(sqlTab.sqlText, cursorOffset)
           : null
 
-      const sqlToExecute = (explicitSql ?? scopedSql ?? sqlTab.sqlText).trim()
+      const sqlToExecute = (hasExplicitSql ? explicitSql : hasSelectedSql ? selectedSql : scopedSql ?? sqlTab.sqlText).trim()
       if (!sqlToExecute) {
         toast.info('Posicione o cursor em uma query válida para executar.')
         return

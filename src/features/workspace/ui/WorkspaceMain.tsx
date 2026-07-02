@@ -15,6 +15,7 @@ import type {
   TableTab,
   WorkTab,
 } from '../../../entities/workspace/types'
+import type { SqlSelectionRange } from '../model/useWorkspace'
 import { WorkspaceEmptyState } from './WorkspaceEmptyState'
 import { WorkspaceTabsBar } from './WorkspaceTabsBar'
 import { SqlWorkspacePanel } from './SqlWorkspacePanel'
@@ -53,6 +54,7 @@ type WorkspaceMainProps = {
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlEditorExtensions: unknown[]
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
+  sqlSelectionByTabRef: MutableRefObject<Record<string, SqlSelectionRange | undefined>>
   setResizingSqlTabId: Dispatch<SetStateAction<string | null>>
   reloadTableTab: (tabId: string, overrides?: TableReloadOverrides) => Promise<void>
   navigateToForeignKey: (sourceTab: TableTab, foreignKey: ColumnForeignKeyRef | undefined, value: unknown) => Promise<void>
@@ -126,6 +128,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
     sqlSplitContainerRef,
     sqlEditorExtensions,
     sqlCursorByTabRef,
+    sqlSelectionByTabRef,
     setResizingSqlTabId,
     reloadTableTab,
     navigateToForeignKey,
@@ -186,6 +189,7 @@ export function WorkspaceMain(props: WorkspaceMainProps): JSX.Element {
                 sqlSplitContainerRef={sqlSplitContainerRef}
                 sqlEditorExtensions={sqlEditorExtensions}
                 sqlCursorByTabRef={sqlCursorByTabRef}
+                sqlSelectionByTabRef={sqlSelectionByTabRef}
                 setResizingSqlTabId={setResizingSqlTabId}
                 formatCell={formatCell}
                 exportSqlResultSetVisibleCsv={exportSqlResultSetVisibleCsv}

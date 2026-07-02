@@ -5,6 +5,7 @@ import { EditorView } from '@codemirror/view'
 import { Bot, ChevronDown, Download, FolderOpen, Loader2, Play, Save, SendHorizontal, X } from 'lucide-react'
 import type { ConnectionSummary } from '../../../../shared/db-types'
 import type { SqlTab } from '../../../entities/workspace/types'
+import type { SqlSelectionRange } from '../model/useWorkspace'
 import { Button } from '../../../components/ui/button'
 import { ButtonGroup } from '../../../components/ui/button-group'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu'
@@ -24,6 +25,7 @@ type SqlWorkspacePanelProps = {
   sqlSplitContainerRef: MutableRefObject<HTMLDivElement | null>
   sqlEditorExtensions: unknown[]
   sqlCursorByTabRef: MutableRefObject<Record<string, number>>
+  sqlSelectionByTabRef: MutableRefObject<Record<string, SqlSelectionRange | undefined>>
   setResizingSqlTabId: Dispatch<SetStateAction<string | null>>
   formatCell: (value: unknown) => string
   exportSqlResultSetVisibleCsv: (params: {
@@ -113,6 +115,7 @@ export function SqlWorkspacePanel({
   sqlSplitContainerRef,
   sqlEditorExtensions,
   sqlCursorByTabRef,
+  sqlSelectionByTabRef,
   setResizingSqlTabId,
   formatCell,
   exportSqlResultSetVisibleCsv,
@@ -351,7 +354,18 @@ export function SqlWorkspacePanel({
                   }))
                 }
                 onUpdate={(update) => {
-                  sqlCursorByTabRef.current[activeSqlTab.id] = update.state.selection.main.head
+                  const selection = update.state.selection.main
+                  sqlCursorByTabRef.current[activeSqlTab.id] = selection.head
+
+                  if (selection.empty) {
+                    delete sqlSelectionByTabRef.current[activeSqlTab.id]
+                    return
+                  }
+
+                  sqlSelectionByTabRef.current[activeSqlTab.id] = {
+                    from: selection.from,
+                    to: selection.to,
+                  }
                 }}
               />
             </div>
