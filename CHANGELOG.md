@@ -2,6 +2,15 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.13.0 - 2026-07-02
+
+### ✨ Novidades
+- A execução SQL agora respeita explicitamente o trecho selecionado no editor: ao selecionar uma query com o mouse, o botão **Executar**, `Cmd/Ctrl+Enter` e `F5` rodam somente aquela seleção.
+
+### ♻️ Melhorias
+- Sem seleção ativa, o comportamento conhecido continua igual: o Pointer executa a query no cursor ou, quando necessário, o conteúdo da aba.
+- Esta release foi classificada como `minor` por tornar a seleção manual de queries uma capacidade visível e central no fluxo de execução SQL.
+
 ## v0.12.3 - 2026-06-25
 
 ### 🐛 Correções
