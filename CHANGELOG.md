@@ -2,6 +2,14 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.13.1 - 2026-07-03
+
+### 🐛 Correções
+- Corrigido o pacote de atualização para macOS: o Pointer agora inclui corretamente os binários nativos usados pelo Keychain e pelo SQLite, evitando o erro de JavaScript no processo principal ao abrir o app depois do update.
+
+### ♻️ Melhorias
+- O build de release passou a validar automaticamente os binários nativos antes e depois do empacotamento, impedindo que uma release incompleta seja publicada.
+
 ## v0.13.0 - 2026-07-02
 
 ### ✨ Novidades
