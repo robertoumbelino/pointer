@@ -39,6 +39,7 @@ const CONNECTIONS_KEY = 'connections'
 const CREDENTIAL_SERVICE = 'pointer-db-explorer'
 const DEFAULT_ENVIRONMENT_COLOR = '#0EA5E9'
 const CLICKHOUSE_READ_KEYWORDS = new Set(['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'WITH'])
+const POSTGRES_SCHEMA_MUTATION_KEYWORDS = new Set(['ALTER', 'CREATE', 'DROP'])
 const SQLITE_WORKER_FAILURE_MESSAGE = 'Falha ao executar query no SQLite.'
 const POSTGRES_OID_DATE = 1082
 const POSTGRES_OID_TIME = 1083
@@ -139,6 +140,7 @@ export class DbService {
   private readonly pgPools = new Map<string, Pool>()
   private readonly clickhouseClients = new Map<string, ClickHouseClient>()
   private readonly sqliteClients = new Map<string, BetterSqlite3.Database>()
+  private readonly postgresTableSchemas = new Map<string, TableSchema>()
   private readonly activeSqlExecutions = new Map<string, SqlExecutionController>()
   private readonly pendingSqlExecutionCancels = new Set<string>()
 
@@ -692,6 +694,9 @@ export class DbService {
 
     if (connection.engine === 'postgres') {
       await this.executePostgresSql(statements, connection, normalizedExecutionId, resultSets)
+      if (statements.some((statement) => isPostgresSchemaMutation(statement))) {
+        this.clearPostgresTableSchemaCache(connection.id)
+      }
     } else if (connection.engine === 'clickhouse') {
       await this.executeClickHouseSql(statements, connection, normalizedExecutionId, resultSets)
     } else {
@@ -761,6 +766,7 @@ export class DbService {
     this.pgPools.clear()
     this.clickhouseClients.clear()
     this.sqliteClients.clear()
+    this.postgresTableSchemas.clear()
   }
 
   private registerSqlExecution(executionId: string, cancel: () => Promise<void> | void): SqlExecutionController {
@@ -1284,6 +1290,8 @@ export class DbService {
   }
 
   private async destroyConnectionClient(connection: ConnectionSummary): Promise<void> {
+    this.clearPostgresTableSchemaCache(connection.id)
+
     const pgPool = this.pgPools.get(connection.id)
     if (pgPool) {
       await pgPool.end()
@@ -1722,6 +1730,12 @@ export class DbService {
   }
 
   private async describePostgresTable(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
+    const cacheKey = this.getPostgresTableSchemaCacheKey(connection.id, table)
+    const cached = this.postgresTableSchemas.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
     const pool = await this.getPostgresPool(connection)
     const quotedSchema = quotePostgresIdentifier(table.schema)
     const quotedTable = quotePostgresIdentifier(table.name)
@@ -1861,12 +1875,28 @@ export class DbService {
 
     await pool.query(`SELECT * FROM ${quotedSchema}.${quotedTable} LIMIT 0`)
 
-    return {
+    const schema: TableSchema = {
       table,
       columns,
       primaryKey,
       engine: 'postgres',
       supportsRowEdit: primaryKey.length > 0,
+    }
+
+    this.postgresTableSchemas.set(cacheKey, schema)
+    return schema
+  }
+
+  private getPostgresTableSchemaCacheKey(connectionId: string, table: TableRef): string {
+    return `${connectionId}\u0000${table.schema}\u0000${table.name}`
+  }
+
+  private clearPostgresTableSchemaCache(connectionId: string): void {
+    const keyPrefix = `${connectionId}\u0000`
+    for (const cacheKey of this.postgresTableSchemas.keys()) {
+      if (cacheKey.startsWith(keyPrefix)) {
+        this.postgresTableSchemas.delete(cacheKey)
+      }
     }
   }
 
@@ -3013,6 +3043,10 @@ function firstSqlKeyword(statement: string): string {
     .trim()
     .split(/\s+/)[0]
     ?.toUpperCase()
+}
+
+function isPostgresSchemaMutation(statement: string): boolean {
+  return POSTGRES_SCHEMA_MUTATION_KEYWORDS.has(firstSqlKeyword(statement))
 }
 
 function createSqlExecutionCanceledError(): Error {
