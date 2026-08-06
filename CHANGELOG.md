@@ -2,6 +2,15 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.13.2 - 2026-08-06
+
+### 🐛 Correções
+- Otimizado o salvamento de edições em tabelas PostgreSQL: o Pointer agora reutiliza a estrutura já carregada da tabela, evitando consultas repetidas de colunas, chaves e relacionamentos antes de cada atualização.
+
+### ♻️ Melhorias
+- O cache da estrutura é renovado automaticamente quando a conexão muda ou quando comandos de alteração de schema são executados pelo editor SQL, mantendo as edições rápidas sem perder consistência.
+- Esta release foi classificada como `patch` por corrigir desempenho em um fluxo existente de edição de tabelas.
+
 ## v0.13.1 - 2026-07-03
 
 ### 🐛 Correções
