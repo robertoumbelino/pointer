@@ -446,7 +446,7 @@ export function TableWorkspacePanel({
       if (isArrayDataType(jsonEditorCell.dataType)) {
         const parsedArray = parseArrayInputValue(trimmed)
         if (parsedArray === undefined) {
-          toast.error('Array inválido. Use JSON (ex: ["WHATSAPP"]) ou literal Postgres (ex: {WHATSAPP}).')
+          toast.error('Array inválido. Use JSON (ex: ["ATIVO"]) ou literal Postgres (ex: {ATIVO}).')
           return
         }
 

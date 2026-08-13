@@ -309,7 +309,7 @@ export class AiService {
       '- connectionId deve ser enviado apenas se você conseguir inferir uma conexão do schema fornecido.',
       '- Ao montar SQL, referencie tabelas apenas pelo campo "name" do schema enviado.',
       '- Antes de perguntar algo ao usuário, tente mapear sozinho: entidade principal, tabela, colunas e filtros.',
-      '- Use similaridade semântica (ex.: ticket/chamado/conversa/chat/atendimento) para escolher tabela alvo.',
+      '- Use similaridade semântica entre o pedido do usuário e os nomes das tabelas e colunas para escolher a tabela alvo.',
       '- Use nomes de colunas, dataType, enumValues e defaultValue para inferir status/motivo/estado.',
       '- NUNCA invente nomes de coluna: use apenas colunas que existam exatamente na tabela escolhida.',
       '- Valide cada coluna do SQL contra o schema da tabela antes de responder.',

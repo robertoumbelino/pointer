@@ -28,7 +28,7 @@ export const postgresJsonDocs: SqlDocumentationSection[] = [
         id: 'nested-field',
         title: 'Campo aninhado',
         description: 'Use #>> para acessar um caminho dentro do JSON e retornar texto.',
-        sql: "where metadata #>> '{customer,email}' ilike '%@empresa.com'",
+        sql: "where metadata #>> '{customer,email}' ilike '%@example.com'",
         keywords: ['campo', 'aninhado', 'nested', 'path', 'email', 'ilike'],
       },
       {
