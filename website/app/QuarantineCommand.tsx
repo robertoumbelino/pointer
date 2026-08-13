@@ -8,7 +8,19 @@ export function QuarantineCommand(): JSX.Element {
   const [copied, setCopied] = useState(false)
 
   async function copyCommand(): Promise<void> {
-    await navigator.clipboard.writeText(quarantineCommand)
+    try {
+      await navigator.clipboard.writeText(quarantineCommand)
+    } catch {
+      const fallback = document.createElement('textarea')
+      fallback.value = quarantineCommand
+      fallback.setAttribute('readonly', '')
+      fallback.style.cssText = 'position:fixed;opacity:0'
+      document.body.appendChild(fallback)
+      fallback.select()
+      document.execCommand('copy')
+      fallback.remove()
+    }
+
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
   }
@@ -23,7 +35,7 @@ export function QuarantineCommand(): JSX.Element {
           {copied ? 'Copiado' : 'Copiar'}
         </button>
       </div>
-      <p>Se o macOS bloquear a abertura, use somente após baixar o Pointer do GitHub oficial.</p>
+      <p>Como esta versão ainda não é assinada pela Apple, use o comando somente após baixar o Pointer do GitHub oficial.</p>
     </div>
   )
 }

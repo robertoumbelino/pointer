@@ -2,6 +2,8 @@ import { QuarantineCommand } from './QuarantineCommand'
 
 const releaseUrl = 'https://github.com/robertoumbelino/pointer/releases/latest'
 const repositoryUrl = 'https://github.com/robertoumbelino/pointer'
+const releaseVersion = 'v0.13.2'
+const downloadLabel = 'Baixar Pointer para macOS'
 
 function BrandMark() {
   return (
@@ -31,7 +33,7 @@ function AppPreview() {
       <div className="app-window real-app-window">
         <div className="real-app-topbar">
           <div className="traffic-lights" aria-hidden="true"><span /><span /><span /></div>
-          <div><span>＋</span><span>↻</span><i /><small>v0.13.2</small></div>
+          <div><span>＋</span><span>↻</span><i /><small>{releaseVersion}</small></div>
         </div>
 
         <div className="real-app-grid">
@@ -42,9 +44,9 @@ function AppPreview() {
               <div className="real-select">Local <span>⌄</span></div>
               <div className="real-side-label connections-label"><span>CONEXÕES</span></div>
               {[
-                ['Clickhouse', 'CH'],
-                ['Postgres', 'PG'],
-                ['teste', 'SQ'],
+                ['ClickHouse', 'CH'],
+                ['PostgreSQL', 'PG'],
+                ['SQLite', 'SQ'],
               ].map(([name, engine]) => (
                 <div className="real-connection" key={name}>
                   <span>▱</span><strong>{name}</strong><em>{engine}</em><i>▥</i><b>•••</b>
@@ -58,7 +60,7 @@ function AppPreview() {
               <div className="real-select">Todos <span>⌄</span></div>
               <div className="real-schema-search">⌕&nbsp;&nbsp; Buscar tabela… <kbd>⌘K</kbd></div>
               <div className="real-tables">
-                {['analytics_benchmark_snap…', 'communication_events', 'custom_object_record_values', 'customer_products_mat', 'customers', 'devices', 'events'].map((table) => (
+                {['customers', 'orders', 'products', 'invoices', 'payments', 'sessions', 'audit_logs'].map((table) => (
                   <span key={table}>▦ <strong>{table}</strong><em>CH</em></span>
                 ))}
               </div>
@@ -121,22 +123,22 @@ function WorkspacesPreview() {
             <i>×</i>
           </div>
           <div className="environment-option selected">
-            <span>▱</span><strong>Local</strong>
+            <span>▱</span><strong>Local</strong><em>Ativo</em>
           </div>
           <div className="environment-option">
-            <span>▱</span><strong>Produção</strong><em>Ativo</em>
+            <span>▱</span><strong>Produção</strong>
           </div>
         </div>
-        <div className="workspace-shortcut"><kbd>Ctrl R</kbd><span>trocar ambiente</span></div>
+        <div className="workspace-shortcut"><kbd>Ctrl+R</kbd><span>trocar ambiente</span></div>
       </div>
 
       <div className="workspace-context">
-        <div className="workspace-context-head"><span className="workspace-color local-color" /><div><small>AMBIENTE ATUAL</small><strong>Local</strong></div><kbd>Ctrl R</kbd></div>
+        <div className="workspace-context-head"><span className="workspace-color local-color" /><div><small>AMBIENTE ATUAL</small><strong>Local</strong></div><kbd>Ctrl+R</kbd></div>
         <p>Conexões deste workspace</p>
         <div className="workspace-databases">
-          <div><i>PG</i><span><strong>Postgres local</strong><small>localhost:5432</small></span><em>online</em></div>
-          <div><i>CH</i><span><strong>ClickHouse dev</strong><small>localhost:8123</small></span><em>online</em></div>
-          <div><i>SQ</i><span><strong>SQLite testes</strong><small>./data/test.db</small></span><em>local</em></div>
+          <div><i>PG</i><span><strong>PostgreSQL</strong><small>localhost:5432</small></span><em>online</em></div>
+          <div><i>CH</i><span><strong>ClickHouse</strong><small>localhost:8123</small></span><em>online</em></div>
+          <div><i>SQ</i><span><strong>SQLite</strong><small>./data/app.db</small></span><em>local</em></div>
         </div>
         <div className="workspace-note"><span>Contexto isolado</span><strong>credenciais · abas · conexões</strong></div>
       </div>
@@ -168,7 +170,7 @@ function TableViewPreview() {
 function ConnectionDashboardPreview() {
   return (
     <div className="moment-window dashboard-window" aria-label="Dashboard da conexão SQLite no Pointer">
-      <div className="dashboard-head"><div><strong>Dashboard Demo SQLite</strong><small>Atualização automática a cada 30s · agora</small></div><span>↻ Atualizar agora</span></div>
+      <div className="dashboard-head"><div><strong>Dashboard SQLite</strong><small>Atualização automática a cada 30s · agora</small></div><span>↻ Atualizar agora</span></div>
       <div className="metric-grid">
         <div className="metric-card health-metric"><small>◉ SAÚDE</small><div><strong>96</strong><em>Saudável</em></div><span><i /></span></div>
         <div className="metric-card"><small>▣ TAMANHO ESTIMADO</small><strong>12,4 MB</strong><p>3.176 páginas</p></div>
@@ -197,7 +199,7 @@ export default function Home() {
           <a href={repositoryUrl} target="_blank" rel="noreferrer">GitHub</a>
         </nav>
         <a className="header-download" href={releaseUrl} target="_blank" rel="noreferrer">
-          Download <ArrowIcon />
+          Baixar <ArrowIcon />
         </a>
       </header>
 
@@ -218,13 +220,13 @@ export default function Home() {
         </p>
         <div className="hero-actions">
           <a className="primary-cta" href={releaseUrl} target="_blank" rel="noreferrer">
-            <ArrowIcon /> Baixar Pointer
+            <ArrowIcon /> {downloadLabel}
           </a>
           <a className="secondary-cta" href={repositoryUrl} target="_blank" rel="noreferrer">
             Ver no GitHub <span aria-hidden="true">↗</span>
           </a>
         </div>
-        <p className="download-meta">macOS · Apple Silicon · v0.13.2</p>
+        <p className="download-meta">Apple Silicon · {releaseVersion} · Developer Preview</p>
         <QuarantineCommand />
       </section>
 
@@ -253,7 +255,7 @@ export default function Home() {
           <div className="moment-copy">
             <span>01 · WORKSPACES</span>
             <h3>Um workspace para cada ambiente.</h3>
-            <p>Separe conexões, credenciais e abas entre Local, Homologação e Produção. Alterne entre eles com <kbd>Ctrl R</kbd> sem reorganizar nada.</p>
+            <p>Separe conexões, credenciais e abas entre Local, Homologação e Produção. Alterne entre eles com <kbd>Ctrl+R</kbd> sem reorganizar nada.</p>
           </div>
           <WorkspacesPreview />
         </article>
@@ -291,9 +293,9 @@ export default function Home() {
         <h2>Abra. Conecte. Resolva.</h2>
         <p>Baixe o Pointer e mantenha SQL, tabelas e contexto no mesmo fluxo.</p>
         <a className="primary-cta" href={releaseUrl} target="_blank" rel="noreferrer">
-          <ArrowIcon /> Baixar Developer Preview
+          <ArrowIcon /> {downloadLabel}
         </a>
-        <span>macOS · Apple Silicon · v0.13.2</span>
+        <span>Apple Silicon · {releaseVersion} · Developer Preview</span>
       </section>
 
       <footer>
