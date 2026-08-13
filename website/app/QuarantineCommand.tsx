@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 const quarantineCommand = 'xattr -dr com.apple.quarantine "/Applications/Pointer.app"'
 
-export function QuarantineCommand(): JSX.Element {
+export function QuarantineCommand() {
   const [copied, setCopied] = useState(false)
 
   async function copyCommand(): Promise<void> {
