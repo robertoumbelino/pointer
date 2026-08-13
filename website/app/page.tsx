@@ -1,9 +1,11 @@
+import { cookies, headers } from 'next/headers'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { QuarantineCommand } from './QuarantineCommand'
+import { getTranslation, resolveLocale } from './i18n'
 
 const releaseUrl = 'https://github.com/robertoumbelino/pointer/releases/latest'
 const repositoryUrl = 'https://github.com/robertoumbelino/pointer'
 const releaseVersion = 'v0.13.2'
-const downloadLabel = 'Baixar Pointer para macOS'
 
 function BrandMark() {
   return (
@@ -15,6 +17,12 @@ function BrandMark() {
 
 function ArrowIcon() {
   return <span aria-hidden="true">↓</span>
+}
+
+function ShortcutCopy({ shortcut, text }: { shortcut: string; text: string }) {
+  const [before, after = ''] = text.split(shortcut)
+
+  return <>{before}<kbd>{shortcut}</kbd>{after}</>
 }
 
 function AppPreview() {
@@ -185,49 +193,61 @@ function ConnectionDashboardPreview() {
   )
 }
 
-export default function Home() {
+export default async function Home() {
+  const [headerStore, cookieStore] = await Promise.all([headers(), cookies()])
+  const locale = resolveLocale(cookieStore.get('pointer.locale')?.value, headerStore.get('accept-language'))
+  const copy = getTranslation(locale)
+
   return (
-    <main>
+    <main lang={copy.htmlLang}>
       <header className="site-header">
         <a href="#inicio" className="brand" aria-label="Pointer, início">
           <BrandMark />
           <span>Pointer</span>
         </a>
-        <nav aria-label="Navegação principal">
-          <a href="#produto">Produto</a>
-          <a href="#recursos">Recursos</a>
+        <nav aria-label={copy.nav.aria}>
+          <a href="#produto">{copy.nav.product}</a>
+          <a href="#recursos">{copy.nav.features}</a>
           <a href={repositoryUrl} target="_blank" rel="noreferrer">GitHub</a>
         </nav>
-        <a className="header-download" href={releaseUrl} target="_blank" rel="noreferrer">
-          Baixar <ArrowIcon />
-        </a>
+        <div className="header-actions">
+          <LanguageSwitcher ariaLabel={copy.nav.language} locale={locale} />
+          <a className="header-download" href={releaseUrl} target="_blank" rel="noreferrer">
+            {copy.nav.download} <ArrowIcon />
+          </a>
+        </div>
       </header>
 
       <section className="hero" id="inicio">
         <div className="hero-orbit" aria-hidden="true" />
-        <p className="eyebrow">POINTER PARA macOS</p>
+        <p className="eyebrow">{copy.hero.eyebrow}</p>
         <h1>
-          Seu banco no ritmo<br />
-          <span>do seu teclado.</span>
+          {copy.hero.title}<br />
+          <span>{copy.hero.titleAccent}</span>
         </h1>
         <p className="hero-copy">
-          Workspaces separados, SQL e atalhos para consultar seus bancos sem quebrar o fluxo.
+          {copy.hero.copy}
         </p>
         <p className="status-line">
-          <span>⌘ K para quase tudo</span><i />
+          <span>{copy.hero.shortcut}</span><i />
           <span>PostgreSQL · ClickHouse · SQLite</span><i />
-          <span>Sem conta</span>
+          <span>{copy.hero.noAccount}</span>
         </p>
         <div className="hero-actions">
           <a className="primary-cta" href={releaseUrl} target="_blank" rel="noreferrer">
-            <ArrowIcon /> {downloadLabel}
+            <ArrowIcon /> {copy.hero.download}
           </a>
           <a className="secondary-cta" href={repositoryUrl} target="_blank" rel="noreferrer">
-            Ver no GitHub <span aria-hidden="true">↗</span>
+            {copy.hero.github} <span aria-hidden="true">↗</span>
           </a>
         </div>
-        <p className="download-meta">Apple Silicon · {releaseVersion} · Developer Preview</p>
-        <QuarantineCommand />
+        <p className="download-meta">Apple Silicon · {releaseVersion} · {copy.hero.preview}</p>
+        <QuarantineCommand
+          ariaLabel={copy.quarantine.aria}
+          copiedLabel={copy.quarantine.copied}
+          copyLabel={copy.quarantine.copy}
+          notice={copy.quarantine.notice}
+        />
       </section>
 
       <section className="product-reveal" id="produto">
@@ -235,54 +255,51 @@ export default function Home() {
       </section>
 
       <section className="database-strip" aria-label="Bancos suportados">
-        <span>Funciona com</span>
+        <span>{copy.databases}</span>
         <strong><i className="postgres-mark">P</i> PostgreSQL</strong>
         <strong><i className="clickhouse-mark" /> ClickHouse</strong>
         <strong><i className="sqlite-mark">S</i> SQLite</strong>
       </section>
 
       <section className="feature-intro" id="recursos">
-        <p className="section-kicker">FEITO PARA O LOOP DE QUEM DESENVOLVE</p>
-        <h2>Menos cliques.<br /><span>Mais contexto.</span></h2>
-        <p>
-          Busque uma tabela, rode SQL, confira o resultado e siga. O Pointer mantém as ações frequentes
-          perto do teclado e o resto fora do caminho.
-        </p>
+        <p className="section-kicker">{copy.intro.kicker}</p>
+        <h2>{copy.intro.title}<br /><span>{copy.intro.accent}</span></h2>
+        <p>{copy.intro.copy}</p>
       </section>
 
-      <section className="moments-grid" aria-label="Destaques do Pointer">
+      <section className="moments-grid" aria-label={copy.moments.aria}>
         <article className="moment-card workspace-moment">
           <div className="moment-copy">
-            <span>01 · WORKSPACES</span>
-            <h3>Um workspace para cada ambiente.</h3>
-            <p>Separe conexões, credenciais e abas entre Local, Homologação e Produção. Alterne entre eles com <kbd>Ctrl+R</kbd> sem reorganizar nada.</p>
+            <span>{copy.moments.workspace.label}</span>
+            <h3>{copy.moments.workspace.title}</h3>
+            <p><ShortcutCopy shortcut="Ctrl+R" text={copy.moments.workspace.copy} /></p>
           </div>
           <WorkspacesPreview />
         </article>
 
         <article className="moment-card command-moment">
           <div className="moment-copy">
-            <span>02 · COMMAND PALETTE</span>
-            <h3>Procure uma vez. Faça quase tudo.</h3>
-            <p>Pressione <kbd>⌘ K</kbd> para buscar tabelas, abrir ações, consultar a documentação ou chamar a IA.</p>
+            <span>{copy.moments.command.label}</span>
+            <h3>{copy.moments.command.title}</h3>
+            <p><ShortcutCopy shortcut="⌘ K" text={copy.moments.command.copy} /></p>
           </div>
           <CommandPalettePreview />
         </article>
 
         <article className="moment-card table-moment">
           <div className="moment-copy">
-            <span>03 · TABELAS</span>
-            <h3>Da busca ao dado, sem desvio.</h3>
-            <p>Abra, filtre, edite e exporte tabelas sem trocar de ferramenta ou abandonar a conexão.</p>
+            <span>{copy.moments.table.label}</span>
+            <h3>{copy.moments.table.title}</h3>
+            <p>{copy.moments.table.copy}</p>
           </div>
           <TableViewPreview />
         </article>
 
         <article className="moment-card dashboard-moment">
           <div className="moment-copy">
-            <span>04 · SAÚDE DA CONEXÃO</span>
-            <h3>Leia a saúde antes de depurar.</h3>
-            <p>Saúde, tamanho, fragmentação e configuração do motor em uma visão pronta para diagnóstico.</p>
+            <span>{copy.moments.dashboard.label}</span>
+            <h3>{copy.moments.dashboard.title}</h3>
+            <p>{copy.moments.dashboard.copy}</p>
           </div>
           <ConnectionDashboardPreview />
         </article>
@@ -290,21 +307,21 @@ export default function Home() {
 
       <section className="final-cta">
         <BrandMark />
-        <h2>Abra. Conecte. Resolva.</h2>
-        <p>Baixe o Pointer e mantenha SQL, tabelas e contexto no mesmo fluxo.</p>
+        <h2>{copy.final.title}</h2>
+        <p>{copy.final.copy}</p>
         <a className="primary-cta" href={releaseUrl} target="_blank" rel="noreferrer">
-          <ArrowIcon /> {downloadLabel}
+          <ArrowIcon /> {copy.hero.download}
         </a>
-        <span>Apple Silicon · {releaseVersion} · Developer Preview</span>
+        <span>Apple Silicon · {releaseVersion} · {copy.hero.preview}</span>
       </section>
 
       <footer>
         <a href="#inicio" className="brand"><BrandMark /><span>Pointer</span></a>
-        <p>Um workspace independente para trabalhar com dados.</p>
+        <p>{copy.footer.copy}</p>
         <div>
           <a href={repositoryUrl} target="_blank" rel="noreferrer">GitHub</a>
-          <a href={`${repositoryUrl}/releases`} target="_blank" rel="noreferrer">Releases</a>
-          <a href={`${repositoryUrl}/blob/main/README.md`} target="_blank" rel="noreferrer">Documentação</a>
+          <a href={`${repositoryUrl}/releases`} target="_blank" rel="noreferrer">{copy.footer.releases}</a>
+          <a href={`${repositoryUrl}/blob/main/README.md`} target="_blank" rel="noreferrer">{copy.footer.docs}</a>
         </div>
       </footer>
     </main>

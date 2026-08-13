@@ -1,11 +1,17 @@
 /* eslint-disable react-refresh/only-export-components -- Next.js metadata exports live beside the image component. */
 import { ImageResponse } from 'next/og'
+import { cookies, headers } from 'next/headers'
+import { getTranslation, resolveLocale } from './i18n'
 
 export const alt = 'Pointer — Seu banco no ritmo do seu teclado'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
-export default function OpenGraphImage() {
+export default async function OpenGraphImage() {
+  const [headerStore, cookieStore] = await Promise.all([headers(), cookies()])
+  const locale = resolveLocale(cookieStore.get('pointer.locale')?.value, headerStore.get('accept-language'))
+  const copy = getTranslation(locale).social
+
   return new ImageResponse(
     (
       <div
@@ -77,17 +83,17 @@ export default function OpenGraphImage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', color: '#9198a2', fontSize: 20, letterSpacing: 4 }}>
-            POINTER PARA macOS
+            {copy.eyebrow}
           </div>
           <div style={{ display: 'flex', marginTop: 22, fontSize: 72, fontWeight: 700, letterSpacing: -4 }}>
             Pointer
           </div>
           <div style={{ display: 'flex', marginTop: 8, color: '#d3d7dc', fontSize: 36, lineHeight: 1.18, letterSpacing: -1.4 }}>
-            Seu banco no ritmo do seu teclado.
+            {copy.tagline}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', marginTop: 28, color: '#9299a3', fontSize: 22, lineHeight: 1.4 }}>
-            <div style={{ display: 'flex' }}>SQL, tabelas e atalhos para PostgreSQL,</div>
-            <div style={{ display: 'flex' }}>ClickHouse e SQLite.</div>
+            <div style={{ display: 'flex' }}>{copy.lineOne}</div>
+            <div style={{ display: 'flex' }}>{copy.lineTwo}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', marginTop: 30, gap: 12 }}>
             <div style={{ display: 'flex', padding: '8px 13px', border: '1px solid #353b44', borderRadius: 9, color: '#d7dbe0', background: '#171a1e', fontSize: 17 }}>

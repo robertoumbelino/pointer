@@ -123,8 +123,50 @@ footer a:hover {
   color: #fff;
 }
 
-.header-download {
+.header-actions {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(17, 19, 20, 0.76);
+}
+
+.language-switcher button {
+  min-width: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #7f858d;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.language-switcher button:hover {
+  color: #e9ebee;
+}
+
+.language-switcher button.active {
+  color: #f5f6f7;
+  background: #292c30;
+}
+
+.header-download {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -1934,6 +1976,10 @@ footer > div a {
   }
 
   .site-header nav { display: none; }
+  .header-actions { gap: 7px; }
+  .language-switcher button { min-width: 30px; min-height: 34px; font-size: 9px; }
+  main[lang="en"] .hero h1 { font-size: clamp(42px, 12.5vw, 62px); }
+  .header-download { padding: 0 12px; }
   .hero { min-height: auto; padding: 90px 20px 56px; }
   .hero h1 { font-size: clamp(48px, 15vw, 72px); }
   .hero h1 br { display: none; }

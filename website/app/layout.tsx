@@ -1,8 +1,10 @@
 /* eslint-disable react-refresh/only-export-components -- Next.js metadata exports live beside the layout component. */
 import type { Metadata, Viewport } from 'next'
 import { JetBrains_Mono, Manrope } from 'next/font/google'
+import { cookies, headers } from 'next/headers'
 import type { ReactNode } from 'react'
 import './globals.css'
+import { getTranslation, resolveLocale } from './i18n'
 
 const sans = Manrope({
   subsets: ['latin'],
@@ -16,26 +18,29 @@ const mono = JetBrains_Mono({
   display: 'swap',
 })
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://pointerdb.vercel.app'),
-  title: 'Pointer — Seu banco no ritmo do seu teclado',
-  description:
-    'Um workspace enxuto para desenvolvedores consultarem PostgreSQL, ClickHouse e SQLite sem quebrar o fluxo.',
-  openGraph: {
-    title: 'Pointer — Seu banco no ritmo do seu teclado',
-    description:
-      'SQL, tabelas e atalhos em um workspace rápido para PostgreSQL, ClickHouse e SQLite.',
-    type: 'website',
-    locale: 'pt_BR',
-    url: '/',
-    siteName: 'Pointer',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Pointer — Seu banco no ritmo do seu teclado',
-    description:
-      'SQL, tabelas e atalhos em um workspace rápido para PostgreSQL, ClickHouse e SQLite.',
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const [headerStore, cookieStore] = await Promise.all([headers(), cookies()])
+  const locale = resolveLocale(cookieStore.get('pointer.locale')?.value, headerStore.get('accept-language'))
+  const copy = getTranslation(locale)
+
+  return {
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://pointerdb.vercel.app'),
+    title: copy.metadata.title,
+    description: copy.metadata.description,
+    openGraph: {
+      title: copy.metadata.title,
+      description: copy.metadata.socialDescription,
+      type: 'website',
+      locale: copy.htmlLang.replace('-', '_'),
+      url: '/',
+      siteName: 'Pointer',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: copy.metadata.title,
+      description: copy.metadata.socialDescription,
+    },
+  }
 }
 
 export const viewport: Viewport = {
@@ -44,9 +49,12 @@ export const viewport: Viewport = {
   themeColor: '#080908',
 }
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const [headerStore, cookieStore] = await Promise.all([headers(), cookies()])
+  const locale = resolveLocale(cookieStore.get('pointer.locale')?.value, headerStore.get('accept-language'))
+
   return (
-    <html lang="pt-BR" className={`${sans.variable} ${mono.variable}`}>
+    <html lang={getTranslation(locale).htmlLang} className={`${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   )

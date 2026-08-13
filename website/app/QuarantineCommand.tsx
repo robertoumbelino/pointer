@@ -4,7 +4,14 @@ import { useState } from 'react'
 
 const quarantineCommand = 'xattr -dr com.apple.quarantine "/Applications/Pointer.app"'
 
-export function QuarantineCommand() {
+type QuarantineCommandProps = {
+  ariaLabel: string
+  copiedLabel: string
+  copyLabel: string
+  notice: string
+}
+
+export function QuarantineCommand({ ariaLabel, copiedLabel, copyLabel, notice }: QuarantineCommandProps) {
   const [copied, setCopied] = useState(false)
 
   async function copyCommand(): Promise<void> {
@@ -30,12 +37,12 @@ export function QuarantineCommand() {
       <div className="quarantine-copy">
         <span className="terminal-mark" aria-hidden="true">›_</span>
         <code>{quarantineCommand}</code>
-        <button type="button" onClick={() => void copyCommand()} aria-label="Copiar comando para remover a quarentena do Pointer">
+        <button type="button" onClick={() => void copyCommand()} aria-label={ariaLabel}>
           <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>
-          {copied ? 'Copiado' : 'Copiar'}
+          {copied ? copiedLabel : copyLabel}
         </button>
       </div>
-      <p>Como esta versão ainda não é assinada pela Apple, use o comando somente após baixar o Pointer do GitHub oficial.</p>
+      <p>{notice}</p>
     </div>
   )
 }
