@@ -17,22 +17,24 @@ const mono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://pointerdb.vercel.app'),
   title: 'Pointer — Seu banco no ritmo do seu teclado',
   description:
     'Um workspace enxuto para desenvolvedores consultarem PostgreSQL, ClickHouse e SQLite sem quebrar o fluxo.',
   openGraph: {
     title: 'Pointer — Seu banco no ritmo do seu teclado',
     description:
-      'SQL, tabelas, atalhos e IA em um workspace enxuto para macOS.',
+      'SQL, tabelas e atalhos em um workspace rápido para PostgreSQL, ClickHouse e SQLite.',
     type: 'website',
     locale: 'pt_BR',
+    url: '/',
+    siteName: 'Pointer',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Pointer — Seu banco no ritmo do seu teclado',
     description:
-      'SQL, tabelas, atalhos e IA em um workspace enxuto para macOS.',
+      'SQL, tabelas e atalhos em um workspace rápido para PostgreSQL, ClickHouse e SQLite.',
   },
 }
 
