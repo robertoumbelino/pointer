@@ -61,6 +61,10 @@ test('fast Postgres schema keeps row editing disabled when the table has no prim
 test('primary key lookup uses the native Postgres catalog and preserves key order', () => {
   assert.match(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /pg_catalog\.pg_constraint/)
   assert.match(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /WITH ORDINALITY/)
+  assert.match(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /namespace_info\.nspname = \$1/)
+  assert.match(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /table_info\.relname = \$2/)
   assert.match(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /ORDER BY key_column\.position ASC/)
   assert.doesNotMatch(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /information_schema/)
+  assert.doesNotMatch(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /format\(/)
+  assert.doesNotMatch(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /to_regclass/)
 })

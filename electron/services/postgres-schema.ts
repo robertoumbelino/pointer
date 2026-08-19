@@ -16,8 +16,13 @@ export const POSTGRES_PRIMARY_KEY_COLUMNS_SQL = `
   JOIN pg_catalog.pg_attribute AS attribute
     ON attribute.attrelid = constraint_info.conrelid
    AND attribute.attnum = key_column.attnum
+  JOIN pg_catalog.pg_class AS table_info
+    ON table_info.oid = constraint_info.conrelid
+  JOIN pg_catalog.pg_namespace AS namespace_info
+    ON namespace_info.oid = table_info.relnamespace
   WHERE constraint_info.contype = 'p'
-    AND constraint_info.conrelid = pg_catalog.to_regclass(pg_catalog.format('%I.%I', $1, $2))
+    AND namespace_info.nspname = $1
+    AND table_info.relname = $2
   ORDER BY key_column.position ASC
 `
 
