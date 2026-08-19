@@ -2,6 +2,22 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.15.0 - 2026-08-19
+
+### ✨ Novidades
+- O Pointer agora tem uma página oficial de apresentação e download, com uma experiência pensada para explicar o produto, destacar os principais fluxos e facilitar a instalação no macOS.
+- O site passou a adaptar o idioma automaticamente entre português e inglês, com seletor manual para quem preferir trocar a linguagem.
+- Compartilhamentos da página agora exibem uma prévia visual própria do Pointer nas redes sociais e aplicativos de mensagem.
+
+### 🐛 Correções
+- Corrigido o atraso para editar ou excluir registros em tabelas PostgreSQL: a chave primária agora é descoberta por uma consulta mais leve e fica disponível sem esperar o carregamento completo de relacionamentos e enums.
+- Ajustada a configuração de tipos do site para manter o build na Vercel consistente.
+
+### ♻️ Melhorias
+- Refinados o conteúdo, a apresentação visual e o seletor de idiomas da página de download.
+- Atualizados textos de exemplo do aplicativo para usar terminologia genérica e mais adequada à distribuição pública.
+- Esta release foi classificada como `minor` por reunir duas novas capacidades de alto impacto desde a última versão: a landing page oficial e a localização automática do site.
+
 ## v0.13.2 - 2026-08-06
 
 ### 🐛 Correções

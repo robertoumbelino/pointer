@@ -3,9 +3,9 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { QuarantineCommand } from './QuarantineCommand'
 import { getTranslation, resolveLocale } from './i18n'
 
-const releaseUrl = 'https://github.com/robertoumbelino/pointer/releases/latest'
 const repositoryUrl = 'https://github.com/robertoumbelino/pointer'
-const releaseVersion = 'v0.13.2'
+const releaseVersion = 'v0.15.0'
+const releaseUrl = `${repositoryUrl}/releases/download/${releaseVersion}/Pointer-Mac-${releaseVersion.slice(1)}.dmg`
 
 function BrandMark() {
   return (
