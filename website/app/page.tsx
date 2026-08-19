@@ -4,7 +4,7 @@ import { QuarantineCommand } from './QuarantineCommand'
 import { getTranslation, resolveLocale } from './i18n'
 
 const repositoryUrl = 'https://github.com/robertoumbelino/pointer'
-const releaseVersion = 'v0.15.0'
+const releaseVersion = 'v0.15.1'
 const releaseUrl = `${repositoryUrl}/releases/download/${releaseVersion}/Pointer-Mac-${releaseVersion.slice(1)}.dmg`
 
 function BrandMark() {

@@ -2,6 +2,15 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.15.1 - 2026-08-19
+
+### 🐛 Correções
+- Corrigida a abertura de tabelas PostgreSQL após a otimização de chave primária da versão anterior: a consulta de metadados agora usa parâmetros com tipos inferidos diretamente pelo catálogo do banco, eliminando o erro `could not determine data type of parameter $1`.
+
+### ♻️ Melhorias
+- Adicionada uma validação com PostgreSQL real para cobrir parâmetros preparados, nomes sensíveis a maiúsculas e minúsculas e chaves primárias compostas.
+- Esta release foi classificada como `patch` por corrigir uma regressão introduzida na `v0.15.0`.
+
 ## v0.15.0 - 2026-08-19
 
 ### ✨ Novidades
