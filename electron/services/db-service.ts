@@ -28,6 +28,11 @@ import type {
   TableSort,
 } from '../../shared/db-types'
 import { compactTableSearchValue, isSubsequenceMatch, rankTableSearchHits } from '../../shared/table-search'
+import {
+  createPostgresTableColumnSchema,
+  POSTGRES_PRIMARY_KEY_COLUMNS_SQL,
+  type PostgresColumnMetadataRow,
+} from './postgres-schema'
 
 type PointerStoreShape = {
   environments: EnvironmentSummary[]
@@ -1756,20 +1761,7 @@ export class DbService {
       [table.schema, table.name],
     )
 
-    const pkResult = await pool.query<{ column_name: string }>(
-      `
-      SELECT kcu.column_name
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-       AND tc.table_schema = kcu.table_schema
-      WHERE tc.constraint_type = 'PRIMARY KEY'
-        AND tc.table_schema = $1
-        AND tc.table_name = $2
-      ORDER BY kcu.ordinal_position ASC
-      `,
-      [table.schema, table.name],
-    )
+    const primaryKey = await this.listPostgresPrimaryKeyColumns(pool, table)
 
     const fkResult = await pool.query<{
       source_column: string
@@ -1828,7 +1820,6 @@ export class DbService {
       [table.schema, table.name],
     )
 
-    const primaryKey = pkResult.rows.map((row) => row.column_name)
     const primaryKeySet = new Set(primaryKey)
     const enumValuesByColumn = new Map<string, string[]>()
     const foreignKeyByColumn = new Map<string, ColumnForeignKeyRef>()
@@ -1903,35 +1894,29 @@ export class DbService {
   private async listPostgresTableColumns(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
     const pool = await this.getPostgresPool(connection)
 
-    const columnsResult = await pool.query<{
-      column_name: string
-      data_type: string
-      is_nullable: 'YES' | 'NO'
-      column_default: string | null
-      udt_name: string
-    }>(
-      `
-      SELECT column_name, data_type, is_nullable, column_default, udt_name
-      FROM information_schema.columns
-      WHERE table_schema = $1 AND table_name = $2
-      ORDER BY ordinal_position ASC
-      `,
-      [table.schema, table.name],
-    )
+    const [columnsResult, primaryKey] = await Promise.all([
+      pool.query<PostgresColumnMetadataRow>(
+        `
+        SELECT column_name, data_type, is_nullable, column_default, udt_name
+        FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = $2
+        ORDER BY ordinal_position ASC
+        `,
+        [table.schema, table.name],
+      ),
+      this.listPostgresPrimaryKeyColumns(pool, table),
+    ])
 
-    return {
-      table,
-      columns: columnsResult.rows.map((row) => ({
-        name: row.column_name,
-        dataType: row.data_type === 'USER-DEFINED' ? row.udt_name : row.data_type,
-        nullable: row.is_nullable === 'YES',
-        defaultValue: row.column_default,
-        isPrimaryKey: false,
-      })),
-      primaryKey: [],
-      engine: 'postgres',
-      supportsRowEdit: false,
-    }
+    return createPostgresTableColumnSchema(table, columnsResult.rows, primaryKey)
+  }
+
+  private async listPostgresPrimaryKeyColumns(pool: Pool, table: TableRef): Promise<string[]> {
+    const result = await pool.query<{ column_name: string }>(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, [
+      table.schema,
+      table.name,
+    ])
+
+    return result.rows.map((row) => row.column_name)
   }
 
   private async describeClickHouseTable(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
