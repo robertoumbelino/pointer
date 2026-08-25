@@ -290,7 +290,7 @@ export function useCommandPaletteActions({
       setCommandScopedValue('')
       setCommandScopedSchema(null)
 
-      const schema = await pointerApi.describeTable(hit.connectionId, hit.table)
+      const schema = await pointerApi.listTableColumns(hit.connectionId, hit.table)
       setCommandScopedSchema(schema)
       setCommandScopedColumn(schema.columns[0]?.name ?? '')
 

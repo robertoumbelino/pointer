@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test electron/services/postgres-schema.test.ts",
+    "test": "node --test electron/services/postgres-schema.test.ts src/features/command-palette/model/useCommandPaletteActions.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "pnpm run typecheck && vite build",
     "prepare:native": "pnpm rebuild keytar better-sqlite3 && pnpm run verify:native",
