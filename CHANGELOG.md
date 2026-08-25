@@ -2,6 +2,15 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.15.2 - 2026-08-25
+
+### 🐛 Correções
+- Corrigido o atraso ao pressionar `Tab` no Command Palette depois de buscar uma tabela: o seletor do filtro rápido agora carrega apenas as colunas necessárias, sem aguardar relacionamentos, enums e outras informações completas da estrutura.
+
+### ♻️ Melhorias
+- Adicionada uma proteção automatizada para manter o carregamento leve das colunas no filtro rápido em futuras mudanças.
+- Esta release foi classificada como `patch` porque melhora o desempenho de um fluxo existente, sem adicionar uma nova capacidade ao produto.
+
 ## v0.15.1 - 2026-08-19
 
 ### 🐛 Correções
