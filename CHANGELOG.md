@@ -2,6 +2,16 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.15.3 - 2026-08-26
+
+### 🐛 Correções
+- Corrigida a lentidão ao salvar alterações simples em tabelas PostgreSQL: depois de confirmar o `UPDATE`, o Pointer mantém a linha editada na tela sem repetir automaticamente toda a consulta filtrada.
+
+### ♻️ Melhorias
+- O salvamento agora reutiliza em cache apenas as informações essenciais de colunas e chave primária, evitando consultas completas de relacionamentos, enums e outros metadados antes de cada atualização.
+- Adicionadas proteções automatizadas para preservar o caminho rápido de atualização em futuras mudanças.
+- Esta release foi classificada como `patch` porque melhora o desempenho de um fluxo existente, sem adicionar uma nova capacidade ao produto.
+
 ## v0.15.2 - 2026-08-25
 
 ### 🐛 Correções
