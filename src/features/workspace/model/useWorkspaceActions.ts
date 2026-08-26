@@ -1508,6 +1508,7 @@ export function useWorkspaceActions({
 
     try {
       let affected = 0
+      let updated = 0
 
       if (tab.insertDraft && tab.schema) {
         const insertPayload = buildInsertPayload(tab.insertDraft, tab.schema)
@@ -1542,6 +1543,7 @@ export function useWorkspaceActions({
 
           const result = await pointerApi.updateRow(tab.connectionId, tab.table, payload)
           affected += result.affected
+          updated += result.affected
         }
 
         for (const rowIndex of pendingDeleteRows) {
@@ -1563,7 +1565,27 @@ export function useWorkspaceActions({
       }
 
       toast.success(`${affected} registro(s) salvo(s).`)
-      await reloadTableTab(tab.id)
+      const canCommitUpdatesLocally =
+        !hasPendingInsert &&
+        pendingDeleteRows.length === 0 &&
+        pendingUpdateRows.length > 0 &&
+        updated === pendingUpdateRows.length
+
+      if (canCommitUpdatesLocally) {
+        updateTableTab(tab.id, (current) => {
+          if (!current.data) {
+            return current
+          }
+
+          return {
+            ...current,
+            pendingUpdates: {},
+            baseRows: cloneRows(current.data.rows),
+          }
+        })
+      } else {
+        await reloadTableTab(tab.id)
+      }
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {

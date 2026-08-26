@@ -146,6 +146,7 @@ export class DbService {
   private readonly clickhouseClients = new Map<string, ClickHouseClient>()
   private readonly sqliteClients = new Map<string, BetterSqlite3.Database>()
   private readonly postgresTableSchemas = new Map<string, TableSchema>()
+  private readonly postgresTableColumnSchemas = new Map<string, Promise<TableSchema>>()
   private readonly activeSqlExecutions = new Map<string, SqlExecutionController>()
   private readonly pendingSqlExecutionCancels = new Set<string>()
 
@@ -772,6 +773,7 @@ export class DbService {
     this.clickhouseClients.clear()
     this.sqliteClients.clear()
     this.postgresTableSchemas.clear()
+    this.postgresTableColumnSchemas.clear()
   }
 
   private registerSqlExecution(executionId: string, cancel: () => Promise<void> | void): SqlExecutionController {
@@ -1889,9 +1891,35 @@ export class DbService {
         this.postgresTableSchemas.delete(cacheKey)
       }
     }
+
+    for (const cacheKey of this.postgresTableColumnSchemas.keys()) {
+      if (cacheKey.startsWith(keyPrefix)) {
+        this.postgresTableColumnSchemas.delete(cacheKey)
+      }
+    }
   }
 
   private async listPostgresTableColumns(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
+    const cacheKey = this.getPostgresTableSchemaCacheKey(connection.id, table)
+    const cached = this.postgresTableColumnSchemas.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    const schemaPromise = this.loadPostgresTableColumns(connection, table)
+    this.postgresTableColumnSchemas.set(cacheKey, schemaPromise)
+
+    try {
+      return await schemaPromise
+    } catch (error) {
+      if (this.postgresTableColumnSchemas.get(cacheKey) === schemaPromise) {
+        this.postgresTableColumnSchemas.delete(cacheKey)
+      }
+      throw error
+    }
+  }
+
+  private async loadPostgresTableColumns(connection: ConnectionSummary, table: TableRef): Promise<TableSchema> {
     const pool = await this.getPostgresPool(connection)
 
     const [columnsResult, primaryKey] = await Promise.all([
@@ -2387,7 +2415,7 @@ export class DbService {
 
   private async updatePostgresRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<{ affected: number }> {
     const pool = await this.getPostgresPool(connection)
-    const schema = await this.describePostgresTable(connection, table)
+    const schema = await this.listPostgresTableColumns(connection, table)
     const columnByName = new Map(schema.columns.map((column) => [column.name, column]))
 
     if (schema.primaryKey.length === 0) {

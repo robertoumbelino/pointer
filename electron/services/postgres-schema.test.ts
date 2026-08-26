@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   createPostgresTableColumnSchema,
@@ -10,6 +11,17 @@ const table = {
   schema: 'public',
   name: 'customers',
   fqName: 'public.customers',
+}
+
+const dbServiceSource = readFileSync(new URL('./db-service.ts', import.meta.url), 'utf8')
+
+function dbServiceMethodSource(methodName: string, nextMethodName: string): string {
+  const start = dbServiceSource.indexOf(`private async ${methodName}`)
+  const end = dbServiceSource.indexOf(`\n  private async ${nextMethodName}`, start)
+
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  return dbServiceSource.slice(start, end)
 }
 
 const columns: PostgresColumnMetadataRow[] = [
@@ -67,4 +79,14 @@ test('primary key lookup uses the native Postgres catalog and preserves key orde
   assert.doesNotMatch(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /information_schema/)
   assert.doesNotMatch(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /format\(/)
   assert.doesNotMatch(POSTGRES_PRIMARY_KEY_COLUMNS_SQL, /to_regclass/)
+})
+
+test('Postgres updates use the cached lightweight schema instead of the full table description', () => {
+  const updateMethod = dbServiceMethodSource('updatePostgresRow', 'deletePostgresRow')
+  const listColumnsMethod = dbServiceMethodSource('listPostgresTableColumns', 'listPostgresPrimaryKeyColumns')
+
+  assert.match(updateMethod, /this\.listPostgresTableColumns\(/)
+  assert.doesNotMatch(updateMethod, /this\.describePostgresTable\(/)
+  assert.match(listColumnsMethod, /this\.postgresTableColumnSchemas\.get\(/)
+  assert.match(listColumnsMethod, /this\.postgresTableColumnSchemas\.set\(/)
 })
