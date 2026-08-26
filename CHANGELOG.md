@@ -2,6 +2,17 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.15.4 - 2026-08-26
+
+### 🐛 Correções
+- Corrigida a lentidão ao excluir registros pela visualização de tabelas PostgreSQL: depois de confirmar o `DELETE`, o Pointer remove a linha da tela sem repetir automaticamente a consulta filtrada.
+
+### ♻️ Melhorias
+- A exclusão agora reutiliza em cache apenas as informações essenciais de colunas e chave primária, evitando carregar relacionamentos, enums e outros metadados completos antes de apagar cada registro.
+- A recarga completa da tabela permanece como proteção quando o banco retorna uma quantidade inesperada de registros afetados ou quando há uma inserção pendente no mesmo salvamento.
+- Adicionadas proteções automatizadas para preservar o caminho rápido de exclusão em futuras mudanças.
+- Esta release foi classificada como `patch` porque melhora o desempenho de um fluxo existente, sem adicionar uma nova capacidade ao produto.
+
 ## v0.15.3 - 2026-08-26
 
 ### 🐛 Correções
