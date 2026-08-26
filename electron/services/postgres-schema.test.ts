@@ -90,3 +90,10 @@ test('Postgres updates use the cached lightweight schema instead of the full tab
   assert.match(listColumnsMethod, /this\.postgresTableColumnSchemas\.get\(/)
   assert.match(listColumnsMethod, /this\.postgresTableColumnSchemas\.set\(/)
 })
+
+test('Postgres deletes use the cached lightweight schema instead of the full table description', () => {
+  const deleteMethod = dbServiceMethodSource('deletePostgresRow', 'updateSqliteRow')
+
+  assert.match(deleteMethod, /this\.listPostgresTableColumns\(/)
+  assert.doesNotMatch(deleteMethod, /this\.describePostgresTable\(/)
+})

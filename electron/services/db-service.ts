@@ -2463,7 +2463,7 @@ export class DbService {
 
   private async deletePostgresRow(connection: ConnectionSummary, table: TableRef, row: Record<string, unknown>): Promise<{ affected: number }> {
     const pool = await this.getPostgresPool(connection)
-    const schema = await this.describePostgresTable(connection, table)
+    const schema = await this.listPostgresTableColumns(connection, table)
     const columnByName = new Map(schema.columns.map((column) => [column.name, column]))
 
     if (schema.primaryKey.length === 0) {

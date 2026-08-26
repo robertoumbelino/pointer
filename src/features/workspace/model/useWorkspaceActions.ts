@@ -1509,6 +1509,7 @@ export function useWorkspaceActions({
     try {
       let affected = 0
       let updated = 0
+      let deleted = 0
 
       if (tab.insertDraft && tab.schema) {
         const insertPayload = buildInsertPayload(tab.insertDraft, tab.schema)
@@ -1559,28 +1560,49 @@ export function useWorkspaceActions({
 
           const result = await pointerApi.deleteRow(tab.connectionId, tab.table, payload)
           affected += result.affected
+          deleted += result.affected
         }
       } else if (hasPendingWriteRows) {
         toast.info('Update/Delete por linha não está disponível para este banco.')
       }
 
       toast.success(`${affected} registro(s) salvo(s).`)
-      const canCommitUpdatesLocally =
+      const canCommitWritesLocally =
         !hasPendingInsert &&
-        pendingDeleteRows.length === 0 &&
-        pendingUpdateRows.length > 0 &&
-        updated === pendingUpdateRows.length
+        hasPendingWriteRows &&
+        updated === pendingUpdateRows.length &&
+        deleted === pendingDeleteRows.length
 
-      if (canCommitUpdatesLocally) {
+      if (canCommitWritesLocally) {
+        const deletedRowIndexes = new Set(pendingDeleteRows)
+
         updateTableTab(tab.id, (current) => {
           if (!current.data) {
             return current
           }
 
+          const nextRows = current.data.rows.filter((_row, rowIndex) => !deletedRowIndexes.has(rowIndex))
+
           return {
             ...current,
+            data: {
+              ...current.data,
+              rows: nextRows,
+            },
             pendingUpdates: {},
-            baseRows: cloneRows(current.data.rows),
+            pendingDeletes: [],
+            baseRows: cloneRows(nextRows),
+            ...(deletedRowIndexes.size > 0
+              ? {
+                  selectedRowIndexes: [],
+                  rowAnchorIndex: null,
+                  activeRowIndex: null,
+                  activeCell: null,
+                  cellAnchor: null,
+                  selectedCellRange: null,
+                  selectionMode: 'cell' as const,
+                }
+              : {}),
           }
         })
       } else {
