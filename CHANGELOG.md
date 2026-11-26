@@ -2,6 +2,11 @@
 
 Este histórico documenta as versões do Pointer com foco no impacto para quem usa o app no dia a dia.
 
+## v0.15.5 - 2026-11-26
+
+### 🐛 Correções
+- Colunas materializadas do ClickHouse agora exibem seus valores na visualização de tabelas. Colunas booleanas, por exemplo, mostram `true` ou `false` quando preenchidas.
+
 ## v0.15.4 - 2026-08-26
 
 ### 🐛 Correções
