@@ -2013,6 +2013,7 @@ export class DbService {
         FROM system.columns
         WHERE database = {schema:String}
           AND table = {table:String}
+          AND default_kind != 'EPHEMERAL'
         ORDER BY position ASC
       `,
       query_params: {
@@ -2226,40 +2227,16 @@ export class DbService {
     const limit = Math.min(Math.max(input.pageSize, 1), 500)
 
     const target = `${quoteClickHouseIdentifier(table.schema)}.${quoteClickHouseIdentifier(table.name)}`
-
-    if (!hasTableReadModifiers(input)) {
-      const dataResult = await client.query({
-        query: `
-          SELECT *
-          FROM ${target}
-          LIMIT {limit:UInt32}
-          OFFSET {offset:UInt32}
-        `,
-        query_params: {
-          limit,
-          offset,
-        },
-        format: 'JSONEachRow',
-      })
-
-      const rows = await dataResult.json<Record<string, unknown>>()
-
-      return {
-        rows,
-        total: -1,
-        page: input.page,
-        pageSize: limit,
-      }
-    }
-
     const schema = await this.listClickHouseTableColumns(connection, table)
-    const filters = input.filters ?? []
-    const where = buildClickHouseWhereClause(filters, schema.columns.map((column) => column.name))
-    const sort = this.buildClickHouseSort(schema.columns.map((column) => column.name), input.sort)
+    const columns = schema.columns.map((column) => column.name)
+    // ClickHouse omits MATERIALIZED and ALIAS columns from SELECT * by default.
+    const projection = columns.map(quoteClickHouseIdentifier).join(', ') || '*'
+    const where = buildClickHouseWhereClause(input.filters ?? [], columns)
+    const sort = this.buildClickHouseSort(columns, input.sort)
 
     const dataResult = await client.query({
       query: `
-        SELECT *
+        SELECT ${projection}
         FROM ${target}
         ${where.sql}
         ${sort}
@@ -2894,7 +2871,7 @@ function quotePostgresIdentifier(identifier: string): string {
 }
 
 function quoteClickHouseIdentifier(identifier: string): string {
-  return '`' + identifier.replace(/`/g, '``') + '`'
+  return '`' + identifier.replace(/\\/g, '\\\\').replace(/`/g, '``') + '`'
 }
 
 function quoteSqliteIdentifier(identifier: string): string {
